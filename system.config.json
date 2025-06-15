@@ -1,0 +1,8 @@
+{
+  "PORT": 3000,
+  "FRONTEND_PORT": 4173,
+  "MONGODB_URI": "mongodb://127.0.0.1:27017/posdb",
+  "USE_LOCAL_DB": true,
+  "RESTAURANT_NAME": "My Restaurant",
+  "CURRENCY": "INR"
+}
