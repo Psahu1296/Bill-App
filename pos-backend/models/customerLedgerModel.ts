@@ -1,5 +1,4 @@
-import { Request, Response, NextFunction } from "express";
-// models/customerLedgerModel.js
+// models/customerLedgerModel.ts
 import mongoose from "mongoose";
 
 const customerLedgerSchema = new mongoose.Schema(
@@ -27,7 +26,7 @@ const customerLedgerSchema = new mongoose.Schema(
     transactions: [
       {
         orderId: { type: mongoose.Schema.Types.ObjectId, ref: "Order" },
-        transactionType: { type: String, enum: ["partial_payment", "full_payment_due", "payment_received", "adjustment"] },
+        transactionType: { type: String, enum: ["partial_payment", "full_payment_due", "payment_received", "adjustment", "balance_increased", "balance_decreased"] },
         amount: { type: Number, required: true }, // The amount of this specific transaction
         // if partial_payment: amount is what they paid
         // if full_payment_due: amount is the total bill

@@ -90,7 +90,8 @@ const getAllCustomerLedgers = async (req: Request, res: Response, next: NextFunc
     let query: IQueryOptions = {};
 
     if (name) {
-      query.customerName = { $regex: name as string, $options: "i" };
+      const escapedName = (name as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      query.customerName = { $regex: escapedName, $options: "i" };
     }
     if (phone) {
       query.customerPhone = phone as string;

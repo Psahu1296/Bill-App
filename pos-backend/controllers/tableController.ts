@@ -6,8 +6,8 @@ import mongoose from "mongoose";
 const addTable = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { tableNo, seats } = req.body;
-    if (!tableNo) {
-      const error = createHttpError(400, "Please provide table No!");
+    if (!tableNo || !seats) {
+      const error = createHttpError(400, "Please provide table number and seats!");
       return next(error);
     }
     const isTablePresent = await Table.findOne({ tableNo });
@@ -46,7 +46,7 @@ const updateTable = async (req: Request, res: Response, next: NextFunction) => {
     const { id } = req.params;
 
     if(!mongoose.Types.ObjectId.isValid(id as string)){
-        const error = createHttpError(404, "Invalid id!");
+        const error = createHttpError(400, "Invalid table ID format!");
         return next(error);
     }
 

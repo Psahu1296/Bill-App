@@ -293,7 +293,6 @@ const getPeriodEarnings = async (req: Request, res: Response, next: NextFunction
 
 const getDashboardEarningsSummary = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      console.log( "DASHBOARD API CALLED");
         const today = new Date();
 
         // --- Daily Earnings ---

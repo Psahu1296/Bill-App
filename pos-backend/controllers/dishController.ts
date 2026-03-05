@@ -112,8 +112,7 @@ const getDishById = async (req: Request, res: Response, next: NextFunction) => {
 const updateDish = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    // UPDATED: Ensure 'variants' is part of updates and is valid if present
-    const updates = req.body;
+    const { _id, __v, ...updates } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id as string)) {
       const error = createHttpError(400, "Invalid Dish ID format!");

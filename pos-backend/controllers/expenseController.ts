@@ -14,7 +14,6 @@ import { format } from "date-fns/format";
 // @access  Private (Admin)
 const addExpense = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    console.log("APi hit ==>>")
     const { type, name, amount, description, expenseDate } = req.body;
 
     if (!type || !name || amount === undefined || amount === null || amount < 0) {
@@ -149,7 +148,7 @@ const getAllExpenses = async (req: Request, res: Response, next: NextFunction) =
 const updateExpense = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const { _id, __v, ...updates } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id as string)) {
       const error = createHttpError(400, "Invalid Expense ID format!");

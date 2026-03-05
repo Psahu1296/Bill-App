@@ -12,6 +12,15 @@ const addOrder = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { _id, amountPaid = 0, ...orderData } = req.body;
 
+    if (!orderData.customerDetails?.name || !orderData.customerDetails?.phone) {
+        const error = createHttpError(400, "Customer name and phone are required!");
+        return next(error);
+    }
+    if (!orderData.bills?.totalWithTax && orderData.bills?.totalWithTax !== 0) {
+        const error = createHttpError(400, "Bill total is required!");
+        return next(error);
+    }
+
     const tableId = orderData.table;
     if (!mongoose.Types.ObjectId.isValid(tableId)) {
         const error = createHttpError(400, "Invalid Table ID in order data!");
@@ -59,7 +68,7 @@ const addOrder = async (req: Request, res: Response, next: NextFunction) => {
 
     await Table.findByIdAndUpdate(
         tableId,
-        { $set: { status: 'Booked', currentOrderId: newOrder._id } },
+        { $set: { status: 'Booked', currentOrder: newOrder._id } },
         { new: true, runValidators: true }
     );
 

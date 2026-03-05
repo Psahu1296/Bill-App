@@ -13,6 +13,10 @@ const createOrder = async (req: Request, res: Response, next: NextFunction) => {
 
   try {
     const { amount } = req.body;
+    if (!amount || typeof amount !== 'number' || amount <= 0) {
+        const error = createHttpError(400, "A valid positive amount is required!");
+        return next(error);
+    }
     const options = {
       amount: amount * 100, // Amount in paisa (1 INR = 100 paisa)
       currency: "INR",
@@ -29,6 +33,11 @@ const createOrder = async (req: Request, res: Response, next: NextFunction) => {
 const verifyPayment = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+        const error = createHttpError(400, "Missing required payment verification fields!");
+        return next(error);
+    }
 
     const expectedSignature = crypto
       .createHmac("sha256", (config.razorpaySecretKey as string))

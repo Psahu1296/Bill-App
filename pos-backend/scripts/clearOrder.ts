@@ -1,5 +1,6 @@
-// clearOrders.js
-require('dotenv').config(); // Load environment variables from .env
+// clearOrders.ts
+import dotenv from 'dotenv';
+dotenv.config();
 import mongoose from 'mongoose';
 import Order from '../models/orderModel'; // Adjust path to your Order model
 
