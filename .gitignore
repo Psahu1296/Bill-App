@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+pos-backend/node_modules/
+pos-frontend/node_modules/
+
+# Build output
+dist/
+pos-backend/dist/
+pos-frontend/dist/
+electron/dist/
+
+# Packaged installers (distribute via GitHub Releases, not git)
+release/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+
+# MongoDB memory server binaries cache (downloaded at runtime)
+.mongodb/

@@ -1,0 +1,58 @@
+productName: Dhaba POS
+appId: com.dhaba.pos
+copyright: Copyright © 2024 Dhaba POS
+
+directories:
+  output: release
+  buildResources: build-resources
+
+# ── What gets packaged ─────────────────────────────────────────────────────────
+# electron/dist  : compiled Electron main + preload
+# pos-backend/dist : compiled Express server
+# pos-backend/node_modules : Express/Mongoose/etc. runtime deps
+# pos-frontend/dist : built React app (served by Express as static files)
+# node_modules   : root deps — mongodb-memory-server (auto-included via dependencies)
+files:
+  - electron/dist/**
+  - pos-backend/dist/**
+  - pos-backend/node_modules/**
+  - pos-frontend/dist/**
+  - package.json
+
+# Unpack the backend + frontend from the asar archive so Express file-serving
+# and native module paths work correctly without asar quirks
+asarUnpack:
+  - pos-backend/dist/**
+  - pos-backend/node_modules/**
+  - pos-frontend/dist/**
+
+# ── Windows installer ──────────────────────────────────────────────────────────
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Dhaba POS
+
+# ── macOS installer ────────────────────────────────────────────────────────────
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  category: public.app-category.business
+
+# ── Linux installer ────────────────────────────────────────────────────────────
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  category: Office

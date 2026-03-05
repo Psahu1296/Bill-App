@@ -1,6 +1,5 @@
 import "./scripts/patch-node25";
 import express from "express";
-import connectDB from "./config/database";
 import config from "./config/config";
 import globalErrorHandler from "./middlewares/globalErrorHandler";
 import cookieParser from "cookie-parser";
@@ -20,8 +19,6 @@ import expenseRoutes from "./routes/expenseRoutes";
 import customerLedgerRoutes from "./routes/customerLedgerRoutes";
 
 const app = express();
-const PORT = config.port;
-connectDB();
 
 cron.schedule(
   "5 0 * * *",
@@ -97,7 +94,4 @@ app.get("*", (req, res) => {
 // Global Error Handler (must be last)
 app.use(globalErrorHandler);
 
-// Start server
-app.listen(Number(PORT), '0.0.0.0', () => {
-  console.log(`☑️  POS Server is listening on port ${PORT}`);
-});
+export default app;
