@@ -1,19 +1,18 @@
-// models/orderModel.js
 import mongoose from "mongoose";
 
 const orderSchema = new mongoose.Schema({
     customerDetails: {
         name: { type: String, required: true },
-        phone: { type: String, required: true},
+        phone: { type: String, required: true },
         guests: { type: Number, required: true },
     },
-    orderStatus: { // e.g., "In Progress", "Completed", "Cancelled"
+    orderStatus: {
         type: String,
         required: true
     },
     orderDate: {
         type: Date,
-        default : Date.now()
+        default: Date.now  // function reference, called fresh per document
     },
     bills: {
         total: { type: Number, required: true },
@@ -22,28 +21,27 @@ const orderSchema = new mongoose.Schema({
     },
     items: [],
     table: { type: mongoose.Schema.Types.ObjectId, ref: "Table" },
-    paymentMethod: String, // e.g., "Cash", "Card", "Razorpay", "Pay Later"
-    paymentData: { // Stores Razorpay specific data if used
+    paymentMethod: String,
+    paymentData: {
         razorpay_order_id: String,
         razorpay_payment_id: String
     },
-    // NEW FIELD: paymentStatus
-    paymentStatus: { // e.g., "Pending", "Paid", "Refunded"
+    paymentStatus: {
         type: String,
-        enum: ["Pending", "Paid", "Refunded"], // Define allowed values
-        default: "Pending", // Default to pending if not explicitly set
+        enum: ["Pending", "Paid", "Refunded"],
+        default: "Pending",
         required: true,
     },
-    amountPaid: { // Actual amount paid by the customer for this order
+    amountPaid: {
         type: Number,
         default: 0,
         min: 0
     },
-    balanceDueOnOrder: { // Remaining amount to be paid for THIS specific order
+    balanceDueOnOrder: {
         type: Number,
         default: 0,
         min: 0
     }
-}, { timestamps : true } );
+}, { timestamps: true });
 
 export default mongoose.model("Order", orderSchema);

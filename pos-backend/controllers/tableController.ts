@@ -3,7 +3,7 @@ import Table from "../models/tableModel";
 import createHttpError from "http-errors";
 import mongoose from "mongoose";
 
-const addTable = async (req: any, res: Response, next: NextFunction) => {
+const addTable = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { tableNo, seats } = req.body;
     if (!tableNo) {
@@ -27,7 +27,7 @@ const addTable = async (req: any, res: Response, next: NextFunction) => {
   }
 };
 
-const getTables = async (req: any, res: Response, next: NextFunction) => {
+const getTables = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const tables = await Table.find().populate({
       path: "currentOrder",
@@ -39,7 +39,7 @@ const getTables = async (req: any, res: Response, next: NextFunction) => {
   }
 };
 
-const updateTable = async (req: any, res: Response, next: NextFunction) => {
+const updateTable = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status, orderId } = req.body;
 
@@ -58,7 +58,7 @@ const updateTable = async (req: any, res: Response, next: NextFunction) => {
 
     if (!table) {
       const error = createHttpError(404, "Table not found!");
-      return error;
+      return next(error);
     }
 
     res.status(200).json({success: true, message: "Table updated!", data: table});

@@ -22,15 +22,13 @@ const createOrder = async (req: Request, res: Response, next: NextFunction) => {
     const order = await razorpay.orders.create(options);
     res.status(200).json({ success: true, order });
   } catch (error) {
-    console.log(error);
     next(error);
   }
 };
 
 const verifyPayment = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
-      req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
     const expectedSignature = crypto
       .createHmac("sha256", (config.razorpaySecretKey as string))
@@ -53,46 +51,43 @@ const webHookVerification = async (req: Request, res: Response, next: NextFuncti
     const secret = config.razorpyWebhookSecret;
     const signature = req.headers["x-razorpay-signature"];
 
-    const body = JSON.stringify(req.body);
+    // req.body is a raw Buffer here (set by express.raw in paymentRoute)
+    const rawBody = (req.body as Buffer).toString("utf8");
 
-    // 🛑 Verify the signature
     const expectedSignature = crypto
       .createHmac("sha256", secret as string)
-      .update(body)
+      .update(rawBody)
       .digest("hex");
 
-    if (expectedSignature === signature) {
-      console.log("✅ Webhook verified:", req.body);
-
-      // ✅ Process payment (e.g., update DB, send confirmation email)
-      if (req.body.event === "payment.captured") {
-        const payment = req.body.payload.payment.entity;
-        console.log(`💰 Payment Captured: ${payment.amount / 100} INR`);
-
-        // Add Payment Details in Database
-        const newPayment = new Payment({
-          paymentId: payment.id,
-          orderId: payment.order_id,
-          amount: payment.amount / 100,
-          currency: payment.currency,
-          status: payment.status,
-          method: payment.method,
-          email: payment.email,
-          contact: payment.contact,
-          createdAt: new Date(payment.created_at * 1000) 
-        })
-
-        await newPayment.save();
-      }
-
-      res.json({ success: true });
-    } else {
-      const error = createHttpError(400, "❌ Invalid Signature!");
+    if (expectedSignature !== signature) {
+      const error = createHttpError(400, "Invalid Signature!");
       return next(error);
     }
+
+    const payload = JSON.parse(rawBody);
+
+    if (payload.event === "payment.captured") {
+      const payment = payload.payload.payment.entity;
+
+      const newPayment = new Payment({
+        paymentId: payment.id,
+        orderId: payment.order_id,
+        amount: payment.amount / 100,
+        currency: payment.currency,
+        status: payment.status,
+        method: payment.method,
+        email: payment.email,
+        contact: payment.contact,
+        createdAt: new Date(payment.created_at * 1000)
+      });
+
+      await newPayment.save();
+    }
+
+    res.json({ success: true });
   } catch (error) {
     next(error);
   }
 };
 
-export {  createOrder, verifyPayment, webHookVerification  };
+export { createOrder, verifyPayment, webHookVerification };

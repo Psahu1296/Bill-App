@@ -7,30 +7,29 @@ import User from "../models/userModel";
 
 
 const isVerifiedUser = async (req: Request, res: Response, next: NextFunction) => {
-    try{
-
+    try {
         const { accessToken } = req.cookies;
-        
-        if(!accessToken){
+
+        if (!accessToken) {
             const error = createHttpError(401, "Please provide token!");
             return next(error);
         }
 
-        const decodeToken = jwt.verify(accessToken, process.env.JWT_SECRET as string) as jwt.JwtPayload;
-        
+        const decodeToken = jwt.verify(accessToken, config.accessTokenSecret) as jwt.JwtPayload;
+
         req.user = decodeToken;
         const user = await User.findById(decodeToken._id);
-        if(!user){
-            const error = createHttpError(401, "User not exist!");
+        if (!user) {
+            const error = createHttpError(401, "User does not exist!");
             return next(error);
         }
 
         next();
 
-    }catch (error) {
+    } catch (error) {
         const err = createHttpError(401, "Invalid Token!");
         next(err);
     }
 }
 
-export {  isVerifiedUser  };
+export { isVerifiedUser };

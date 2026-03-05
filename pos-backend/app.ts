@@ -5,12 +5,10 @@ import config from "./config/config";
 import globalErrorHandler from "./middlewares/globalErrorHandler";
 import cookieParser from "cookie-parser";
 import cors from "cors";
-import fs from "fs";
 import path from "path";
-import cron from "node-cron"; // Import node-cron
-import {
-  calculateAndSaveDailyEarnings,
-} from "./controllers/earningController"; // Import the function
+import cron from "node-cron";
+import rateLimit from "express-rate-limit";
+import { calculateAndSaveDailyEarnings } from "./controllers/earningController";
 
 import userRoute from "./routes/userRoute";
 import orderRoute from "./routes/orderRoute";
@@ -25,31 +23,59 @@ const app = express();
 const PORT = config.port;
 connectDB();
 
-
 cron.schedule(
   "5 0 * * *",
   async () => {
     console.log("Running daily earning calculation job...");
     try {
-      await calculateAndSaveDailyEarnings({}); // Pass empty req object for internal call
+      await calculateAndSaveDailyEarnings({});
       console.log("Daily earning calculation job completed successfully.");
     } catch (error) {
       console.error("Daily earning calculation job failed:", error);
     }
   },
   {
-    timezone: "Asia/Kolkata", // IMPORTANT: Set cron timezone if your server is not in Asia/Kolkata
+    timezone: "Asia/Kolkata",
   }
 );
 
+// CORS — must be before routes
+app.use(cors({
+  origin: config.frontendUrl,
+  credentials: true,
+}));
+
+// Webhook route needs raw body for Razorpay signature verification.
+// Register BEFORE express.json() so the body isn't pre-parsed.
+app.use(
+  "/api/payment/webhook-verification",
+  express.raw({ type: "application/json" })
+);
 
 app.use(express.json());
 app.use(cookieParser());
 
+// Rate limiting
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  message: { success: false, message: "Too many login attempts. Please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5,
+  message: { success: false, message: "Too many registration attempts. Please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // API Endpoints
-// app.get("/", (req,res) => {
-//   res.json({message : "Hello from POS Server!"});
-// });
+app.use("/api/user/login", loginLimiter);
+app.use("/api/user/register", registerLimiter);
+
 app.use("/api/user", userRoute);
 app.use("/api/order", orderRoute);
 app.use("/api/table", tableRoute);
@@ -60,15 +86,15 @@ app.use("/api/expenses", expenseRoutes);
 app.use("/api/ledger", customerLedgerRoutes);
 
 // Serve frontend static files
-const frontendBuildPath = path.join(__dirname, "../pos-frontend/dist"); // or 'build' if CRA
+const frontendBuildPath = path.join(__dirname, "../pos-frontend/dist");
 app.use(express.static(frontendBuildPath));
 
-// Serve index.html for any other route (to support React Router)
+// Serve index.html for any non-API route (React Router support)
 app.get("*", (req, res) => {
   res.sendFile(path.join(frontendBuildPath, "index.html"));
 });
 
-// Global Error Handler (put last)
+// Global Error Handler (must be last)
 app.use(globalErrorHandler);
 
 // Start server

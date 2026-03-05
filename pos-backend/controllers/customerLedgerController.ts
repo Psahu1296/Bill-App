@@ -1,15 +1,11 @@
 import { Response, NextFunction } from "express";
 import { CustomRequest as Request, IQueryOptions } from "../types";
-// controllers/customerLedgerController.js
 import createHttpError from "http-errors";
 import CustomerLedger from "../models/customerLedgerModel";
 import mongoose from "mongoose";
-import DailyEarning from "../models/dailyEarningModel"; // For earning updates on manual payments
-import { getZonedStartOfDayUtc } from "./earningController"; // For earning updates on manual payments
+import DailyEarning from "../models/dailyEarningModel";
+import { getZonedStartOfDayUtc } from "./earningController";
 
-// @desc    Get a customer's ledger by phone number
-// @route   GET /api/ledger/:phone
-// @access  Private (Admin/Staff)
 const getCustomerLedger = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { phone } = req.params;
@@ -30,13 +26,10 @@ const getCustomerLedger = async (req: Request, res: Response, next: NextFunction
   }
 };
 
-// @desc    Record a payment against a customer's outstanding balance
-// @route   POST /api/ledger/:phone/pay
-// @access  Private (Admin/Staff)
 const recordCustomerPayment = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { phone } = req.params;
-    const { amountPaid, orderId, notes } = req.body; // amountPaid is the payment towards balance
+    const { amountPaid, orderId, notes } = req.body;
 
     if (!phone || amountPaid === undefined || amountPaid <= 0) {
       const error = createHttpError(400, "Phone and valid amountPaid are required.");
@@ -50,7 +43,7 @@ const recordCustomerPayment = async (req: Request, res: Response, next: NextFunc
     const customerLedger = await CustomerLedger.findOneAndUpdate(
       { customerPhone: phone },
       {
-        $inc: { balanceDue: -amountPaid }, // Subtract payment from balance
+        $inc: { balanceDue: -amountPaid },
         $set: { lastActivity: new Date() },
         $push: {
           transactions: {
@@ -70,9 +63,7 @@ const recordCustomerPayment = async (req: Request, res: Response, next: NextFunc
       return next(error);
     }
 
-    // --- Update Daily Earning for this manual payment ---
-    // If the payment is received manually, it contributes to daily earnings
-    const dateForEarningUpdate = getZonedStartOfDayUtc(new Date()); // Earning attributed to today's date
+    const dateForEarningUpdate = getZonedStartOfDayUtc(new Date());
     try {
         await DailyEarning.findOneAndUpdate(
             { date: dateForEarningUpdate },
@@ -82,11 +73,9 @@ const recordCustomerPayment = async (req: Request, res: Response, next: NextFunc
             },
             { upsert: true, new: true, setDefaultsOnInsert: true }
         );
-        console.log(`[Earning Update] Daily earning for ${dateForEarningUpdate.toISOString().split('T')[0]} incremented by ${amountPaid} due to manual customer payment.`);
     } catch (earningUpdateError) {
         console.error("Error updating daily earnings during manual customer payment:", earningUpdateError);
     }
-
 
     res.status(200).json({ success: true, message: "Payment recorded successfully!", data: customerLedger });
   } catch (error) {
@@ -96,15 +85,15 @@ const recordCustomerPayment = async (req: Request, res: Response, next: NextFunc
 
 const getAllCustomerLedgers = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { name, phone, status } = req.query; // Filters
+    const { name, phone, status } = req.query;
 
     let query: IQueryOptions = {};
 
     if (name) {
-      query.customerName = { $regex: name as string, $options: "i" }; // Case-insensitive search
+      query.customerName = { $regex: name as string, $options: "i" };
     }
     if (phone) {
-      query.customerPhone = phone as string; // Adjust if this needs to be a regex too
+      query.customerPhone = phone as string;
     }
     if (status === 'unpaid') {
       query.balanceDue = { $gt: 0 };
@@ -112,16 +101,11 @@ const getAllCustomerLedgers = async (req: Request, res: Response, next: NextFunc
         query.balanceDue = 0;
     }
 
-    const ledgers = await CustomerLedger.find(query).sort({ lastActivity: -1 }); // Sort by latest activity
-
+    const ledgers = await CustomerLedger.find(query).sort({ lastActivity: -1 });
     res.status(200).json({ success: true, data: ledgers });
   } catch (error) {
     next(error);
   }
 };
 
-export { 
-  getCustomerLedger,
-  recordCustomerPayment,
-  getAllCustomerLedgers
- };
+export { getCustomerLedger, recordCustomerPayment, getAllCustomerLedgers };

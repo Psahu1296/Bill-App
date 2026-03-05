@@ -1,25 +1,16 @@
-import { Response, NextFunction } from "express";
-import { CustomRequest as Request } from "../types";
-// routes/customerLedgerRoutes.js
 import express from "express";
 import { getCustomerLedger, recordCustomerPayment, getAllCustomerLedgers } from "../controllers/customerLedgerController";
 import { isVerifiedUser } from "../middlewares/tokenVerification";
 const router = express.Router();
 
-const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
-    req.user = { role: 'admin' };
-    next();
-};
+// /all must be registered BEFORE /:phone to avoid being caught by the dynamic route
+router.route("/all")
+  .get(isVerifiedUser, getAllCustomerLedgers);
 
 router.route("/:phone")
-  .get(authMiddleware, getCustomerLedger); // Get ledger by customer phone
+  .get(isVerifiedUser, getCustomerLedger);
 
 router.route("/:phone/pay")
-  .post(authMiddleware, recordCustomerPayment); // Record a payment
-
-router.route("/all")
-  .post(authMiddleware, getAllCustomerLedgers); // Record a payment
-
-
+  .post(isVerifiedUser, recordCustomerPayment);
 
 export default router;

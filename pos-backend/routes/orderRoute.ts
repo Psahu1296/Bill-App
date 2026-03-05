@@ -1,5 +1,5 @@
 import express from "express";
-import { addOrder, getOrders, getOrderById, updateOrder, updateOrderById } from "../controllers/orderController";
+import { addOrder, getOrders, getOrderById, updateOrderById } from "../controllers/orderController";
 import { isVerifiedUser } from "../middlewares/tokenVerification";
 const router = express.Router();
 
