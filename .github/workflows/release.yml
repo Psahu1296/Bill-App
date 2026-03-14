@@ -9,6 +9,9 @@ jobs:
   release:
     name: Build & Release on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    # Need write permissions for creating a release
+    permissions:
+      contents: write
     strategy:
       matrix:
         # We build on all three major OS environments to get platform-specific installers
@@ -21,7 +24,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
       - name: Install dependencies
         run: |
