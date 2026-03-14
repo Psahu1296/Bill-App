@@ -1,7 +1,7 @@
 import app from "./app";
 import connectDB from "./config/database";
 
-const startServer = async (port: number = Number(process.env.PORT) || 5000): Promise<void> => {
+const startServer = async (port: number = Number(process.env.PORT) || 5001): Promise<void> => {
   await connectDB();
   return new Promise((resolve, reject) => {
     const server = app.listen(port, "0.0.0.0", () => {

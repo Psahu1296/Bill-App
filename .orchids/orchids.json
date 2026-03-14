@@ -1,0 +1,10 @@
+{
+  "projectId": "a9973767-8bb6-47e1-8239-e8646fcab55b",
+  "createdAt": 1773507767515,
+  "version": "1.0",
+  "startupCommands": [
+    "cd pos-backend && npm install; cd pos-backend && npm run dev",
+    "cd pos-frontend && npm install; cd pos-frontend && npm run dev -- --host 0.0.0.0 --port 5173"
+  ],
+  "templateId": "any"
+}

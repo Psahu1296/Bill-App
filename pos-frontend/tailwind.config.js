@@ -7,8 +7,8 @@ export default {
   theme: {
     extend: {},
   },
-  plugins: [
-    require('tailwind-scrollbar-hide')
-  ],
+plugins: [
+      import('tailwind-scrollbar-hide')
+    ],
 }
 

@@ -4,19 +4,22 @@
   "description": "Point-of-Sale system for Dhaba",
   "author": "Dhaba POS",
   "main": "electron/dist/main.js",
-  "scripts": {
-    "electron:dev": "NODE_ENV=development electron .",
+"scripts": {
+      "electron:dev": "NODE_ENV=development electron .",
 
-    "build:frontend": "cd pos-frontend && npm run build",
-    "build:backend": "cd pos-backend && npm run build",
-    "build:electron": "tsc -p electron/tsconfig.json",
-    "build": "npm run build:frontend && npm run build:backend && npm run build:electron",
+      "build:frontend": "cd pos-frontend && npm run build",
+      "build:backend": "cd pos-backend && npm run build",
+      "build:electron": "tsc -p electron/tsconfig.json",
+      "build": "npm run build:frontend && npm run build:backend && npm run build:electron",
 
-    "dist": "npm run build && electron-builder",
-    "dist:win": "npm run build && electron-builder --win",
-    "dist:mac": "npm run build && electron-builder --mac",
-    "dist:linux": "npm run build && electron-builder --linux"
-  },
+      "test": "node test/smoke-test.js",
+      "test:health": "node test/smoke-test.js",
+
+      "dist": "npm run build && electron-builder",
+      "dist:win": "npm run build && electron-builder --win",
+      "dist:mac": "npm run build && electron-builder --mac",
+      "dist:linux": "npm run build && electron-builder --linux"
+    },
   "dependencies": {
     "mongodb-memory-server": "^10.1.4"
   },

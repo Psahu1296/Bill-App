@@ -50,7 +50,18 @@ app.use(
 );
 
 app.use(express.json());
-app.use(cookieParser());
+  app.use(cookieParser());
+
+  // Health check endpoint
+  app.get("/health", (req, res) => {
+    res.json({ 
+      status: "ok", 
+      timestamp: new Date().toISOString(),
+      version: process.env.npm_package_version || "1.0.0",
+      environment: config.nodeEnv,
+      port: config.port 
+    });
+  });
 
 // Rate limiting
 const loginLimiter = rateLimit({

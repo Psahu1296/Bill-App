@@ -148,7 +148,8 @@ const Bill: React.FC = () => {
       setOrderInfo(data);
       dispatch(removeCustomer());
       dispatch(removeAllItems());
-      enqueueSnackbar("Order Placed!", { variant: "success" });
+      enqueueSnackbar("Order Processed!", { variant: "success" });
+      setIsPayModalOpen(false);
       navigate("/", { replace: true });
     },
     onError: (error: { response?: { data?: { message?: string } } }) => {
@@ -157,7 +158,30 @@ const Bill: React.FC = () => {
     },
   });
 
-  const orderData = buildOrderData();
+  const handlePaymentSubmit = (paidAmount: number, payMethod: PaymentMethod, isFullyPaid: boolean) => {
+    // Determine total amount paid so far
+    const orderData = buildOrderData();
+    const amountAlreadyPaid = orderId && orderInfo ? (orderInfo.amountPaid || 0) : 0;
+    const newAmountPaid = amountAlreadyPaid + paidAmount;
+
+    // By definition, when they pay through the modal, they are finalizing the order
+    // (any remaining balance is added to the ledger)
+    const updates = {
+      ...orderData,
+      amountPaid: newAmountPaid,
+      paymentMethod: payMethod,
+      paymentStatus: isFullyPaid ? "Paid" : "Pending",
+      orderStatus: "Completed" as OrderStatus,
+    };
+
+    if (orderId) {
+      orderMutation.mutate({ id: orderId, ...updates });
+    } else {
+      orderMutation.mutate(updates);
+    }
+  };
+
+  const currentOrderData = buildOrderData();
 
   return (
     <>
@@ -207,8 +231,7 @@ const Bill: React.FC = () => {
           Place Order
         </button>
         <button
-          disabled={!orderId}
-          className="px-4 py-3 w-full rounded-lg bg-[#2e4a40] text-[#02ca3a] font-semibold text-lg"
+          className="px-4 py-3 w-full rounded-lg bg-[#2e4a40] text-[#02ca3a] font-semibold text-lg hover:bg-[#3B5D51] transition"
           onClick={() => setIsPayModalOpen(true)}
         >
           Pay
@@ -221,8 +244,9 @@ const Bill: React.FC = () => {
       <PayModal
         isOpen={isPayModalOpen}
         onClose={() => setIsPayModalOpen(false)}
-        order={{ _id: orderId ?? "", ...orderData } as Partial<Order> & { _id: string }}
+        order={{ _id: orderId ?? "", ...currentOrderData } as Partial<Order> & { _id: string }}
         customerData={customerData}
+        onSubmitPayment={handlePaymentSubmit}
       />
     </>
   );

@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 
-const PORT = 5000;
+const PORT = 5001;
 
 // In dev mode Electron loads the Vite dev server; backend is started separately.
 // In production (packaged) mode Electron starts everything itself.
@@ -37,26 +37,36 @@ async function setupBackend(): Promise<void> {
   process.env["PORT"] = String(PORT);
   process.env["FRONTEND_URL"] = `http://localhost:${PORT}`;
 
-  // 3. Start embedded MongoDB with a persistent data directory.
-  //    On first launch the MongoDB binary is downloaded once (~70 MB) and cached.
-  const dbDataPath = path.join(userDataPath, "mongodb-data");
-  const binaryPath = path.join(userDataPath, "mongodb-binaries");
-  fs.mkdirSync(dbDataPath, { recursive: true });
-  fs.mkdirSync(binaryPath, { recursive: true });
+// 3. Start embedded MongoDB with a persistent data directory.
+    //    On first launch the MongoDB binary is downloaded once (~70 MB) and cached.
+    const dbDataPath = path.join(userDataPath, "mongodb-data");
+    const binaryPath = path.join(userDataPath, "mongodb-binaries");
+    fs.mkdirSync(dbDataPath, { recursive: true });
+    fs.mkdirSync(binaryPath, { recursive: true });
 
-  process.env["MONGOMS_DOWNLOAD_DIR"] = binaryPath;
-  process.env["MONGOMS_VERSION"] = "7.0.14";
-  process.env["MONGOMS_PREFER_GLOBAL_PATH"] = "0";
+    process.env["MONGOMS_DOWNLOAD_DIR"] = binaryPath;
+    process.env["MONGOMS_VERSION"] = "7.0.14";
+    process.env["MONGOMS_PREFER_GLOBAL_PATH"] = "0";
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { MongoMemoryServer } = require("mongodb-memory-server");
-  const mongod = await MongoMemoryServer.create({
-    instance: {
-      dbPath: dbDataPath,
-      storageEngine: "wiredTiger",
-    },
-  });
-  process.env["MONGODB_URI"] = mongod.getUri();
+    console.log("🔄 Setting up embedded database...");
+    
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { MongoMemoryServer } = require("mongodb-memory-server");
+    let mongod;
+    try {
+      mongod = await MongoMemoryServer.create({
+        instance: {
+          dbPath: dbDataPath,
+          storageEngine: "wiredTiger",
+        },
+        downloadDir: binaryPath,
+      });
+      process.env["MONGODB_URI"] = mongod.getUri();
+      console.log("✅ Database initialized successfully");
+    } catch (error) {
+      console.error("❌ Failed to initialize database:", error);
+      throw new Error("Database initialization failed. Please check your internet connection and try again.");
+    }
 
   // 4. Load and start the Express backend.
   //    Path differs between dev (source tree) and packaged (app resources).

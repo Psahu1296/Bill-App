@@ -5,23 +5,24 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { enqueueSnackbar } from "notistack";
 import { updateOrder } from "../../https";
 import { useNavigate } from "react-router-dom";
-import type { Order } from "../../types";
+import type { Order, AddOrderPayload, PaymentMethod, OrderStatus } from "../../types";
 
-const PAYMENT_METHODS = ["Cash"];
+const PAYMENT_METHODS: PaymentMethod[] = ["Cash", "Online"];
 
 interface PayModalProps {
   isOpen: boolean;
   onClose: () => void;
-  order: Partial<Order> & { _id: string };
+  order: Partial<Order> & { _id?: string };
   customerData: { customerPhone?: string };
+  onSubmitPayment: (amountPaid: number, paymentMethod: PaymentMethod, isFullyPaid: boolean) => void;
 }
 
-const PayModal: React.FC<PayModalProps> = ({ isOpen, onClose, order, customerData }) => {
+const PayModal: React.FC<PayModalProps> = ({ isOpen, onClose, order, customerData, onSubmitPayment }) => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
   const [amountPaying, setAmountPaying] = useState("");
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("Cash");
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>("Cash");
 
   const totalBill = order?.bills?.totalWithTax ?? 0;
   const amountAlreadyPaid = order?.amountPaid ?? 0;
@@ -34,27 +35,6 @@ const PayModal: React.FC<PayModalProps> = ({ isOpen, onClose, order, customerDat
       setSelectedPaymentMethod("Cash");
     }
   }, [isOpen, order]);
-
-  const updateOrderMutation = useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: Record<string, unknown> }) =>
-      updateOrder({ id, ...updates }),
-    onSuccess: () => {
-      enqueueSnackbar("Payment recorded!", { variant: "success" });
-      queryClient.invalidateQueries({ queryKey: ["orders", order._id] });
-      queryClient.invalidateQueries({ queryKey: ["orders"] });
-      queryClient.invalidateQueries({
-        queryKey: ["customerLedger", customerData?.customerPhone],
-      });
-      queryClient.invalidateQueries({ queryKey: ["dashboardEarningsSummary"] });
-      onClose();
-      navigate("/", { replace: true });
-    },
-    onError: (error: { response?: { data?: { message?: string } } }) => {
-      const errorMessage =
-        error.response?.data?.message || "Failed to record payment.";
-      enqueueSnackbar(errorMessage, { variant: "error" });
-    },
-  });
 
   const handleSubmitPayment = () => {
     const paidAmount = parseFloat(amountPaying);
@@ -75,14 +55,7 @@ const PayModal: React.FC<PayModalProps> = ({ isOpen, onClose, order, customerDat
     const newAmountPaid = amountAlreadyPaid + paidAmount;
     const isFullyPaid = newAmountPaid >= totalBill - 0.01;
 
-    const updatesForOrder = {
-      amountPaid: newAmountPaid,
-      paymentMethod: selectedPaymentMethod,
-      paymentStatus: isFullyPaid ? "Paid" : "Pending",
-      orderStatus: isFullyPaid ? "Completed" : "In Progress",
-    };
-
-    updateOrderMutation.mutate({ id: order._id, updates: updatesForOrder });
+    onSubmitPayment(paidAmount, selectedPaymentMethod, isFullyPaid);
   };
 
   return (
@@ -98,7 +71,7 @@ const PayModal: React.FC<PayModalProps> = ({ isOpen, onClose, order, customerDat
           >
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold">
-                Record Payment for Order #{order?._id?.slice(-6)}
+                {order._id ? `Record Payment for Order #${order._id.slice(-6)}` : "Record Payment for New Order"}
               </h2>
               <button onClick={onClose} className="text-[#f5f5f5] hover:text-red-500">
                 <IoMdClose size={24} />
@@ -171,13 +144,12 @@ const PayModal: React.FC<PayModalProps> = ({ isOpen, onClose, order, customerDat
             <button
               onClick={handleSubmitPayment}
               disabled={
-                updateOrderMutation.isPending ||
                 parseFloat(amountPaying) <= 0 ||
                 parseFloat(amountPaying) > remainingToPay + 0.01
               }
               className="w-full rounded-lg py-3 text-lg bg-yellow-400 text-gray-900 font-bold hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {updateOrderMutation.isPending ? "Processing..." : "Record Payment"}
+              Record Payment
             </button>
           </motion.div>
         </div>
