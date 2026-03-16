@@ -53,14 +53,20 @@ jobs:
       # softprops/action-gh-release below handles all artifact uploads via GITHUB_TOKEN.
       - name: Build and Package Installer (macOS)
         if: matrix.os == 'macos-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run dist:mac
 
       - name: Build and Package Installer (Windows)
         if: matrix.os == 'windows-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run dist:win
 
       - name: Build and Package Installer (Linux)
         if: matrix.os == 'ubuntu-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run dist:linux
 
       - name: Upload Artifacts to GitHub Release
