@@ -12,6 +12,11 @@ jobs:
     # Need write permissions for creating a release
     permissions:
       contents: write
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      NODE_OPTIONS: "--max-old-space-size=4096"
+      CSC_IDENTITY_AUTO_DISCOVERY: false
     strategy:
       matrix:
         # We build on all three major OS environments to get platform-specific installers
@@ -53,24 +58,14 @@ jobs:
       # softprops/action-gh-release below handles all artifact uploads via GITHUB_TOKEN.
       - name: Build and Package Installer (macOS)
         if: matrix.os == 'macos-latest'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-          NODE_OPTIONS: "--max-old-space-size=4096"
         run: npm run dist:mac
 
       - name: Build and Package Installer (Windows)
         if: matrix.os == 'windows-latest'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_OPTIONS: "--max-old-space-size=4096"
         run: npm run dist:win
 
       - name: Build and Package Installer (Linux)
         if: matrix.os == 'ubuntu-latest'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_OPTIONS: "--max-old-space-size=4096"
         run: npm run dist:linux
 
       - name: Upload Artifacts to GitHub Release
@@ -83,5 +78,4 @@ jobs:
             release/latest*.yml
             release/*.blockmap
             release/*.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Env is already set at the job level
