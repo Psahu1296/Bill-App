@@ -7,6 +7,13 @@ import Modal from "./Modal";
 import { setCustomer } from "../../redux/slices/customerSlice";
 import { useAppDispatch } from "../../redux/hooks";
 
+const navItems = [
+  { path: "/", icon: FaHome, label: "Home" },
+  { path: "/orders", icon: MdOutlineReorder, label: "Orders" },
+  { path: "/tables", icon: MdTableBar, label: "Tables" },
+  { path: "/ledger", icon: BiNotepad, label: "Ledger" },
+];
+
 const BottomNav: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -14,19 +21,11 @@ const BottomNav: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDriver, setIsDriver] = useState(false);
   const [guestCount, setGuestCount] = useState(0);
-  const [name, setName] = useState<string>("");
-  const [phone, setPhone] = useState<string>("");
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
 
-  const increment = () => {
-    if (guestCount >= 6) return;
-    setGuestCount((prev) => prev + 1);
-  };
-
-  const decrement = () => {
-    if (guestCount <= 0) return;
-    setGuestCount((prev) => prev - 1);
-  };
-
+  const increment = () => { if (guestCount < 6) setGuestCount((p) => p + 1); };
+  const decrement = () => { if (guestCount > 0) setGuestCount((p) => p - 1); };
   const isActive = (path: string) => location.pathname === path;
 
   const handleCreateOrder = () => {
@@ -37,123 +36,105 @@ const BottomNav: React.FC = () => {
   const onSpecialCheck = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { checked } = e.target;
     setIsDriver(checked);
-    if (checked) {
-      setName("Driver");
-      setPhone("214214214");
-      setGuestCount(1);
-    } else {
-      setName("");
-      setPhone("");
-      setGuestCount(0);
-    }
+    if (checked) { setName("Driver"); setPhone("214214214"); setGuestCount(1); }
+    else { setName(""); setPhone(""); setGuestCount(0); }
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-[#262626] p-2 h-16 flex justify-around">
-      <button
-        onClick={() => navigate("/")}
-        className={`flex items-center justify-center font-bold ${
-          isActive("/") ? "text-[#f5f5f5] bg-[#343434]" : "text-[#ababab]"
-        } w-[300px] rounded-[20px]`}
-      >
-        <FaHome className="inline mr-2" size={20} /> <p>Home</p>
-      </button>
-      <button
-        onClick={() => navigate("/orders")}
-        className={`flex items-center justify-center font-bold ${
-          isActive("/orders") ? "text-[#f5f5f5] bg-[#343434]" : "text-[#ababab]"
-        } w-[300px] rounded-[20px]`}
-      >
-        <MdOutlineReorder className="inline mr-2" size={20} /> <p>Orders</p>
-      </button>
-      <button
-        onClick={() => navigate("/tables")}
-        className={`flex items-center justify-center font-bold ${
-          isActive("/tables") ? "text-[#f5f5f5] bg-[#343434]" : "text-[#ababab]"
-        } w-[300px] rounded-[20px]`}
-      >
-        <MdTableBar className="inline mr-2" size={20} /> <p>Tables</p>
-      </button>
-      <button
-        className="flex items-center justify-center font-bold text-[#ababab] w-[300px]"
-        onClick={() => navigate("/ledger")}
-      >
-        <BiNotepad className="inline mr-2" size={20} /> <p>Ledger</p>
-      </button>
+    <div className="fixed bottom-0 left-0 right-0 z-40">
+      {/* Gradient fade above nav */}
+      <div className="h-6 bg-gradient-to-t from-dhaba-bg to-transparent pointer-events-none" />
 
-      <button
-        disabled={isActive("/tables") || isActive("/menu")}
-        onClick={() => setIsModalOpen(true)}
-        className="absolute bottom-6 bg-[#F6B100] text-[#f5f5f5] rounded-full p-4 items-center"
-      >
-        <BiSolidDish size={40} />
-      </button>
+      <div className="glass border-t border-dhaba-border/30 px-4 py-2 flex justify-around items-center">
+        {navItems.map(({ path, icon: Icon, label }) => (
+          <button
+            key={path}
+            onClick={() => navigate(path)}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-semibold text-sm transition-all duration-300 ${
+              isActive(path)
+                ? "bg-dhaba-accent/15 text-dhaba-accent shadow-glow"
+                : "text-dhaba-muted hover:text-dhaba-text hover:bg-dhaba-surface-hover"
+            }`}
+          >
+            <Icon size={18} />
+            <span className={isActive(path) ? "" : "hidden lg:inline"}>{label}</span>
+          </button>
+        ))}
+
+        {/* Floating action button */}
+        <button
+          disabled={isActive("/tables") || isActive("/menu")}
+          onClick={() => setIsModalOpen(true)}
+          className="absolute -top-5 btn-accent rounded-2xl p-4 shadow-glow-lg disabled:opacity-40 disabled:shadow-none"
+        >
+          <BiSolidDish size={28} />
+        </button>
+      </div>
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Create Order">
-        <div>
-          <label className="block text-[#ababab] mb-2 text-sm font-medium">
-            Customer Name
-          </label>
-          <div className="flex items-center rounded-lg p-3 px-4 bg-[#1f1f1f]">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-dhaba-muted mb-2 text-xs font-bold tracking-wider uppercase">
+              Customer Name
+            </label>
+            <div className="glass-input rounded-xl px-4 py-3">
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                type="text"
+                placeholder="Enter customer name"
+                className="bg-transparent flex-1 w-full text-dhaba-text text-sm focus:outline-none placeholder:text-dhaba-muted/50"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-dhaba-muted mb-2 text-xs font-bold tracking-wider uppercase">
+              Phone Number
+            </label>
+            <div className="glass-input rounded-xl px-4 py-3">
+              <input
+                value={phone}
+                maxLength={10}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, "");
+                  if (val.length <= 10) setPhone(val);
+                }}
+                type="tel"
+                placeholder="9876543210"
+                className="bg-transparent flex-1 w-full text-dhaba-text text-sm focus:outline-none placeholder:text-dhaba-muted/50"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-dhaba-muted mb-2 text-xs font-bold tracking-wider uppercase">
+              Guests
+            </label>
+            <div className="glass-input rounded-xl flex items-center justify-between px-4 py-3">
+              <button onClick={decrement} className="text-dhaba-accent text-xl font-bold w-8 h-8 rounded-lg hover:bg-dhaba-accent/10 transition-colors">−</button>
+              <span className="text-dhaba-text font-bold">{guestCount} <span className="text-dhaba-muted font-normal text-sm">Person</span></span>
+              <button onClick={increment} className="text-dhaba-accent text-xl font-bold w-8 h-8 rounded-lg hover:bg-dhaba-accent/10 transition-colors">+</button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 py-2">
             <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              type="text"
-              placeholder="Enter customer name"
-              className="bg-transparent flex-1 text-white focus:outline-none"
+              type="checkbox"
+              id="isFrequent"
+              checked={isDriver}
+              onChange={onSpecialCheck}
+              className="h-4 w-4 rounded border-dhaba-border accent-dhaba-accent"
             />
+            <label htmlFor="isFrequent" className="text-sm text-dhaba-text font-medium">
+              🚛 Is Truck Driver
+            </label>
           </div>
+
+          <button onClick={handleCreateOrder} className="w-full btn-accent rounded-xl py-3 text-base mt-2">
+            Create Order
+          </button>
         </div>
-        <div>
-          <label className="block text-[#ababab] mb-2 mt-3 text-sm font-medium">
-            Customer Phone
-          </label>
-          <div className="flex items-center rounded-lg p-3 px-4 bg-[#1f1f1f]">
-            <input
-              value={phone}
-              maxLength={10}
-              onChange={(e) => setPhone(e.target.value)}
-              type="number"
-              placeholder="9876543210"
-              className="bg-transparent flex-1 text-white focus:outline-none"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="block mb-2 mt-3 text-sm font-medium text-[#ababab]">
-            Guest
-          </label>
-          <div className="flex items-center justify-between bg-[#1f1f1f] px-4 py-3 rounded-lg">
-            <button onClick={decrement} className="text-yellow-500 text-2xl">
-              &minus;
-            </button>
-            <span className="text-white">{guestCount} Person</span>
-            <button onClick={increment} className="text-yellow-500 text-2xl">
-              &#43;
-            </button>
-          </div>
-        </div>
-        <div className="flex items-center my-2 mt-4">
-          <input
-            type="checkbox"
-            id="isFrequent"
-            checked={isDriver}
-            onChange={onSpecialCheck}
-            className="h-4 w-4 text-yellow-400 rounded border-gray-600 focus:ring-yellow-500 bg-[#1f1f1f]"
-          />
-          <label
-            htmlFor="isFrequent"
-            className="ml-2 block text-sm text-[#f5f5f5]"
-          >
-            Is Truck Driver
-          </label>
-        </div>
-        <button
-          onClick={handleCreateOrder}
-          className="w-full bg-[#F6B100] text-[#f5f5f5] rounded-lg py-3 mt-8 hover:bg-yellow-700"
-        >
-          Create Order
-        </button>
       </Modal>
     </div>
   );

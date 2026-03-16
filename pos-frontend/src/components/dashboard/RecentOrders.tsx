@@ -1,50 +1,68 @@
 import React, { useEffect } from "react";
-import {
-  keepPreviousData,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { enqueueSnackbar } from "notistack";
 import { getOrders, updateOrderStatus } from "../../https/index";
 import { formatDateAndTime } from "../../utils";
+import { useNavigate } from "react-router-dom";
+import { IoPrintOutline } from "react-icons/io5";
 import type { Order, OrderStatus, PaymentStatus } from "../../types";
 
 const RecentOrders: React.FC = () => {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
-  const handleStatusChange = ({
-    orderId,
-    orderStatus,
-  }: {
-    orderId: string;
-    orderStatus: OrderStatus;
-  }) => {
-    orderStatusUpdateMutation.mutate({ orderId, orderStatus });
+  const handleRowClick = (order: Order) => {
+    if (order.orderStatus === "Completed") {
+      navigate(`/order-summary?orderId=${order._id}`);
+    } else {
+      navigate(`/menu?orderId=${order._id}`);
+    }
+  };
+
+  const handlePrint = (e: React.MouseEvent, order: Order) => {
+    e.stopPropagation();
+    const WinPrint = window.open("", "", "width=500,height=750");
+    if (!WinPrint) return;
+    WinPrint.document.write(`<!DOCTYPE html><html><head><title>Receipt #${order._id.slice(-6)}</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 24px; max-width: 400px; margin: auto; color: #222; }
+      h2 { text-align:center; font-size: 1.3rem; margin-bottom: 4px; }
+      p { margin: 2px 0; font-size: 0.85rem; }
+      .row { display: flex; justify-content: space-between; }
+      .divider { border: none; border-top: 1px dashed #999; margin: 8px 0; }
+      .total { font-size: 1.1rem; font-weight: bold; }
+      .footer { text-align: center; margin-top: 16px; font-size: 0.8rem; color: #888; }
+    </style></head><body>
+    <h2>&#x1F372; Dhaba POS</h2><p style="text-align:center;color:#888;">Order Receipt</p>
+    <hr class="divider">
+    <p>Order #: <strong>${order._id.slice(-6)}</strong></p>
+    <p>Name: <strong>${order.customerDetails.name}</strong></p>
+    <p>Phone: ${order.customerDetails.phone}</p>
+    <p>Table: T-${order.table.tableNo} &nbsp;|&nbsp; Guests: ${order.customerDetails.guests}</p>
+    <hr class="divider">
+    <p><strong>Items</strong></p>
+    ${order.items.map(i => `<div class="row"><span>${i.name} x${i.quantity}</span><span>&#x20B9;${i.price.toFixed(2)}</span></div>`).join("")}
+    <hr class="divider">
+    <div class="row"><span>Subtotal</span><span>&#x20B9;${order.bills.total.toFixed(2)}</span></div>
+    <div class="row"><span>Tax (5.25%)</span><span>&#x20B9;${order.bills.tax.toFixed(2)}</span></div>
+    <div class="row total"><span>Total</span><span>&#x20B9;${order.bills.totalWithTax.toFixed(2)}</span></div>
+    <hr class="divider">
+    <div class="row"><span>Paid (${order.paymentMethod})</span><span>&#x20B9;${(order.amountPaid || 0).toFixed(2)}</span></div>
+    <div class="footer">Thank you for dining with us! &#x2764;</div>
+    </body></html>`);
+    WinPrint.document.close();
+    WinPrint.focus();
+    setTimeout(() => { WinPrint.print(); WinPrint.close(); }, 600);
   };
 
   const orderStatusUpdateMutation = useMutation({
-    mutationFn: ({
-      orderId,
-      orderStatus,
-    }: {
-      orderId: string;
-      orderStatus: OrderStatus;
-    }) =>
-      updateOrderStatus({
-        orderId,
-        orderStatus,
-        paymentStatus: (orderStatus === "Completed" ? "Paid" : "Pending") as PaymentStatus,
-      }),
+    mutationFn: ({ orderId, orderStatus }: { orderId: string; orderStatus: OrderStatus }) =>
+      updateOrderStatus({ orderId, orderStatus, paymentStatus: (orderStatus === "Completed" ? "Paid" : "Pending") as PaymentStatus }),
     onSuccess: () => {
-      enqueueSnackbar("Order status updated successfully!", {
-        variant: "success",
-      });
+      enqueueSnackbar("Order status updated!", { variant: "success" });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
     },
-    onError: () => {
-      enqueueSnackbar("Failed to update order status!", { variant: "error" });
-    },
+    onError: () => { enqueueSnackbar("Failed to update!", { variant: "error" }); },
   });
 
   const { data: resData, isError } = useQuery({
@@ -54,78 +72,68 @@ const RecentOrders: React.FC = () => {
   });
 
   useEffect(() => {
-    if (isError) {
-      enqueueSnackbar("Something went wrong!", { variant: "error" });
-    }
+    if (isError) enqueueSnackbar("Something went wrong!", { variant: "error" });
   }, [isError]);
 
   const orders: Order[] = resData?.data?.data ?? [];
 
   return (
-    <div className="container mx-auto bg-[#262626] p-4 rounded-lg">
-      <h2 className="text-[#f5f5f5] text-xl font-semibold mb-4">
-        Recent Orders
-      </h2>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-[#f5f5f5]">
-          <thead className="bg-[#333] text-[#ababab]">
-            <tr>
-              <th className="p-3">Customer</th>
-              <th className="p-3">Status</th>
-              <th className="p-3">Date &amp; Time</th>
-              <th className="p-3">Items</th>
-              <th className="p-3">Table No</th>
-              <th className="p-3">Total</th>
-              <th className="p-3">Payment Method</th>
-              <th className="p-3">Payment Status</th>
+    <div className="container mx-auto glass-card rounded-2xl p-6 mx-6">
+      <h2 className="font-display text-xl font-bold text-dhaba-text mb-6">Recent Orders</h2>
+      <div className="overflow-x-auto rounded-xl">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="bg-dhaba-surface text-dhaba-muted text-xs font-bold tracking-wider uppercase">
+              <th className="p-4 rounded-tl-xl">Customer</th>
+              <th className="p-4">Status</th>
+              <th className="p-4">Date & Time</th>
+              <th className="p-4">Items</th>
+              <th className="p-4">Table</th>
+              <th className="p-4">Total</th>
+              <th className="p-4">Payment</th>
+              <th className="p-4 rounded-tr-xl">Action</th>
             </tr>
           </thead>
           <tbody>
             {orders.map((order, index) => (
               <tr
                 key={index}
-                className="border-b border-gray-600 hover:bg-[#333]"
+                className="border-b border-dhaba-border/15 hover:bg-dhaba-surface-hover/50 transition-colors cursor-pointer"
+                onClick={() => handleRowClick(order)}
               >
-                <td className="p-4">{order.customerDetails.name}</td>
-                <td className="p-4">
+                <td className="p-4 text-dhaba-text font-semibold">{order.customerDetails.name}</td>
+                <td className="p-4" onClick={(e) => e.stopPropagation()}>
                   <select
-                    className={`bg-[#1a1a1a] text-[#f5f5f5] border border-gray-500 p-2 rounded-lg focus:outline-none ${
-                      order.orderStatus === "Ready"
-                        ? "text-green-500"
-                        : "text-yellow-500"
-                    }`}
+                    className="glass-input rounded-lg px-3 py-1.5 text-xs font-bold focus:outline-none appearance-none"
+                    style={{ color: order.orderStatus === "Ready" || order.orderStatus === "Completed" ? "hsl(var(--dhaba-success))" : "hsl(var(--dhaba-accent))" }}
                     value={order.orderStatus}
-                    onChange={(e) =>
-                      handleStatusChange({
-                        orderId: order._id,
-                        orderStatus: e.target.value as OrderStatus,
-                      })
-                    }
+                    onChange={(e) => orderStatusUpdateMutation.mutate({ orderId: order._id, orderStatus: e.target.value as OrderStatus })}
                   >
-                    <option className="text-yellow-500" value="In Progress">
-                      In Progress
-                    </option>
-                    <option className="text-green-500" value="Ready">
-                      Ready
-                    </option>
-                    <option className="text-green-500" value="Completed">
-                      Completed
-                    </option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Ready">Ready</option>
+                    <option value="Completed">Completed</option>
                   </select>
                 </td>
-                <td className="p-4">{formatDateAndTime(order.orderDate)}</td>
-                <td className="p-4">{order.items.length} Items</td>
-                <td className="p-4">Table - {order.table.tableNo}</td>
-                <td className="p-4">₹{order.bills.totalWithTax}</td>
-                <td className="p-4">{order.paymentMethod}</td>
-                <td className="p-4">
+                <td className="p-4 text-dhaba-muted text-xs">{formatDateAndTime(order.orderDate)}</td>
+                <td className="p-4 text-dhaba-text">{order.items.length}</td>
+                <td className="p-4"><span className="text-dhaba-accent font-bold">T-{order.table.tableNo}</span></td>
+                <td className="p-4 text-dhaba-text font-bold">₹{order.bills.totalWithTax}</td>
+                <td className="p-4 text-dhaba-muted">{order.paymentMethod}</td>
+                <td className="p-4" onClick={(e) => e.stopPropagation()}>
                   {order.paymentStatus === "Pending" ? (
-                    <button className="bg-[#f6b100] px-2 py-1 font-medium rounded-lg">
+                    <button
+                      className="btn-accent rounded-lg px-3 py-1.5 text-xs"
+                      onClick={(e) => { e.stopPropagation(); navigate(`/order-summary?orderId=${order._id}`); }}
+                    >
                       Pay
                     </button>
                   ) : (
-                    <button className="text-[#02ca3a] px-2 py-1 font-medium rounded-lg">
-                      Print Invoice
+                    <button
+                      onClick={(e) => handlePrint(e, order)}
+                      className="flex items-center gap-1.5 text-dhaba-success text-xs font-bold hover:text-dhaba-success/80 transition-colors"
+                      title="Print Receipt"
+                    >
+                      <IoPrintOutline className="text-sm" /> Print
                     </button>
                   )}
                 </td>

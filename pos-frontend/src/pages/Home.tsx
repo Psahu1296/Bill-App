@@ -11,9 +11,7 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { enqueueSnackbar } from "notistack";
 
 const Home: React.FC = () => {
-  useEffect(() => {
-    document.title = "POS | Home";
-  }, []);
+  useEffect(() => { document.title = "Dhaba POS | Home"; }, []);
 
   const { data: resData, isError } = useQuery({
     queryKey: ["earnings"],
@@ -22,9 +20,7 @@ const Home: React.FC = () => {
   });
 
   useEffect(() => {
-    if (isError) {
-      enqueueSnackbar("Failed to load earnings data", { variant: "error" });
-    }
+    if (isError) enqueueSnackbar("Failed to load earnings data", { variant: "error" });
   }, [isError]);
 
   const earningsData = resData?.data?.data as
@@ -34,27 +30,34 @@ const Home: React.FC = () => {
   const percent = earningsData?.percentageChange ?? 0;
 
   return (
-    <section className="bg-[#1f1f1f] h-[calc(100vh-5rem)] overflow-hidden flex gap-3">
-      <div className="flex-[3]">
-        <Greetings />
-        <div className="flex items-center w-full gap-3 px-8 mt-8">
-          <MiniCard
-            title="Total Earnings"
-            icon={<BsCashCoin />}
-            number={earnings || 0}
-            footerNum={percent || 0}
-          />
-          <MiniCard
-            title="In Progress"
-            icon={<GrInProgress />}
-            number={16}
-            footerNum={3.6}
-          />
+    <section className="bg-dhaba-bg min-h-[calc(100vh-4rem)] pb-24 overflow-y-auto">
+      <div className="flex gap-6 px-6 pt-2">
+        {/* Left column */}
+        <div className="flex-[3] space-y-6">
+          <Greetings />
+          <div className="grid grid-cols-2 gap-4">
+            <MiniCard
+              title="Total Earnings"
+              icon={<BsCashCoin />}
+              number={earnings || 0}
+              footerNum={percent || 0}
+              variant="earnings"
+            />
+            <MiniCard
+              title="In Progress"
+              icon={<GrInProgress />}
+              number={16}
+              footerNum={3.6}
+              variant="progress"
+            />
+          </div>
+          <RecentOrders />
         </div>
-        <RecentOrders />
-      </div>
-      <div className="flex-[2]">
-        <PopularDishes />
+
+        {/* Right column */}
+        <div className="flex-[2]">
+          <PopularDishes />
+        </div>
       </div>
       <BottomNav />
     </section>

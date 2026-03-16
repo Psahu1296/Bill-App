@@ -25,66 +25,59 @@ const Login: React.FC = () => {
     onSuccess: (res) => {
       const { data } = res;
       const { _id, name, email, phone, role } = data.data as {
-        _id: string;
-        name: string;
-        email: string;
-        phone: string;
-        role: string;
+        _id: string; name: string; email: string; phone: string; role: string;
       };
       dispatch(setUser({ _id, name, email, phone, role }));
       navigate("/");
     },
     onError: (error: { response?: { data?: { message?: string } } }) => {
-      const message =
-        error.response?.data?.message || "Login failed. Please try again.";
+      const message = error.response?.data?.message || "Login failed. Please try again.";
       enqueueSnackbar(message, { variant: "error" });
     },
   });
 
   return (
-    <div>
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label className="block text-[#ababab] mb-2 mt-3 text-sm font-medium">
-            Employee Email
-          </label>
-          <div className="flex item-center rounded-lg p-5 px-4 bg-[#1f1f1f]">
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              placeholder="Enter employee email"
-              className="bg-transparent flex-1 text-white focus:outline-none"
-              required
-            />
-          </div>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-dhaba-muted mb-2 text-xs font-bold tracking-wider uppercase">
+          Email
+        </label>
+        <div className="glass-input rounded-xl px-4 py-3">
+          <input
+            type="email"
+            name="email"
+            value={formData.email}
+            onChange={handleChange}
+            placeholder="Enter your email"
+            className="bg-transparent flex-1 w-full text-dhaba-text text-sm focus:outline-none placeholder:text-dhaba-muted/50"
+            required
+          />
         </div>
-        <div>
-          <label className="block text-[#ababab] mb-2 mt-3 text-sm font-medium">
-            Password
-          </label>
-          <div className="flex item-center rounded-lg p-5 px-4 bg-[#1f1f1f]">
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              placeholder="Enter password"
-              className="bg-transparent flex-1 text-white focus:outline-none"
-              required
-            />
-          </div>
+      </div>
+      <div>
+        <label className="block text-dhaba-muted mb-2 text-xs font-bold tracking-wider uppercase">
+          Password
+        </label>
+        <div className="glass-input rounded-xl px-4 py-3">
+          <input
+            type="password"
+            name="password"
+            value={formData.password}
+            onChange={handleChange}
+            placeholder="Enter password"
+            className="bg-transparent flex-1 w-full text-dhaba-text text-sm focus:outline-none placeholder:text-dhaba-muted/50"
+            required
+          />
         </div>
-        <button
-          type="submit"
-          disabled={loginMutation.isPending}
-          className="w-full rounded-lg mt-6 py-3 text-lg bg-yellow-400 text-gray-900 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {loginMutation.isPending ? "Signing in..." : "Sign in"}
-        </button>
-      </form>
-    </div>
+      </div>
+      <button
+        type="submit"
+        disabled={loginMutation.isPending}
+        className="w-full btn-accent rounded-xl py-3.5 text-base mt-2"
+      >
+        {loginMutation.isPending ? "Signing in..." : "Sign In"}
+      </button>
+    </form>
   );
 };
 

@@ -7,12 +7,54 @@ import CustomerInfo from "../components/menu/CustomerInfo";
 import CartInfo from "../components/menu/CartInfo";
 import Bill from "../components/menu/Bill";
 import { useSelector } from "react-redux";
+import { useAppDispatch } from "../redux/hooks";
+import { removeAllItems, updateList } from "../redux/slices/cartSlice";
+import { setCustomer, updateTable } from "../redux/slices/customerSlice";
+import { useSearchParams } from "react-router-dom";
+import { getOrderById } from "../https";
 import type { RootState } from "../redux/store";
+import type { Order } from "../types";
 
 const Menu: React.FC = () => {
+  const dispatch = useAppDispatch();
+  const [searchParams] = useSearchParams();
+  const orderId = searchParams.get("orderId");
+
   useEffect(() => {
     document.title = "POS | Menu";
-  }, []);
+
+    if (orderId) {
+      getOrderById(orderId)
+        .then((res) => {
+          const orderData = res.data.data as Order;
+          dispatch(
+            setCustomer({
+              name: orderData.customerDetails.name,
+              phone: orderData.customerDetails.phone,
+              guests: orderData.customerDetails.guests,
+            })
+          );
+          if (orderData.table) {
+            dispatch(
+              updateTable({
+                table: {
+                  tableId: orderData.table._id,
+                  tableNo: orderData.table.tableNo,
+                },
+              })
+            );
+          }
+          dispatch(updateList(orderData.items));
+        })
+        .catch((err) => {
+          console.error("Failed to load order data:", err);
+        });
+    }
+
+    return () => {
+      dispatch(removeAllItems());
+    };
+  }, [dispatch, orderId]);
 
   const customerData = useSelector((state: RootState) => state.customer);
 

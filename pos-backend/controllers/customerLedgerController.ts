@@ -83,6 +83,49 @@ const recordCustomerPayment = async (req: Request, res: Response, next: NextFunc
   }
 };
 
+// Call this when a customer pays partial amount and we want to push the remaining to ledger.
+// This creates or upserts the ledger entry for the customer.
+const addDebtToLedger = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { phone } = req.params;
+    const { amountDue, orderId, customerName, notes } = req.body;
+
+    if (!phone || amountDue === undefined || amountDue <= 0) {
+      const error = createHttpError(400, "Phone and valid amountDue are required.");
+      return next(error);
+    }
+    if (orderId && !mongoose.Types.ObjectId.isValid(orderId)) {
+      const error = createHttpError(400, "Invalid Order ID format.");
+      return next(error);
+    }
+
+    const ledger = await CustomerLedger.findOneAndUpdate(
+      { customerPhone: phone },
+      {
+        $inc: { balanceDue: amountDue },
+        $set: {
+          customerName: customerName || phone,
+          lastActivity: new Date(),
+        },
+        $push: {
+          transactions: {
+            orderId: orderId || null,
+            transactionType: "full_payment_due",
+            amount: amountDue,
+            timestamp: new Date(),
+            notes: notes || `Remaining balance for Order #${orderId ? orderId.toString().slice(-6) : "N/A"}`,
+          },
+        },
+      },
+      { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
+    );
+
+    res.status(200).json({ success: true, message: "Debt added to ledger.", data: ledger });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const getAllCustomerLedgers = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { name, phone, status } = req.query;
@@ -109,4 +152,4 @@ const getAllCustomerLedgers = async (req: Request, res: Response, next: NextFunc
   }
 };
 
-export { getCustomerLedger, recordCustomerPayment, getAllCustomerLedgers };
+export { getCustomerLedger, recordCustomerPayment, addDebtToLedger, getAllCustomerLedgers };

@@ -10,9 +10,7 @@ import type { Table } from "../types";
 const Tables: React.FC = () => {
   const [status, setStatus] = useState("all");
 
-  useEffect(() => {
-    document.title = "POS | Tables";
-  }, []);
+  useEffect(() => { document.title = "Dhaba POS | Tables"; }, []);
 
   const { data: resData, isError } = useQuery({
     queryKey: ["tables"],
@@ -21,43 +19,36 @@ const Tables: React.FC = () => {
   });
 
   useEffect(() => {
-    if (isError) {
-      enqueueSnackbar("Something went wrong!", { variant: "error" });
-    }
+    if (isError) enqueueSnackbar("Something went wrong!", { variant: "error" });
   }, [isError]);
 
   const tables: Table[] = resData?.data?.data ?? [];
 
   return (
-    <section className="bg-[#1f1f1f] h-[calc(100vh-5rem)] overflow-hidden">
-      <div className="flex items-center justify-between px-10 py-4">
+    <section className="bg-dhaba-bg min-h-[calc(100vh-4rem)] pb-24">
+      <div className="flex items-center justify-between px-6 py-5">
         <div className="flex items-center gap-4">
           <BackButton />
-          <h1 className="text-[#f5f5f5] text-2xl font-bold tracking-wider">
-            Tables
-          </h1>
+          <h1 className="font-display text-2xl font-bold text-dhaba-text">Tables</h1>
         </div>
-        <div className="flex items-center justify-around gap-4">
-          <button
-            onClick={() => setStatus("all")}
-            className={`text-[#ababab] text-lg ${
-              status === "all" && "bg-[#383838] rounded-lg px-5 py-2"
-            } rounded-lg px-5 py-2 font-semibold`}
-          >
-            All
-          </button>
-          <button
-            onClick={() => setStatus("booked")}
-            className={`text-[#ababab] text-lg ${
-              status === "booked" && "bg-[#383838] rounded-lg px-5 py-2"
-            } rounded-lg px-5 py-2 font-semibold`}
-          >
-            Booked
-          </button>
+        <div className="glass-card rounded-2xl p-1 flex gap-1">
+          {["all", "booked"].map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatus(s)}
+              className={`text-sm rounded-xl px-5 py-2 font-semibold transition-all duration-200 ${
+                status === s
+                  ? "bg-dhaba-accent/15 text-dhaba-accent shadow-glow"
+                  : "text-dhaba-muted hover:text-dhaba-text hover:bg-dhaba-surface-hover"
+              }`}
+            >
+              {s === "all" ? "All" : "Booked"}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-3 px-16 py-4 overflow-y-scroll scrollbar-hide">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 px-6 py-2">
         {tables.map((table) => (
           <TableCard
             key={table._id}

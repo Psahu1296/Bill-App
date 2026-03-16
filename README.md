@@ -1,5 +1,9 @@
 # Dhaba POS
 
+*For offline frontend development, see [Dummy Data Guide](./dummy-data-guide.md)*
+
+Dhaba POS is a comprehensive point-of-sale system...
+
 A full-featured **Point-of-Sale desktop app** for restaurants and dhabas. Runs entirely offline — no server setup, no cloud subscription, no IT skills needed. Just download and use.
 
 <table>
@@ -78,16 +82,28 @@ cd pos-backend && npm install
 cd pos-frontend && npm install
 ```
 
+### Seed Initial Data (Optional)
+
+To populate the database with default menu items:
+
+```bash
+cd pos-backend
+npx tsx scripts/script.ts
+```
+
 ### Run in development
 
 ```bash
-# Terminal 1 — backend (Express on :5000)
+# Terminal 1 — local database (MongoDB on :27017)
+node start-mongo.js
+
+# Terminal 2 — backend (Express on :5000)
 cd pos-backend && npm run dev
 
-# Terminal 2 — frontend (Vite on :5173)
+# Terminal 3 — frontend (Vite on :5173)
 cd pos-frontend && npm run dev
 
-# Terminal 3 — open Electron window (optional, points to Vite dev server)
+# Terminal 4 — open Electron window (optional, points to Vite dev server)
 npm run electron:dev
 ```
 
@@ -159,7 +175,7 @@ Bill-App/
 - [x] Expense tracking
 - [x] TypeScript migration (FE + BE)
 - [x] Electron desktop app (offline, zero config)
-- [ ] Auto-updater (v2)
+- [x] Auto-updater (v2)
 - [ ] Cloud sync / multi-device (v2)
 - [ ] Print receipt directly from app (v2)
 - [ ] Inventory / stock management (v2)

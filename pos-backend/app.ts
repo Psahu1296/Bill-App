@@ -17,6 +17,7 @@ import dishRoute from "./routes/dishRoute";
 import earningRoute from "./routes/earningRoute";
 import expenseRoutes from "./routes/expenseRoutes";
 import customerLedgerRoutes from "./routes/customerLedgerRoutes";
+import consumableRoutes from "./routes/consumableRoutes";
 
 const app = express();
 
@@ -92,6 +93,7 @@ app.use("/api/dishes", dishRoute);
 app.use("/api/earnings", earningRoute);
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/ledger", customerLedgerRoutes);
+app.use("/api/consumables", consumableRoutes);
 
 // Serve frontend static files
 const frontendBuildPath = path.join(__dirname, "../pos-frontend/dist");

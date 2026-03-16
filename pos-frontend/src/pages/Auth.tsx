@@ -1,70 +1,70 @@
 import React, { useEffect, useState } from "react";
 import restaurant from "../assets/images/restaurant-img.jpg";
-import logo from "../assets/images/logo.png";
+const logo = "/dhaba_logo.webp";
 import Register from "../components/auth/Register";
 import Login from "../components/auth/Login";
 
 const Auth: React.FC = () => {
-  useEffect(() => {
-    document.title = "POS | Auth";
-  }, []);
-
+  useEffect(() => { document.title = "Dhaba POS | Login"; }, []);
   const [isRegister, setIsRegister] = useState(false);
 
   return (
-    <div className="flex min-h-screen w-full">
-      <div className="w-1/2 relative flex items-center justify-center bg-cover">
-        <img
-          className="w-full h-full object-cover"
-          src={restaurant}
-          alt="Restaurant Image"
-        />
-        <div className="absolute inset-0 bg-black bg-opacity-80"></div>
-        <blockquote className="absolute bottom-10 px-8 mb-10 text-2xl italic text-white">
-          "Serve customers the best food with prompt and friendly service in a
-          welcoming atmosphere, and they'll keep coming back."
-          <br />
-          <span className="block mt-4 text-yellow-400">
-            - Founder of Restro
-          </span>
-        </blockquote>
+    <div className="flex min-h-screen w-full bg-dhaba-bg">
+      {/* Left — Hero */}
+      <div className="w-1/2 relative flex items-center justify-center overflow-hidden">
+        <img className="w-full h-full object-cover scale-105" src={restaurant} alt="Restaurant" />
+        <div className="absolute inset-0 bg-gradient-to-br from-dhaba-bg/90 via-dhaba-bg/70 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-dhaba-bg via-transparent to-transparent" />
+
+        <div className="absolute bottom-12 left-10 right-10">
+          <h2 className="font-display text-5xl font-bold text-dhaba-text leading-tight mb-4">
+            Welcome to <br />
+            <span className="text-dhaba-accent">Dhaba</span>POS
+          </h2>
+          <p className="text-dhaba-muted text-lg max-w-md leading-relaxed">
+            "Serve customers the best food with love and they'll keep coming back."
+          </p>
+          <p className="text-dhaba-accent font-semibold mt-4 text-sm tracking-wider uppercase">
+            — Dhaba Founder
+          </p>
+        </div>
       </div>
 
-      <div className="w-1/2 min-h-screen bg-[#1a1a1a] p-10">
-        <div className="flex flex-col items-center gap-2">
-          <img
-            src={logo}
-            alt="Restro Logo"
-            className="h-14 w-14 border-2 rounded-full p-1"
-          />
-          <h1 className="text-lg font-semibold text-[#f5f5f5] tracking-wide">
-            Restro
-          </h1>
-        </div>
+      {/* Right — Form */}
+      <div className="w-1/2 min-h-screen flex flex-col justify-center p-16">
+        <div className="max-w-md mx-auto w-full">
+          <div className="flex flex-col items-center gap-3 mb-10">
+            <div className="relative">
+              <img src={logo} alt="Logo" className="h-16 w-16 object-contain" />
+              <div className="absolute -inset-2 bg-dhaba-accent/20 rounded-2xl blur-lg" />
+            </div>
+            <h1 className="font-display text-2xl font-bold text-dhaba-text">
+              Dhaba<span className="text-dhaba-accent">POS</span>
+            </h1>
+          </div>
 
-        <h2 className="text-4xl text-center mt-10 font-semibold text-yellow-400 mb-10">
-          {isRegister ? "Employee Registration" : "Employee Login"}
-        </h2>
-
-        {isRegister ? (
-          <Register setIsRegister={setIsRegister} />
-        ) : (
-          <Login />
-        )}
-
-        <div className="flex justify-center mt-6">
-          <p className="text-sm text-[#ababab]">
-            {isRegister
-              ? "Already have an account?"
-              : "Don't have an account?"}
-            <a
-              onClick={() => setIsRegister(!isRegister)}
-              className="text-yellow-400 font-semibold hover:underline cursor-pointer"
-              href="#"
-            >
-              {isRegister ? "Sign in" : "Sign up"}
-            </a>
+          <h2 className="font-display text-3xl text-center font-bold text-dhaba-text mb-2">
+            {isRegister ? "Create Account" : "Sign In"}
+          </h2>
+          <p className="text-dhaba-muted text-center text-sm mb-8">
+            {isRegister ? "Register as a new employee" : "Enter your credentials to continue"}
           </p>
+
+          <div className="glass-card rounded-3xl p-8">
+            {isRegister ? <Register setIsRegister={setIsRegister} /> : <Login />}
+          </div>
+
+          <div className="flex justify-center mt-6">
+            <p className="text-sm text-dhaba-muted">
+              {isRegister ? "Already have an account? " : "Don't have an account? "}
+              <button
+                onClick={() => setIsRegister(!isRegister)}
+                className="text-dhaba-accent font-bold hover:underline"
+              >
+                {isRegister ? "Sign in" : "Sign up"}
+              </button>
+            </p>
+          </div>
         </div>
       </div>
     </div>

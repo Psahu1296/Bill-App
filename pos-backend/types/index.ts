@@ -27,6 +27,12 @@ export interface IQueryOptions {
     $options: string;
   };
   balanceDue?: number | { $gt: number };
+  consumableType?: string;
+  consumerType?: string;
+  timestamp?: {
+    $gte?: Date;
+    $lte?: Date;
+  };
 }
 
 export interface IUpdateOrderPayload {

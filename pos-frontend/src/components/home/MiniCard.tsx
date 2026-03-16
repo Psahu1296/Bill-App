@@ -5,30 +5,28 @@ interface MiniCardProps {
   icon: React.ReactNode;
   number: number;
   footerNum: number;
+  variant?: "earnings" | "progress";
 }
 
-const MiniCard: React.FC<MiniCardProps> = ({ title, icon, number, footerNum }) => {
+const MiniCard: React.FC<MiniCardProps> = ({ title, icon, number, footerNum, variant = "earnings" }) => {
+  const isEarnings = variant === "earnings";
+
   return (
-    <div className="bg-[#1a1a1a] py-5 px-5 rounded-lg w-[50%]">
-      <div className="flex items-start justify-between">
-        <h1 className="text-[#f5f5f5] text-lg font-semibold tracking-wide">
-          {title}
-        </h1>
-        <button
-          className={`${
-            title === "Total Earnings" ? "bg-[#02ca3a]" : "bg-[#f6b100]"
-          } p-3 rounded-lg text-[#f5f5f5] text-2xl`}
-        >
+    <div className="glass-card rounded-2xl p-5 group hover:shadow-glow transition-all duration-300">
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-dhaba-muted text-xs font-bold tracking-widest uppercase">{title}</p>
+        <div className={`p-3 rounded-xl ${isEarnings ? "bg-dhaba-success/15 text-dhaba-success" : "bg-dhaba-accent/15 text-dhaba-accent"} text-xl transition-transform group-hover:scale-110`}>
           {icon}
-        </button>
+        </div>
       </div>
-      <div>
-        <h1 className="text-[#f5f5f5] text-4xl font-bold mt-5">
-          {title === "Total Earnings" ? `₹ ${number}` : number}
-        </h1>
-        <h1 className="text-[#f5f5f5] text-lg mt-2">
-          <span className="text-[#02ca3a]">{footerNum}%</span> than yesterday
-        </h1>
+      <h1 className="font-display text-4xl font-bold text-dhaba-text">
+        {isEarnings ? `₹${number.toLocaleString()}` : number}
+      </h1>
+      <div className="flex items-center gap-2 mt-3">
+        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${footerNum >= 0 ? "bg-dhaba-success/15 text-dhaba-success" : "bg-dhaba-danger/15 text-dhaba-danger"}`}>
+          {footerNum >= 0 ? "↑" : "↓"} {Math.abs(footerNum)}%
+        </span>
+        <span className="text-dhaba-muted text-xs">vs yesterday</span>
       </div>
     </div>
   );

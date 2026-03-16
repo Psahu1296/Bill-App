@@ -67,8 +67,7 @@ const Invoice: React.FC<InvoiceProps> = ({ orderInfo, setShowInvoice }) => {
 
           <div className="mt-4 border-t pt-4 text-sm text-gray-700">
             <p>
-              <strong>Order ID:</strong>{" "}
-              {Math.floor(new Date(orderInfo.orderDate).getTime())}
+              <strong>Order ID:</strong> {orderInfo._id}
             </p>
             <p>
               <strong>Name:</strong> {orderInfo.customerDetails.name}

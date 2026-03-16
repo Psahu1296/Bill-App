@@ -16,9 +16,12 @@ const OrderList: React.FC<OrderListProps> = ({ order }) => {
   const navigate = useNavigate();
 
   const onOrderClick = () => {
+    if (order.orderStatus === "Completed") {
+      navigate(`/order-summary?orderId=${order._id}`);
+      return;
+    }
     const { customerDetails, table, items } = order;
     dispatch(setCustomer({ ...customerDetails } as { name: string; phone: string; guests: number }));
-    // Map populated table._id to tableId so Bill.tsx can read customerData.table?.tableId
     dispatch(tableStateUpdate({ table: { tableId: table._id, tableNo: table.tableNo } }));
     dispatch(updateList([...items]));
     navigate(`/menu?orderId=${order._id}`);
@@ -26,32 +29,31 @@ const OrderList: React.FC<OrderListProps> = ({ order }) => {
 
   return (
     <div
-      className="flex items-center gap-5 mb-3 hover:bg-[#262626] p-4 rounded-lg cursor-pointer"
+      className="flex items-center gap-4 p-3 rounded-2xl hover:bg-dhaba-surface-hover cursor-pointer transition-all duration-200 group"
       onClick={onOrderClick}
     >
-      <button className="bg-[#f6b100] p-3 text-xl font-bold rounded-lg">
+      <div className="h-12 w-12 rounded-xl bg-gradient-warm flex items-center justify-center text-sm font-bold text-dhaba-bg flex-shrink-0 group-hover:shadow-glow transition-shadow">
         {getAvatarName(order.customerDetails.name)}
-      </button>
-      <div className="flex items-center justify-between w-[100%]">
-        <div className="flex flex-col items-start gap-1">
-          <h1 className="text-[#f5f5f5] text-lg font-semibold tracking-wide">
+      </div>
+      <div className="flex items-center justify-between flex-1 min-w-0">
+        <div className="flex flex-col gap-0.5">
+          <h3 className="text-dhaba-text font-semibold text-sm truncate">
             {order.customerDetails.name}
-          </h1>
-          <p className="text-[#ababab] text-sm">{order.items.length} Items</p>
+          </h3>
+          <p className="text-dhaba-muted text-xs">{order.items.length} Items</p>
         </div>
-        <h1 className="text-[#f6b100] font-semibold border border-[#f6b100] rounded-lg p-1">
-          Table <FaLongArrowAltRight className="text-[#ababab] ml-2 inline" />{" "}
-          {order.table.tableNo}
-        </h1>
-        <div className="flex flex-col items-end gap-2">
+        <div className="flex items-center gap-3">
+          <span className="text-dhaba-accent text-xs font-bold border border-dhaba-accent/30 rounded-lg px-2.5 py-1 bg-dhaba-accent/5">
+            T-{order.table.tableNo}
+          </span>
           {order.orderStatus === "Ready" ? (
-            <p className="text-green-600 bg-[#2e4a40] px-2 py-1 rounded-lg">
-              <FaCheckDouble className="inline mr-2" /> {order.orderStatus}
-            </p>
+            <span className="status-chip bg-dhaba-success/15 text-dhaba-success">
+              <FaCheckDouble className="inline mr-1" /> Ready
+            </span>
           ) : (
-            <p className="text-yellow-600 bg-[#4a452e] px-2 py-1 rounded-lg">
-              <FaCircle className="inline mr-2" /> {order.orderStatus}
-            </p>
+            <span className="status-chip bg-dhaba-accent/15 text-dhaba-accent">
+              <FaCircle className="inline mr-1 text-[6px]" /> In Progress
+            </span>
           )}
         </div>
       </div>

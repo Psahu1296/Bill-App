@@ -8,9 +8,9 @@ const BackButton: React.FC = () => {
   return (
     <button
       onClick={() => navigate(-1)}
-      className="bg-[#025cca] p-2 text-xl font-bold rounded-full text-white"
+      className="glass-card p-2.5 rounded-xl text-dhaba-muted hover:text-dhaba-accent hover:shadow-glow transition-all duration-200"
     >
-      <IoArrowBackOutline />
+      <IoArrowBackOutline size={20} />
     </button>
   );
 };

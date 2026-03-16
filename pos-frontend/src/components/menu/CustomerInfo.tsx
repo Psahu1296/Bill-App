@@ -8,21 +8,21 @@ const CustomerInfo: React.FC = () => {
   const customerData = useSelector((state: RootState) => state.customer);
 
   return (
-    <div className="flex items-center justify-between px-4 py-3">
+    <div className="flex items-center justify-between px-4 py-4">
       <div className="flex flex-col items-start">
-        <h1 className="text-md text-[#f5f5f5] font-semibold tracking-wide">
+        <h3 className="text-sm text-dhaba-text font-semibold">
           {customerData.customerName || "Customer Name"}
-        </h1>
-        <p className="text-xs text-[#ababab] font-medium mt-1">
-          #{customerData.orderId || "N/A"} / Dine in
+        </h3>
+        <p className="text-[10px] text-dhaba-muted mt-0.5">
+          #{customerData.orderId || "N/A"} · Dine in
         </p>
-        <p className="text-xs text-[#ababab] font-medium mt-2">
+        <p className="text-[10px] text-dhaba-muted mt-1">
           {formatDate(dateTime)}
         </p>
       </div>
-      <button className="bg-[#f6b100] p-3 text-xl font-bold rounded-lg">
+      <div className="h-10 w-10 rounded-xl bg-gradient-warm flex items-center justify-center text-sm font-bold text-dhaba-bg">
         {getAvatarName(customerData.customerName) || "CN"}
-      </button>
+      </div>
     </div>
   );
 };

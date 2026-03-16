@@ -1,14 +1,9 @@
 import React, { useState } from "react";
 import { useSelector } from "react-redux";
 import { getTotalPrice } from "../../redux/slices/cartSlice";
-import {
-  addOrder,
-  createOrderRazorpay,
-  updateOrder,
-  verifyPaymentRazorpay,
-} from "../../https/index";
+import { addOrder, createOrderRazorpay, updateOrder, verifyPaymentRazorpay } from "../../https/index";
 import { enqueueSnackbar } from "notistack";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { removeAllItems } from "../../redux/slices/cartSlice";
 import { removeCustomer } from "../../redux/slices/customerSlice";
 import Invoice from "../invoice/Invoice";
@@ -19,9 +14,7 @@ import type { RootState } from "../../redux/store";
 import type { Order, AddOrderPayload, PaymentMethod, OrderStatus } from "../../types";
 
 declare global {
-  interface Window {
-    Razorpay: new (options: Record<string, unknown>) => { open: () => void };
-  }
+  interface Window { Razorpay: new (options: Record<string, unknown>) => { open: () => void }; }
 }
 
 function loadScript(src: string): Promise<boolean> {
@@ -38,7 +31,7 @@ const Bill: React.FC = () => {
   const dispatch = useAppDispatch();
   const [param] = useSearchParams();
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
-
+  const queryClient = useQueryClient();
   const orderId = param.get("orderId");
   const navigate = useNavigate();
 
@@ -54,86 +47,39 @@ const Bill: React.FC = () => {
   const [orderInfo, setOrderInfo] = useState<Order | undefined>();
 
   const buildOrderData = () => ({
-    customerDetails: {
-      name: customerData.customerName,
-      phone: customerData.customerPhone,
-      guests: customerData.guests,
-    },
+    customerDetails: { name: customerData.customerName, phone: customerData.customerPhone, guests: customerData.guests },
     orderStatus: "In Progress" as OrderStatus,
-    bills: {
-      total: Math.floor(total),
-      tax: tax,
-      totalWithTax: Math.floor(totalPriceWithTax),
-    },
+    bills: { total: Math.floor(total), tax, totalWithTax: Math.floor(totalPriceWithTax) },
     items: cartData,
     table: customerData.table?.tableId,
-    paymentMethod: paymentMethod,
+    paymentMethod,
   });
 
   const handlePlaceOrder = async () => {
-    if (!paymentMethod) {
-      enqueueSnackbar("Please select a payment method!", { variant: "warning" });
-      return;
-    }
-
+    if (!paymentMethod) { enqueueSnackbar("Please select a payment method!", { variant: "warning" }); return; }
     if (paymentMethod === "Online") {
       try {
         const res = await loadScript("https://checkout.razorpay.com/v1/checkout.js");
-        if (!res) {
-          enqueueSnackbar("Razorpay SDK failed to load. Are you online?", {
-            variant: "warning",
-          });
-          return;
-        }
-
-        const { data } = await createOrderRazorpay({
-          amount: totalPriceWithTax,
-        });
-
+        if (!res) { enqueueSnackbar("Razorpay SDK failed to load.", { variant: "warning" }); return; }
+        const { data } = await createOrderRazorpay({ amount: totalPriceWithTax });
         const options = {
           key: `${import.meta.env.VITE_RAZORPAY_KEY_ID}`,
           amount: (data as { order: { amount: number; currency: string; id: string } }).order.amount,
           currency: (data as { order: { amount: number; currency: string; id: string } }).order.currency,
-          name: "RESTRO",
-          description: "Secure Payment for Your Meal",
+          name: "DHABA POS",
+          description: "Secure Payment",
           order_id: (data as { order: { amount: number; currency: string; id: string } }).order.id,
-          handler: async function (response: {
-            razorpay_order_id: string;
-            razorpay_payment_id: string;
-            razorpay_signature: string;
-          }) {
-            const verification = await verifyPaymentRazorpay(response);
-            enqueueSnackbar(
-              (verification.data as { message: string }).message,
-              { variant: "success" }
-            );
-            const orderData = {
-              ...buildOrderData(),
-              bills: { total, tax, totalWithTax: totalPriceWithTax },
-              paymentData: {
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-              },
-            };
-            orderMutation.mutate(orderData);
+          handler: async function (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) {
+            await verifyPaymentRazorpay(response);
+            orderMutation.mutate({ ...buildOrderData(), paymentData: { razorpay_order_id: response.razorpay_order_id, razorpay_payment_id: response.razorpay_payment_id } });
           },
-          prefill: {
-            name: customerData.customerName,
-            email: "",
-            contact: customerData.customerPhone,
-          },
-          theme: { color: "#025cca" },
+          prefill: { name: customerData.customerName, contact: customerData.customerPhone },
+          theme: { color: "#E8A317" },
         };
-
-        const rzp = new window.Razorpay(options);
-        rzp.open();
-      } catch {
-        enqueueSnackbar("Payment Failed!", { variant: "error" });
-      }
+        new window.Razorpay(options).open();
+      } catch { enqueueSnackbar("Payment Failed!", { variant: "error" }); }
     } else {
-      const orderData = orderId
-        ? { id: orderId, ...buildOrderData() }
-        : buildOrderData();
+      const orderData = orderId ? { id: orderId, ...buildOrderData() } : buildOrderData();
       orderMutation.mutate(orderData);
     }
   };
@@ -141,106 +87,89 @@ const Bill: React.FC = () => {
   type OrderMutationData = AddOrderPayload & { id?: string };
 
   const orderMutation = useMutation({
-    mutationFn: (reqData: OrderMutationData) =>
-      (reqData.id ? updateOrder(reqData as unknown as { id: string; [key: string]: unknown }) : addOrder(reqData)),
+    mutationFn: (reqData: OrderMutationData) => (reqData.id ? updateOrder(reqData as unknown as { id: string; [key: string]: unknown }) : addOrder(reqData)),
     onSuccess: (resData) => {
       const { data } = (resData as { data: { data: Order } }).data;
       setOrderInfo(data);
       dispatch(removeCustomer());
       dispatch(removeAllItems());
+      queryClient.invalidateQueries({ queryKey: ["earnings"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
       enqueueSnackbar("Order Processed!", { variant: "success" });
       setIsPayModalOpen(false);
       navigate("/", { replace: true });
     },
     onError: (error: { response?: { data?: { message?: string } } }) => {
-      const msg = error.response?.data?.message || "Failed to place order.";
-      enqueueSnackbar(msg, { variant: "error" });
+      enqueueSnackbar(error.response?.data?.message || "Failed to place order.", { variant: "error" });
     },
   });
 
   const handlePaymentSubmit = (paidAmount: number, payMethod: PaymentMethod, isFullyPaid: boolean) => {
-    // Determine total amount paid so far
     const orderData = buildOrderData();
     const amountAlreadyPaid = orderId && orderInfo ? (orderInfo.amountPaid || 0) : 0;
-    const newAmountPaid = amountAlreadyPaid + paidAmount;
-
-    // By definition, when they pay through the modal, they are finalizing the order
-    // (any remaining balance is added to the ledger)
     const updates = {
       ...orderData,
-      amountPaid: newAmountPaid,
+      amountPaid: amountAlreadyPaid + paidAmount,
       paymentMethod: payMethod,
       paymentStatus: isFullyPaid ? "Paid" : "Pending",
       orderStatus: "Completed" as OrderStatus,
     };
-
-    if (orderId) {
-      orderMutation.mutate({ id: orderId, ...updates });
-    } else {
-      orderMutation.mutate(updates);
-    }
+    orderMutation.mutate(orderId ? { id: orderId, ...updates } : updates);
   };
 
   const currentOrderData = buildOrderData();
 
   return (
-    <>
-      <div className="flex items-center justify-between px-5 mt-2">
-        <p className="text-xs text-[#ababab] font-medium mt-2">
-          Items({cartData.length})
-        </p>
-        <h1 className="text-[#f5f5f5] text-md font-bold">
-          ₹{total.toFixed(2)}
-        </h1>
+    <div className="px-4 py-3 space-y-3">
+      <div className="space-y-2">
+        <div className="flex justify-between text-xs">
+          <span className="text-dhaba-muted">Items ({cartData.length})</span>
+          <span className="text-dhaba-text font-semibold">₹{total.toFixed(2)}</span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span className="text-dhaba-muted">Tax (5.25%)</span>
+          <span className="text-dhaba-text font-semibold">₹{tax.toFixed(2)}</span>
+        </div>
+        <div className="h-px bg-dhaba-border/20" />
+        <div className="flex justify-between">
+          <span className="text-dhaba-accent text-xs font-bold uppercase tracking-wider">Total</span>
+          <span className="font-display text-lg font-bold text-dhaba-accent">₹{totalPriceWithTax.toFixed(0)}</span>
+        </div>
       </div>
-      <div className="flex items-center justify-between px-5 mt-2">
-        <p className="text-xs text-[#ababab] font-medium mt-2">Tax(5.25%)</p>
-        <h1 className="text-[#f5f5f5] text-md font-bold">₹{tax.toFixed(2)}</h1>
-      </div>
-      <div className="flex items-center justify-between px-5 mt-2">
-        <p className="text-xs text-[#ababab] font-medium mt-2">Total With Tax</p>
-        <h1 className="text-[#f5f5f5] text-md font-bold">
-          ₹{totalPriceWithTax.toFixed(2)}
-        </h1>
-      </div>
-      <div className="flex items-center gap-3 px-5 mt-4">
+
+      <div className="flex gap-2">
         <button
           onClick={() => setPaymentMethod("Cash")}
-          className={`bg-[#1f1f1f] px-4 py-3 w-full rounded-lg text-[#ababab] font-semibold ${
-            paymentMethod === "Cash" ? "bg-[#383737]" : ""
+          className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${
+            paymentMethod === "Cash" ? "bg-dhaba-accent/15 text-dhaba-accent border border-dhaba-accent/30" : "glass-input text-dhaba-muted"
           }`}
         >
-          Cash
+          💵 Cash
         </button>
         <button
           disabled
           onClick={() => setPaymentMethod("Online")}
-          className={`bg-[#1f1f1f] px-4 py-3 w-full rounded-lg text-[#ababab] font-semibold ${
-            paymentMethod === "Online" ? "bg-[#383737]" : ""
+          className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all opacity-50 ${
+            paymentMethod === "Online" ? "bg-dhaba-accent/15 text-dhaba-accent border border-dhaba-accent/30" : "glass-input text-dhaba-muted"
           }`}
         >
-          Online
+          💳 Online
         </button>
       </div>
 
-      <div className="flex flex-col items-center gap-3 px-5 mt-4">
-        <button
-          onClick={handlePlaceOrder}
-          className="bg-[#f6b100] px-4 py-3 w-full rounded-lg text-[#1f1f1f] font-semibold text-lg"
-        >
-          Place Order
+      <div className="space-y-2">
+        <button onClick={handlePlaceOrder} className="w-full btn-accent rounded-xl py-3 text-sm">
+          {orderId ? "Update Order" : "Place Order"}
         </button>
         <button
-          className="px-4 py-3 w-full rounded-lg bg-[#2e4a40] text-[#02ca3a] font-semibold text-lg hover:bg-[#3B5D51] transition"
+          className="w-full py-2.5 rounded-xl bg-dhaba-success/10 text-dhaba-success font-bold text-sm border border-dhaba-success/20 hover:bg-dhaba-success/20 transition-colors"
           onClick={() => setIsPayModalOpen(true)}
         >
-          Pay
+          Pay & Complete
         </button>
       </div>
 
-      {showInvoice && orderInfo && (
-        <Invoice orderInfo={orderInfo} setShowInvoice={setShowInvoice} />
-      )}
+      {showInvoice && orderInfo && <Invoice orderInfo={orderInfo} setShowInvoice={setShowInvoice} />}
       <PayModal
         isOpen={isPayModalOpen}
         onClose={() => setIsPayModalOpen(false)}
@@ -248,7 +177,7 @@ const Bill: React.FC = () => {
         customerData={customerData}
         onSubmitPayment={handlePaymentSubmit}
       />
-    </>
+    </div>
   );
 };
 

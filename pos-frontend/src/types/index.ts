@@ -213,6 +213,41 @@ export interface AddExpensePayload {
   expenseDate?: string | Date;
 }
 
+export type ConsumableType = "tea" | "gutka" | "cigarette";
+export type ConsumerType = "customer" | "staff" | "owner";
+
+export interface AddConsumablePayload {
+  type: ConsumableType;
+  quantity: number;
+  pricePerUnit?: number;
+  consumerType: ConsumerType;
+  consumerName: string;
+  orderId?: string | null;
+  timestamp?: string;
+}
+
+// Shape returned by GET /api/consumables
+export interface ConsumableEntry {
+  _id: string;
+  type: ConsumableType;
+  quantity: number;
+  pricePerUnit: number;
+  consumerType: ConsumerType;
+  consumerName: string;
+  orderId?: string | null;
+  timestamp: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConsumableDailySummary {
+  totalSold: number;
+  totalRevenue: number;
+  staffConsumed: number;
+  ownerConsumed: number;
+  wastedValue: number;
+}
+
 // ── API response wrapper ──────────────────────────────────────────────────────
 
 export interface ApiResponse<T> {

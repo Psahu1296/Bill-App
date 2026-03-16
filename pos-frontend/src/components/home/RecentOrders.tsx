@@ -14,9 +14,7 @@ const RecentOrders: React.FC = () => {
   });
 
   useEffect(() => {
-    if (isError) {
-      enqueueSnackbar("Something went wrong!", { variant: "error" });
-    }
+    if (isError) enqueueSnackbar("Something went wrong!", { variant: "error" });
   }, [isError]);
 
   const onGoingOrders = useMemo<Order[]>(() => {
@@ -25,35 +23,35 @@ const RecentOrders: React.FC = () => {
   }, [resData?.data?.data]);
 
   return (
-    <div className="px-8 mt-6">
-      <div className="bg-[#1a1a1a] w-full h-[450px] rounded-lg">
-        <div className="flex justify-between items-center px-6 py-4">
-          <h1 className="text-[#f5f5f5] text-lg font-semibold tracking-wide">
-            Recent Orders
-          </h1>
-          <a href="" className="text-[#025cca] text-sm font-semibold">
-            View all
-          </a>
-        </div>
-        <div className="flex items-center gap-4 bg-[#1f1f1f] rounded-[15px] px-6 py-4 mx-6">
-          <FaSearch className="text-[#f5f5f5]" />
+    <div className="glass-card rounded-3xl overflow-hidden">
+      <div className="flex justify-between items-center px-6 py-4 border-b border-dhaba-border/20">
+        <h2 className="section-title text-dhaba-text">Recent Orders</h2>
+        <a href="/orders" className="text-dhaba-accent text-xs font-bold tracking-wider uppercase hover:underline">
+          View all →
+        </a>
+      </div>
+
+      <div className="px-6 pt-4">
+        <div className="glass-input rounded-xl flex items-center gap-3 px-4 py-2.5">
+          <FaSearch className="text-dhaba-muted text-sm" />
           <input
             type="text"
-            placeholder="Search recent orders"
-            className="bg-[#1f1f1f] outline-none text-[#f5f5f5]"
+            placeholder="Search recent orders..."
+            className="bg-transparent outline-none text-dhaba-text text-sm flex-1 placeholder:text-dhaba-muted/50"
           />
         </div>
-        <div className="mt-4 px-6 overflow-y-scroll h-[300px] scrollbar-hide">
-          {onGoingOrders?.length > 0 ? (
-            onGoingOrders.map((order) => (
-              <OrderList key={order._id} order={order} />
-            ))
-          ) : (
-            <p className="col-span-3 text-gray-500">
-              No On going orders available
-            </p>
-          )}
-        </div>
+      </div>
+
+      <div className="px-4 py-4 overflow-y-auto max-h-[380px] scrollbar-hide space-y-2">
+        {onGoingOrders?.length > 0 ? (
+          onGoingOrders.map((order) => <OrderList key={order._id} order={order} />)
+        ) : (
+          <div className="flex flex-col items-center justify-center py-12 text-dhaba-muted">
+            <span className="text-4xl mb-3">🍽️</span>
+            <p className="font-medium">No ongoing orders</p>
+            <p className="text-xs mt-1">All caught up!</p>
+          </div>
+        )}
       </div>
     </div>
   );

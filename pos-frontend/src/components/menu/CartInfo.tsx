@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from "react";
 import { RiDeleteBin2Fill } from "react-icons/ri";
-import { FaNotesMedical } from "react-icons/fa6";
 import { useSelector } from "react-redux";
 import { removeItem, updateItem } from "../../redux/slices/cartSlice";
 import { FaMinus, FaPlus } from "react-icons/fa";
@@ -14,70 +13,51 @@ const CartInfo: React.FC = () => {
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        behavior: "smooth",
-      });
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
     }
   }, [cartData]);
 
-  const handleRemove = (itemId: string) => {
-    dispatch(removeItem(itemId));
-  };
-
-  const updateItemCount = (itemId: string, quantity: number) => {
-    dispatch(updateItem({ id: itemId, quantity }));
-  };
-
   return (
-    <div className="px-4 py-2">
-      <h1 className="text-lg text-[#e4e4e4] font-semibold tracking-wide">
+    <div className="px-4 py-3 flex-1 flex flex-col min-h-0">
+      <h3 className="text-sm text-dhaba-text font-bold tracking-wider uppercase mb-3">
         Order Details
-      </h1>
-      <div
-        className="mt-4 overflow-y-scroll scrollbar-hide h-[380px]"
-        ref={scrollRef}
-      >
+      </h3>
+      <div className="flex-1 overflow-y-auto scrollbar-hide space-y-2" ref={scrollRef}>
         {cartData.length === 0 ? (
-          <p className="text-[#ababab] text-sm flex justify-center items-center h-[380px]">
-            Your cart is empty. Start adding items!
-          </p>
+          <div className="flex flex-col items-center justify-center py-8 text-dhaba-muted">
+            <span className="text-3xl mb-2">🛒</span>
+            <p className="text-xs">Cart is empty</p>
+          </div>
         ) : (
           cartData.map((item) => (
-            <div key={item.id} className="bg-[#1f1f1f] rounded-lg px-4 py-4 mb-2">
+            <div key={item.id} className="glass-input rounded-xl px-3 py-3">
               <div className="flex items-center justify-between">
-                <h1 className="text-[#ababab] font-semibold tracking-wide text-md">
+                <h4 className="text-dhaba-text text-xs font-semibold truncate flex-1 mr-2">
                   {item.name}
-                </h1>
-                <div className="flex gap-4 items-center">
-                  <div
-                    className="bg-[#e47575] h-8 w-8 rounded-full cursor-pointer"
-                    onClick={() => updateItemCount(item.id, -1)}
+                </h4>
+                <div className="flex gap-2 items-center">
+                  <button
+                    className="h-6 w-6 rounded-lg bg-dhaba-danger/15 text-dhaba-danger flex items-center justify-center hover:bg-dhaba-danger/25 transition-colors"
+                    onClick={() => dispatch(updateItem({ id: item.id, quantity: -1 }))}
                   >
-                    <FaMinus className="text-[#922626] m-2" />
-                  </div>
-                  <p className="text-[#ababab] font-semibold">x{item.quantity}</p>
-                  <div
-                    className="bg-[#8ddb75] h-8 w-8 rounded-full cursor-pointer"
-                    onClick={() => updateItemCount(item.id, 1)}
+                    <FaMinus size={8} />
+                  </button>
+                  <span className="text-dhaba-text text-xs font-bold w-5 text-center">
+                    {item.quantity}
+                  </span>
+                  <button
+                    className="h-6 w-6 rounded-lg bg-dhaba-success/15 text-dhaba-success flex items-center justify-center hover:bg-dhaba-success/25 transition-colors"
+                    onClick={() => dispatch(updateItem({ id: item.id, quantity: 1 }))}
                   >
-                    <FaPlus className="text-[#1d7337] m-2" />
-                  </div>
+                    <FaPlus size={8} />
+                  </button>
                 </div>
               </div>
-              <div className="flex items-center justify-between mt-3">
-                <div className="flex items-center gap-3">
-                  <RiDeleteBin2Fill
-                    onClick={() => handleRemove(item.id)}
-                    className="text-[#ababab] cursor-pointer"
-                    size={20}
-                  />
-                  <FaNotesMedical
-                    className="text-[#ababab] cursor-pointer"
-                    size={20}
-                  />
-                </div>
-                <p className="text-[#f5f5f5] text-md font-bold">₹{item.price}</p>
+              <div className="flex items-center justify-between mt-2">
+                <button onClick={() => dispatch(removeItem(item.id))} className="text-dhaba-muted hover:text-dhaba-danger transition-colors">
+                  <RiDeleteBin2Fill size={14} />
+                </button>
+                <p className="text-dhaba-accent text-sm font-bold">₹{item.price}</p>
               </div>
             </div>
           ))

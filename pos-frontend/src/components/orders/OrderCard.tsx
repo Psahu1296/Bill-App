@@ -1,5 +1,5 @@
 import React from "react";
-import { FaCheckDouble, FaLongArrowAltRight, FaCircle } from "react-icons/fa";
+import { FaCheckDouble, FaCircle } from "react-icons/fa";
 import { formatDateAndTime, getAvatarName } from "../../utils/index";
 import { IoCheckmarkDoneCircle } from "react-icons/io5";
 import { useNavigate } from "react-router-dom";
@@ -13,90 +13,77 @@ interface OrderCardProps {
   type: string;
 }
 
-const OrderCard: React.FC<OrderCardProps> = ({ order, type }) => {
+const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
+  const isCompleted = order.orderStatus === "Completed";
+  const isCompletedAndFullyPaid = isCompleted && (order.paymentStatus === "Paid" || (order.amountPaid || 0) >= order.bills.totalWithTax);
+
   const onOrderClick = () => {
-    if (type === "Complete") return;
+    // Completed orders always go to the read-only summary page
+    if (isCompleted) {
+      navigate(`/order-summary?orderId=${order._id}`);
+      return;
+    }
+    // Active orders → load into menu editor
     const { customerDetails, table, items } = order;
     dispatch(setCustomer({ ...customerDetails } as { name: string; phone: string; guests: number }));
-    // Map populated table._id to tableId so Bill.tsx can read customerData.table?.tableId
     dispatch(tableStateUpdate({ table: { tableId: table._id, tableNo: table.tableNo } }));
     dispatch(updateList([...items]));
     navigate(`/menu?orderId=${order._id}`);
   };
 
+  const statusConfig = {
+    "Ready": { chip: "bg-dhaba-success/15 text-dhaba-success", icon: <FaCheckDouble className="inline mr-1.5" />, sub: "Ready to serve" },
+    "Completed": { chip: "bg-dhaba-success/15 text-dhaba-success", icon: <IoCheckmarkDoneCircle className="inline h-4 w-4 mr-1.5" />, sub: "Order completed" },
+    "In Progress": { chip: "bg-dhaba-accent/15 text-dhaba-accent", icon: <FaCircle className="inline mr-1.5 text-[6px]" />, sub: "Preparing your order" },
+  };
+  const cfg = statusConfig[order.orderStatus as keyof typeof statusConfig] || statusConfig["In Progress"];
+
   return (
     <div
-      className={`w-[500px] max-h-[220px] bg-[#262626] p-4 rounded-lg mb-4 ${
-        type !== "Complete" ? "cursor-pointer hover:bg-[#1a1a1a]" : ""
+      className={`w-[480px] glass-card rounded-2xl p-5 transition-all duration-300 ${
+        isCompleted && isCompletedAndFullyPaid ? "opacity-70" : "cursor-pointer hover:shadow-glow hover:-translate-y-0.5"
       }`}
       onClick={onOrderClick}
     >
-      <div className="flex items-center gap-5">
-        <button className="bg-[#f6b100] p-3 text-xl font-bold rounded-lg">
+      <div className="flex items-start gap-4">
+        <div className="h-12 w-12 rounded-xl bg-gradient-warm flex items-center justify-center text-sm font-bold text-dhaba-bg flex-shrink-0">
           {getAvatarName(order.customerDetails.name)}
-        </button>
-        <div className="flex items-center justify-between w-[100%]">
-          <div className="flex flex-col items-start gap-1">
-            <h1 className="text-[#f5f5f5] text-lg font-semibold tracking-wide">
-              {order.customerDetails.name}
-            </h1>
-            <p className="text-[#ababab] text-sm">
-              #{Math.floor(new Date(order.orderDate).getTime())} / Dine in
-            </p>
-            <p className="text-[#ababab] text-sm">
-              Table{" "}
-              <FaLongArrowAltRight className="text-[#ababab] ml-2 inline" />{" "}
-              {order.table.tableNo}
-            </p>
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            {order.orderStatus === "Ready" ? (
-              <>
-                <p className="orange-green-600 bg-[#4a3b2e] px-2 py-1 rounded-lg">
-                  <FaCheckDouble className="inline mr-2" /> {order.orderStatus}
-                </p>
-                <p className="text-[#ababab] text-sm">
-                  <FaCircle className="inline mr-2 orange-green-600" /> Ready to
-                  serve
-                </p>
-              </>
-            ) : order.orderStatus === "Completed" ? (
-              <>
-                <p className="text-green-600 bg-[#3a5d36] px-2 py-1 rounded-lg">
-                  <IoCheckmarkDoneCircle className="inline h-6 w-6 mr-2" />{" "}
-                  {order.orderStatus}
-                </p>
-                <p className="text-[#ababab] text-sm">
-                  <FaCircle className="inline mr-2 text-green-600" /> Order
-                  completed
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="text-yellow-600 bg-[#4a452e] px-2 py-1 rounded-lg">
-                  <FaCircle className="inline mr-2" /> {order.orderStatus}
-                </p>
-                <p className="text-[#ababab] text-sm">
-                  <FaCircle className="inline mr-2 text-yellow-600" /> Preparing
-                  your order
-                </p>
-              </>
-            )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="text-dhaba-text font-bold">{order.customerDetails.name}</h3>
+              <p className="text-dhaba-muted text-xs mt-0.5">
+                Table {order.table.tableNo} · Dine in
+              </p>
+            </div>
+            <div className="text-right">
+              <span className={`status-chip ${cfg.chip}`}>
+                {cfg.icon}{order.orderStatus}
+              </span>
+              <p className="text-dhaba-muted text-[10px] mt-1">{cfg.sub}</p>
+            </div>
           </div>
         </div>
       </div>
-      <div className="flex justify-between items-center mt-4 text-[#ababab]">
+
+      <div className="flex justify-between items-center mt-4 text-dhaba-muted text-xs">
         <p>{formatDateAndTime(order.orderDate)}</p>
-        <p>{order.items.length} Items</p>
+        <p className="font-semibold">{order.items.length} Items</p>
       </div>
-      <hr className="w-full mt-4 border-t-1 border-gray-500" />
-      <div className="flex items-center justify-between mt-4">
-        <h1 className="text-[#f5f5f5] text-lg font-semibold">Total</h1>
-        <p className="text-[#f5f5f5] text-lg font-semibold">
-          ₹{order.bills.totalWithTax.toFixed(2)}
+
+      <div className="h-px bg-dhaba-border/30 my-3" />
+
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-dhaba-text font-bold text-lg">₹{order.bills.totalWithTax.toFixed(0)}</p>
+          <p className="text-dhaba-muted text-xs">Paid: ₹{(order.amountPaid || 0).toFixed(0)}</p>
+        </div>
+        <p className="text-dhaba-accent font-bold text-lg">
+          Due: ₹{Math.max(0, order.bills.totalWithTax - (order.amountPaid || 0)).toFixed(0)}
         </p>
       </div>
     </div>

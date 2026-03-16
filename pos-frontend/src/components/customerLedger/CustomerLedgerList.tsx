@@ -4,6 +4,7 @@ import { getAllCustomerLedgers, recordCustomerPayment } from "../../https";
 import { enqueueSnackbar } from "notistack";
 import { motion, AnimatePresence } from "framer-motion";
 import PaymentModal from "./PaymentModal";
+import BottomNav from "../shared/BottomNav";
 import type { CustomerLedger } from "../../types";
 
 const CustomerLedgerList: React.FC = () => {
@@ -86,7 +87,7 @@ const CustomerLedgerList: React.FC = () => {
   }
 
   return (
-    <div className="p-6 bg-[#262626] min-h-screen text-[#f5f5f5]">
+    <div className="p-6 bg-[#1f1f1f] min-h-screen pb-24 text-[#f5f5f5]">
       <h1 className="text-3xl font-bold mb-6">Customer Ledger</h1>
 
       <div className="mb-6">
@@ -95,7 +96,7 @@ const CustomerLedgerList: React.FC = () => {
           placeholder="Search by name or phone..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full p-3 rounded-lg bg-[#1f1f1f] border border-[#333] text-[#f5f5f5] focus:outline-none focus:ring-2 focus:ring-yellow-400"
+          className="w-full p-3 rounded-lg bg-[#262626] border border-[#333] text-[#f5f5f5] focus:outline-none focus:ring-2 focus:ring-yellow-400"
         />
       </div>
 
@@ -108,7 +109,7 @@ const CustomerLedgerList: React.FC = () => {
           {filteredCustomers.map((customer) => (
             <div
               key={customer._id}
-              className="bg-[#1f1f1f] rounded-lg shadow-md overflow-hidden"
+              className="bg-[#262626] rounded-lg shadow-md overflow-hidden"
             >
               <div
                 className="flex justify-between items-center p-4 cursor-pointer hover:bg-[#2a2a2a] transition-colors"
@@ -214,6 +215,7 @@ const CustomerLedgerList: React.FC = () => {
         customer={customerToPay}
         recordPaymentMutation={recordPaymentMutation}
       />
+      <BottomNav />
     </div>
   );
 };

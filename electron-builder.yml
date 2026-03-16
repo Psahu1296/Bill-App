@@ -6,6 +6,9 @@ directories:
   output: release
   buildResources: build-resources
 
+publish:
+  provider: github
+
 # ── What gets packaged ─────────────────────────────────────────────────────────
 # electron/dist  : compiled Electron main + preload
 # pos-backend/dist : compiled Express server

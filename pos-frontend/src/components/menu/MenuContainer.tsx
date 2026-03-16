@@ -17,32 +17,33 @@ const MenuContainer: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="text-center p-8 text-gray-300">
-        <p>Loading dishes...</p>
+      <div className="flex items-center justify-center py-20 text-dhaba-muted">
+        <div className="spinner mr-3" />
+        Loading dishes...
       </div>
     );
   }
 
   const selectedDishes: Dish[] = dishes?.data?.data ?? [];
   const filteredDishes = selectedDishes.filter((dish) =>
-    searchTerm === ""
-      ? true
-      : dish.name.toLowerCase().includes(searchTerm.toLowerCase())
+    searchTerm === "" ? true : dish.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
     <>
-      <div className="flex items-center gap-2 bg-[#1f1f1f] rounded-[15px] mx-8 px-4 py-2 w-[500px] border border-[#2a2a2a] focus-within:border-[#F6B100]">
-        <FaSearch className="text-[#f5f5f5]" />
-        <input
-          type="text"
-          placeholder="Search"
-          className="bg-[#1f1f1f] text-[#f5f5f5] outline-none focus:outline-none flex-1"
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+      <div className="px-6 mb-4">
+        <div className="glass-input rounded-xl flex items-center gap-3 px-4 py-2.5 w-full max-w-md">
+          <FaSearch className="text-dhaba-muted text-sm" />
+          <input
+            type="text"
+            placeholder="Search dishes..."
+            className="bg-transparent text-dhaba-text text-sm outline-none flex-1 placeholder:text-dhaba-muted/50"
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
       </div>
-      <hr className="border-[#2a2a2a] border-t-2 mt-4" />
-      <div className="flex flex-wrap gap-4 px-4 py-4 w-full overflow-y-auto justify-center flex-[3]">
+      <div className="h-px bg-dhaba-border/20 mx-6" />
+      <div className="flex flex-wrap gap-3 px-6 py-4 overflow-y-auto">
         {filteredDishes.map((item) => (
           <MenuItem key={item._id} item={item} />
         ))}

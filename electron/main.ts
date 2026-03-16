@@ -1,7 +1,8 @@
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, shell, dialog, ipcMain } from "electron";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
+import { autoUpdater } from "electron-updater";
 
 const PORT = 5001;
 
@@ -11,6 +12,15 @@ const isDev = !app.isPackaged;
 
 let win: BrowserWindow | null = null;
 let backendStarted = false;
+
+// ── Updater helper: push events to the renderer window ───────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function sendToRenderer(event: string, payload?: any) {
+  if (win && !win.isDestroyed()) {
+    win.webContents.send("updater:status", { event, ...payload });
+  }
+}
 
 // ── Backend + MongoDB setup ────────────────────────────────────────────────────
 
@@ -126,6 +136,12 @@ app.whenReady().then(async () => {
     await setupBackend();
   }
   createWindow();
+
+  // Check for updates silently after the window is ready (production only)
+  if (!isDev) {
+    // Small delay so the window is visible before any update UI appears
+    setTimeout(() => autoUpdater.checkForUpdates(), 3000);
+  }
 });
 
 // Quit when all windows are closed (except on macOS)
@@ -136,4 +152,76 @@ app.on("window-all-closed", () => {
 // Re-create window on macOS when dock icon is clicked with no open windows
 app.on("activate", () => {
   if (win === null) createWindow();
+});
+
+// ── IPC handlers: renderer → main ─────────────────────────────────────────────
+// These are triggered by window.appBridge.checkForUpdates() etc. in the page.
+
+ipcMain.on("updater:check", () => {
+  autoUpdater.checkForUpdates();
+});
+
+ipcMain.on("updater:download", () => {
+  autoUpdater.downloadUpdate();
+});
+
+ipcMain.on("updater:install", () => {
+  autoUpdater.quitAndInstall();
+});
+
+// ── Auto Updater Events: main → renderer ──────────────────────────────────────
+// All events are forwarded to the renderer via sendToRenderer() so AppUpdate.tsx
+// can react to the real update lifecycle without any simulation.
+
+autoUpdater.on("checking-for-update", () => {
+  console.log("Checking for update...");
+  sendToRenderer("checking");
+});
+
+autoUpdater.on("update-available", (info) => {
+  console.log(`Update available: v${info.version}`);
+  sendToRenderer("available", {
+    version: info.version,
+    releaseNotes: typeof info.releaseNotes === "string" ? info.releaseNotes : undefined,
+  });
+});
+
+autoUpdater.on("update-not-available", (info) => {
+  console.log(`Already up to date: v${info.version}`);
+  sendToRenderer("not-available", { version: info.version });
+});
+
+autoUpdater.on("download-progress", (progress) => {
+  sendToRenderer("progress", {
+    percent: Math.round(progress.percent),
+    transferred: progress.transferred,
+    total: progress.total,
+    bytesPerSecond: progress.bytesPerSecond,
+  });
+});
+
+autoUpdater.on("update-downloaded", async (info) => {
+  console.log(`Update downloaded: v${info.version}`);
+  // Notify the renderer that the update is ready to install
+  sendToRenderer("downloaded", { version: info.version });
+
+  // Also show a native OS dialog as a fallback (e.g. if the user is not on the update page)
+  const result = await dialog.showMessageBox({
+    type: "info",
+    title: "Update Ready",
+    message: `Dhaba POS v${info.version} is ready to install.`,
+    detail: "Restart the app now to apply the update, or do it later from the App Update page.",
+    buttons: ["Restart Now", "Later"],
+    defaultId: 0,
+    cancelId: 1,
+  });
+
+  if (result.response === 0) {
+    autoUpdater.quitAndInstall();
+  }
+});
+
+autoUpdater.on("error", (err) => {
+  console.error("Auto-updater error:", err);
+  sendToRenderer("error", { message: err.message });
 });

@@ -51,17 +51,17 @@ const getExpensesByPeriod = async (req: Request, res: Response, next: NextFuncti
             case 'day':
                 startDate = getZonedStartOfDayUtc(dateQuery);
                 endDate = getZonedEndOfDayUtc(dateQuery);
-                groupByFormat = "%Y-%m-%d";
+                groupByFormat = "%yyyy-%MM-%dd";
                 break;
             case 'month':
                 startDate = getZonedStartOfMonthUtc(dateQuery);
                 endDate = getZonedEndOfMonthUtc(dateQuery);
-                groupByFormat = "%Y-%m";
+                groupByFormat = "%yyyy-%MM";
                 break;
             case 'year':
                 startDate = getZonedStartOfYearUtc(dateQuery);
                 endDate = getZonedEndOfYearUtc(dateQuery);
-                groupByFormat = "%Y";
+                groupByFormat = "%yyyy";
                 break;
             default:
                 const error = createHttpError(400, "Invalid periodType. Use 'day', 'month', or 'year'.");

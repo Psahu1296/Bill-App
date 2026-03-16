@@ -1,5 +1,5 @@
 import { axiosWrapper } from "./axiosWrapper";
-import type { AddOrderPayload, AddDishPayload, AddExpensePayload, OrderStatus, PaymentStatus } from "../types";
+import type { AddOrderPayload, AddDishPayload, AddExpensePayload, OrderStatus, PaymentStatus, AddConsumablePayload } from "../types";
 
 // Auth Endpoints
 export const login = (data: { email: string; password: string }) =>
@@ -45,6 +45,8 @@ export const verifyPaymentRazorpay = (data: {
 
 // Order Endpoints
 export const addOrder = (data: AddOrderPayload) => axiosWrapper.post("/api/order/", data);
+
+export const getOrderById = (id: string) => axiosWrapper.get(`/api/order/${id}`);
 
 export const getOrders = (filters: Record<string, string> = {}) =>
   axiosWrapper.get("/api/order", { params: filters });
@@ -119,3 +121,26 @@ export const recordCustomerPayment = (
 
 export const getAllCustomerLedgers = (filters: Record<string, unknown> = {}) =>
   axiosWrapper.get("/api/ledger/all", { params: filters });
+
+export const addDebtToLedger = (
+  phone: string,
+  data: { amountDue: number; orderId?: string; customerName?: string; notes?: string }
+) => axiosWrapper.post(`/api/ledger/${phone}/add-debt`, data);
+
+// Consumables
+export const addConsumable = (data: AddConsumablePayload) =>
+  axiosWrapper.post("/api/consumables", data);
+
+export const getAllConsumables = (filters: Record<string, string> = {}) =>
+  axiosWrapper.get("/api/consumables", { params: filters });
+
+export const getConsumableDailySummary = (date?: string) =>
+  axiosWrapper.get("/api/consumables/summary/day", {
+    params: date ? { date } : {},
+  });
+
+export const updateConsumable = (id: string, updates: object) =>
+  axiosWrapper.put(`/api/consumables/${id}`, updates);
+
+export const deleteConsumable = (id: string) =>
+  axiosWrapper.delete(`/api/consumables/${id}`);

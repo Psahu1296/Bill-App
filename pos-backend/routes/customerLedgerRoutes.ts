@@ -1,5 +1,5 @@
 import express from "express";
-import { getCustomerLedger, recordCustomerPayment, getAllCustomerLedgers } from "../controllers/customerLedgerController";
+import { getCustomerLedger, recordCustomerPayment, addDebtToLedger, getAllCustomerLedgers } from "../controllers/customerLedgerController";
 import { isVerifiedUser } from "../middlewares/tokenVerification";
 const router = express.Router();
 
@@ -12,5 +12,8 @@ router.route("/:phone")
 
 router.route("/:phone/pay")
   .post(isVerifiedUser, recordCustomerPayment);
+
+router.route("/:phone/add-debt")
+  .post(isVerifiedUser, addDebtToLedger);
 
 export default router;

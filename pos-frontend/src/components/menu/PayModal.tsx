@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { IoMdClose } from "react-icons/io";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { enqueueSnackbar } from "notistack";
-import { updateOrder } from "../../https";
+import { updateOrder, addDebtToLedger } from "../../https";
 import { useNavigate } from "react-router-dom";
 import type { Order, AddOrderPayload, PaymentMethod, OrderStatus } from "../../types";
 
@@ -36,24 +36,37 @@ const PayModal: React.FC<PayModalProps> = ({ isOpen, onClose, order, customerDat
     }
   }, [isOpen, order]);
 
-  const handleSubmitPayment = () => {
+  const handleSubmitPayment = async () => {
     const paidAmount = parseFloat(amountPaying);
 
     if (isNaN(paidAmount) || paidAmount <= 0) {
-      enqueueSnackbar("Please enter a valid amount to pay.", {
-        variant: "warning",
-      });
+      enqueueSnackbar("Please enter a valid amount to pay.", { variant: "warning" });
       return;
     }
     if (paidAmount > remainingToPay + 0.01) {
-      enqueueSnackbar("Amount paying cannot exceed outstanding balance.", {
-        variant: "warning",
-      });
+      enqueueSnackbar("Amount paying cannot exceed outstanding balance.", { variant: "warning" });
       return;
     }
 
     const newAmountPaid = amountAlreadyPaid + paidAmount;
-    const isFullyPaid = newAmountPaid >= totalBill - 0.01;
+    const remainingAfterPay = totalBill - newAmountPaid;
+    // Always mark order as Paid — remaining goes to ledger
+    const isFullyPaid = true;
+
+    // If there's still a balance due after this payment, push to ledger
+    if (remainingAfterPay > 0.01 && customerData.customerPhone) {
+      try {
+        await addDebtToLedger(customerData.customerPhone, {
+          amountDue: parseFloat(remainingAfterPay.toFixed(2)),
+          orderId: order._id,
+          customerName: (order as Order).customerDetails?.name,
+          notes: `Remaining balance for Order #${order._id?.slice(-6) || "N/A"}`,
+        });
+        enqueueSnackbar(`₹${remainingAfterPay.toFixed(2)} added to ${customerData.customerPhone}'s ledger.`, { variant: "info" });
+      } catch {
+        enqueueSnackbar("Warning: Could not add remaining balance to ledger.", { variant: "warning" });
+      }
+    }
 
     onSubmitPayment(paidAmount, selectedPaymentMethod, isFullyPaid);
   };

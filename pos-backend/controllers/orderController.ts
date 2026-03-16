@@ -129,7 +129,7 @@ const getOrderById = async (req: Request, res: Response, next: NextFunction) => 
       return next(error);
     }
 
-    const order = await Order.findById(id);
+    const order = await Order.findById(id).populate("table");
     if (!order) {
       const error = createHttpError(404, "Order not found!");
       return next(error);
@@ -212,19 +212,24 @@ const updateOrderById = async (req: Request, res: Response, next: NextFunction) 
     }
 
     // --- Determine Earning Change ---
-    // Fix: when changing to Paid, only count the portion NOT already counted at order creation.
     let amountChangeForEarnings = 0;
     const dateForEarningUpdate = getZonedStartOfDayUtc(orderCreationDate);
 
-    if (requestBodyUpdates.paymentStatus === 'Paid' && oldPaymentStatus !== 'Paid') {
-        // Only add what hasn't been counted yet (full bill minus already-paid amount at creation)
+    if (requestBodyUpdates.amountPaid !== undefined) {
+        // If amountPaid is explicitly provided, earning change is exactly the delta
+        amountChangeForEarnings = updatePayloadForMongoose.amountPaid - oldAmountPaid;
+    } else if (requestBodyUpdates.paymentStatus === 'Paid' && oldPaymentStatus !== 'Paid') {
         amountChangeForEarnings = orderTotalWithTax - oldAmountPaid;
+        // Auto-fix amount paid if only status is sent
+        updatePayloadForMongoose.amountPaid = orderTotalWithTax;
+        updatePayloadForMongoose.balanceDueOnOrder = 0;
     } else if (
         (requestBodyUpdates.paymentStatus === 'Refunded' || requestBodyUpdates.paymentStatus === 'Pending') &&
-        oldPaymentStatus === 'Paid'
+        oldAmountPaid > 0
     ) {
-        // Reverse the full bill amount that was counted when status changed to Paid
-        amountChangeForEarnings = -(orderTotalWithTax - oldAmountPaid);
+        amountChangeForEarnings = -oldAmountPaid;
+        updatePayloadForMongoose.amountPaid = 0;
+        updatePayloadForMongoose.balanceDueOnOrder = orderTotalWithTax;
     }
 
     const updatedOrder = await Order.findByIdAndUpdate(
