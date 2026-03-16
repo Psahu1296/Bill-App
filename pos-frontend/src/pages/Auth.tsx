@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import restaurant from "../assets/images/restaurant-img.jpg";
+const restaurant = "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?q=80&w=1200&auto=format&fit=crop";
 const logo = "/dhaba_logo.webp";
 import Register from "../components/auth/Register";
 import Login from "../components/auth/Login";

@@ -4,7 +4,8 @@ import { deleteDish, getDishes } from "../../https";
 import { enqueueSnackbar } from "notistack";
 import DishCard from "./DishesCard";
 import AddDishModal from "../dashboard/AddDishModal";
-import { FaSearch } from "react-icons/fa";
+import BulkAddDishModal from "./BulkAddDishModal";
+import { FaSearch, FaCloudUploadAlt } from "react-icons/fa";
 import type { Dish } from "../../types";
 
 const DishesList: React.FC = () => {
@@ -12,6 +13,7 @@ const DishesList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [isUpdateId, setIsUpdateId] = useState<string | null>(null);
   const [selectedDish, setSelectedDish] = useState<Dish | null>(null);
+  const [isBulkOpen, setIsBulkOpen] = useState(false);
 
   const { data: dishes, isLoading, isError, error } = useQuery({
     queryKey: ["dishes"],
@@ -69,15 +71,23 @@ const DishesList: React.FC = () => {
           <h1 className="font-display text-2xl font-bold text-dhaba-text">Dishes</h1>
           <p className="text-sm text-dhaba-muted mt-0.5">{dishList.length} items in menu</p>
         </div>
-        <div className="glass-input rounded-xl flex items-center gap-3 px-4 py-2.5 w-80">
-          <FaSearch className="text-dhaba-muted text-sm" />
-          <input
-            type="text"
-            placeholder="Search dishes..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="bg-transparent text-dhaba-text text-sm outline-none flex-1 placeholder:text-dhaba-muted/50"
-          />
+        <div className="flex items-center gap-3">
+          <div className="glass-input rounded-xl flex items-center gap-3 px-4 py-2.5 w-80">
+            <FaSearch className="text-dhaba-muted text-sm" />
+            <input
+              type="text"
+              placeholder="Search dishes..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="bg-transparent text-dhaba-text text-sm outline-none flex-1 placeholder:text-dhaba-muted/50"
+            />
+          </div>
+          <button
+            onClick={() => setIsBulkOpen(true)}
+            className="glass-card flex items-center gap-2 px-5 py-2.5 rounded-xl text-dhaba-accent font-bold text-sm hover:bg-dhaba-accent/10 transition-all border border-dhaba-accent/20"
+          >
+            <FaCloudUploadAlt /> Bulk Add
+          </button>
         </div>
       </div>
 
@@ -101,6 +111,11 @@ const DishesList: React.FC = () => {
           dish={selectedDish}
         />
       )}
+
+      <BulkAddDishModal
+        isOpen={isBulkOpen}
+        onClose={() => setIsBulkOpen(false)}
+      />
     </div>
   );
 };

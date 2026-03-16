@@ -80,6 +80,9 @@ export const deleteDish = (dishId: string) =>
 export const getFrequentDishes = () =>
   axiosWrapper.get("/api/dishes/frequent");
 
+export const bulkAddDishes = (data: AddDishPayload[]) =>
+  axiosWrapper.post("/api/dishes/bulk", data);
+
 // Earnings
 export const getDailyEarnings = () =>
   axiosWrapper.get("/api/earnings/daywise");

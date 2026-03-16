@@ -178,4 +178,50 @@ const deleteDish = async (req: Request, res: Response, next: NextFunction) => {
   }
 };
 
-export {  addDish, getDishes, getFrequentDishes, getDishById, updateDish, deleteDish  };
+// @desc    Bulk add dishes
+// @route   POST /api/dishes/bulk
+// @access  Private (e.g., Admin)
+const bulkAddDishes = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const dishes = req.body;
+
+    if (!Array.isArray(dishes) || dishes.length === 0) {
+      const error = createHttpError(400, "Request body must be a non-empty array of dishes.");
+      return next(error);
+    }
+
+    // Validate each dish in the array
+    for (const [index, dishData] of dishes.entries()) {
+      const { image, name, type, category, variants } = dishData;
+      if (!image || !name || !type || !category || !variants || !Array.isArray(variants) || variants.length === 0) {
+        const error = createHttpError(400, `Dish at index ${index} is missing required fields (image, name, type, category, variants).`);
+        return next(error);
+      }
+      for (const variant of variants) {
+        if (!variant.size || variant.price === undefined || variant.price === null || variant.price < 0) {
+          const error = createHttpError(400, `Dish at index ${index} has an invalid variant.`);
+          return next(error);
+        }
+      }
+    }
+
+    // Use insertMany to save all dishes. 
+    // ordered: true means it will stop at the first error (e.g. duplicate name)
+    const savedDishes = await Dish.insertMany(dishes);
+
+    res.status(201).json({
+      success: true,
+      message: `${savedDishes.length} dishes added successfully!`,
+      data: savedDishes,
+    });
+  } catch (error: any) {
+    if (error.code === 11000) {
+        const field = Object.keys(error.keyPattern)[0];
+        const msg = `Duplicate value for field: ${field}. One of the dish names might already exist.`;
+        return next(createHttpError(409, msg));
+    }
+    next(error);
+  }
+};
+
+export {  addDish, getDishes, getFrequentDishes, getDishById, updateDish, deleteDish, bulkAddDishes  };
