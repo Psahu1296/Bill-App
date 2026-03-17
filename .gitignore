@@ -31,3 +31,7 @@ npm-debug.log*
 
 # MongoDB memory server binaries cache (downloaded at runtime)
 .mongodb/
+
+# Bundled MongoDB binaries (prepared via scripts/prepare-mongodb.js)
+build-resources/bin/
+

@@ -53,6 +53,9 @@ jobs:
           cd pos-backend && npm install
           cd ../pos-frontend && npm install
 
+      - name: Prepare MongoDB Binaries
+        run: node scripts/prepare-mongodb.js
+
       # Note: --publish never has been removed so that electron-builder generates
       # the latest-mac.yml / latest.yml / latest-linux.yml update manifests.
       # softprops/action-gh-release below handles all artifact uploads via GITHUB_TOKEN.

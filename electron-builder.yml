@@ -15,12 +15,14 @@ publish:
 # pos-backend/node_modules : Express/Mongoose/etc. runtime deps
 # pos-frontend/dist : built React app (served by Express as static files)
 # node_modules   : root deps — mongodb-memory-server (auto-included via dependencies)
-files:
-  - electron/dist/**
-  - pos-backend/dist/**
-  - pos-backend/node_modules/**
-  - pos-frontend/dist/**
   - package.json
+
+extraResources:
+  - from: build-resources/bin
+    to: bin
+    filter:
+      - mongod-*
+
 
 # Unpack the backend + frontend from the asar archive so Express file-serving
 # and native module paths work correctly without asar quirks

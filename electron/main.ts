@@ -48,35 +48,67 @@ async function setupBackend(): Promise<void> {
   process.env["FRONTEND_URL"] = `http://localhost:${PORT}`;
 
 // 3. Start embedded MongoDB with a persistent data directory.
-    //    On first launch the MongoDB binary is downloaded once (~70 MB) and cached.
     const dbDataPath = path.join(userDataPath, "mongodb-data");
-    const binaryPath = path.join(userDataPath, "mongodb-binaries");
     fs.mkdirSync(dbDataPath, { recursive: true });
-    fs.mkdirSync(binaryPath, { recursive: true });
-
-    process.env["MONGOMS_DOWNLOAD_DIR"] = binaryPath;
-    process.env["MONGOMS_VERSION"] = "7.0.14";
-    process.env["MONGOMS_PREFER_GLOBAL_PATH"] = "0";
 
     console.log("🔄 Setting up embedded database...");
     
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { MongoMemoryServer } = require("mongodb-memory-server");
-    let mongod;
-    try {
-      mongod = await MongoMemoryServer.create({
-        instance: {
-          dbPath: dbDataPath,
-          storageEngine: "wiredTiger",
-        },
-        downloadDir: binaryPath,
-      });
-      process.env["MONGODB_URI"] = mongod.getUri();
-      console.log("✅ Database initialized successfully");
-    } catch (error) {
-      console.error("❌ Failed to initialize database:", error);
-      throw new Error("Database initialization failed. Please check your internet connection and try again.");
+    const { spawn } = require("child_process");
+
+    // Resolve the bundled mongod binary path
+    function getMongodPath() {
+      // In development, we use the ones downloaded by our script in build-resources/bin
+      // In production, electron-builder puts them in the 'bin' folder under resources
+      const platform = process.platform; // 'win32', 'darwin', 'linux'
+      const arch = process.arch; // 'x64', 'arm64'
+      const binaryName = platform === 'win32' ? `mongod-${platform}-${arch}.exe` : `mongod-${platform}-${arch}`;
+      
+      if (isDev) {
+        return path.join(app.getAppPath(), 'build-resources', 'bin', binaryName);
+      } else {
+        // process.resourcesPath is the 'Resources' directory in the app bundle
+        return path.join(process.resourcesPath, 'bin', binaryName);
+      }
     }
+
+    const mongodPath = getMongodPath();
+    const dbPort = 27017;
+    
+    if (!fs.existsSync(mongodPath)) {
+      if (isDev) {
+        throw new Error(`MongoDB binary not found at ${mongodPath}. Please run 'node scripts/prepare-mongodb.js' first.`);
+      } else {
+        throw new Error(`Critical Error: MongoDB binary missing from package: ${mongodPath}`);
+      }
+    }
+
+    console.log(`🚀 Starting MongoDB from: ${mongodPath}`);
+    
+    const mongodProcess = spawn(mongodPath, [
+      "--dbpath", dbDataPath,
+      "--port", String(dbPort),
+      "--bind_ip", "127.0.0.1",
+      "--storageEngine", "wiredTiger",
+    ], {
+      detached: false,
+      stdio: 'ignore' // We don't want to pipe logs to parent to avoid the JSON parse error mentioned in the issue
+    });
+
+    mongodProcess.on('error', (err: Error) => {
+      console.error("❌ MongoDB failed to start:", err);
+    });
+
+    // Ensure MongoDB is killed when the app exits
+    app.on('will-quit', () => {
+        mongodProcess.kill();
+    });
+
+    process.env["MONGODB_URI"] = `mongodb://127.0.0.1:${dbPort}/dhaba-pos`;
+    
+    // Give it a moment to start
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    console.log("✅ Database initialized successfully");
+
 
   // 4. Load and start the Express backend.
   //    Path differs between dev (source tree) and packaged (app resources).
