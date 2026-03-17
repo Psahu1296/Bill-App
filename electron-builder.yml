@@ -16,26 +16,6 @@ publish:
 # pos-frontend/dist : built React app (served by Express as static files)
 # node_modules   : root deps — mongodb-memory-server (auto-included via dependencies)
 
-extraResources:
-  - from: build-resources/bin
-    to: bin
-    filter:
-      - mongod-win32-*
-    platform: win32
-
-  - from: build-resources/bin
-    to: bin
-    filter:
-      - mongod-darwin-*
-    platform: mac
-
-  - from: build-resources/bin
-    to: bin
-    filter:
-      - mongod-linux-*
-    platform: linux
-
-
 # Unpack the backend + frontend from the asar archive so Express file-serving
 # and native module paths work correctly without asar quirks
 asarUnpack:
@@ -45,6 +25,11 @@ asarUnpack:
 
 # ── Windows installer ──────────────────────────────────────────────────────────
 win:
+  extraResources:
+    - from: build-resources/bin
+      to: bin
+      filter:
+        - mongod-win32-*
   target:
     - target: nsis
       arch:
@@ -59,6 +44,11 @@ nsis:
 
 # ── macOS installer ────────────────────────────────────────────────────────────
 mac:
+  extraResources:
+    - from: build-resources/bin
+      to: bin
+      filter:
+        - mongod-darwin-*
   target:
     - target: dmg
       arch:
@@ -68,6 +58,11 @@ mac:
 
 # ── Linux installer ────────────────────────────────────────────────────────────
 linux:
+  extraResources:
+    - from: build-resources/bin
+      to: bin
+      filter:
+        - mongod-linux-*
   target:
     - target: AppImage
       arch:
