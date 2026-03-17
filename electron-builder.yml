@@ -15,7 +15,6 @@ publish:
 # pos-backend/node_modules : Express/Mongoose/etc. runtime deps
 # pos-frontend/dist : built React app (served by Express as static files)
 # node_modules   : root deps — mongodb-memory-server (auto-included via dependencies)
-  - package.json
 
 extraResources:
   - from: build-resources/bin
