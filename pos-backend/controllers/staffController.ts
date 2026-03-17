@@ -63,7 +63,7 @@ const addStaff = async (req: Request, res: Response, next: NextFunction) => {
 const updateStaff = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!mongoose.Types.ObjectId.isValid(id as string)) {
       return next(createHttpError(400, "Invalid staff ID format."));
     }
 
@@ -90,7 +90,7 @@ const updateStaff = async (req: Request, res: Response, next: NextFunction) => {
 const deleteStaff = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!mongoose.Types.ObjectId.isValid(id as string)) {
       return next(createHttpError(400, "Invalid staff ID format."));
     }
 
@@ -110,7 +110,7 @@ const deleteStaff = async (req: Request, res: Response, next: NextFunction) => {
 const toggleActive = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!mongoose.Types.ObjectId.isValid(id as string)) {
       return next(createHttpError(400, "Invalid staff ID format."));
     }
 
@@ -133,7 +133,7 @@ const toggleActive = async (req: Request, res: Response, next: NextFunction) => 
 const addPayment = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!mongoose.Types.ObjectId.isValid(id as string)) {
       return next(createHttpError(400, "Invalid staff ID format."));
     }
 
@@ -163,7 +163,7 @@ const addPayment = async (req: Request, res: Response, next: NextFunction) => {
 const deletePayment = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id, paymentId } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(paymentId)) {
+    if (!mongoose.Types.ObjectId.isValid(id as string) || !mongoose.Types.ObjectId.isValid(paymentId as string)) {
       return next(createHttpError(400, "Invalid ID format."));
     }
 
