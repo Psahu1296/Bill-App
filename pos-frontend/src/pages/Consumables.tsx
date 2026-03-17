@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { FaCoffee, FaBox, FaPlus, FaTrash } from "react-icons/fa";
+import { FaCoffee, FaBox, FaPlus, FaTrash, FaTimes } from "react-icons/fa";
 import { GiCigarette } from "react-icons/gi";
 import { FiRefreshCw } from "react-icons/fi";
 import BackButton from "../components/shared/BackButton";
@@ -7,10 +7,20 @@ import {
   addConsumable,
   getAllConsumables,
   deleteConsumable,
+  getAllStaff,
 } from "../https";
-import type { ConsumableEntry, ConsumableType, ConsumerType } from "../types";
+import type { ConsumableEntry, ConsumableType, ConsumerType, StaffMember } from "../types";
+import type { StaffRole } from "./Staff";
 
-// ── Config ──
+interface DailySummary {
+  totalSold: number;
+  totalRevenue: number;
+  staffConsumed: number;
+  ownerConsumed: number;
+  wastedValue: number;
+}
+
+// ── Config & Constants ──
 const CONSUMABLE_CONFIG: Record<
   ConsumableType,
   { label: string; icon: React.ReactNode; unitPrice: number; unit: string }
@@ -20,16 +30,9 @@ const CONSUMABLE_CONFIG: Record<
   cigarette: { label: "Cigarette", icon: <GiCigarette />, unitPrice: 20, unit: "stick" },
 };
 
-const STAFF_NAMES = ["Raju", "Mohan", "Suresh", "Amit", "Vikram", "Deepak"];
-const OWNER_NAMES = ["Owner - Rajesh", "Owner - Sunil"];
-
-interface DailySummary {
-  totalSold: number;
-  totalRevenue: number;
-  staffConsumed: number;
-  ownerConsumed: number;
-  wastedValue: number;
-}
+const ROLE_EMOJI: Record<StaffRole, string> = {
+  cook: "👨‍🍳", supplier: "🚚", owner: "👑", manager: "📋", delivery: "🏍️", other: "👤",
+};
 
 const getSummaryFromEntries = (
   entries: ConsumableEntry[],
@@ -60,6 +63,7 @@ const Consumables: React.FC = () => {
   }, []);
 
   const [entries, setEntries] = useState<ConsumableEntry[]>([]);
+  const [availableStaff, setAvailableStaff] = useState<StaffMember[]>([]);
   const [activeTab, setActiveTab] = useState<ConsumableType>("tea");
   const [showAddModal, setShowAddModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -70,20 +74,19 @@ const Consumables: React.FC = () => {
   const [formQty, setFormQty] = useState(1);
   const [formConsumerType, setFormConsumerType] = useState<ConsumerType>("customer");
   const [formName, setFormName] = useState("");
+  const [formSelectedStaff, setFormSelectedStaff] = useState<string[]>([]);
 
   // ── Fetch today's entries ──
   const fetchEntries = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      // Fetch all types for today so summary cards work across tabs
-      const today = new Date().toISOString().split("T")[0];
+      const d = new Date();
+      const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       const res = await getAllConsumables({ date: today });
       setEntries(res.data?.data ?? []);
-    } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : "Failed to load consumables.";
-      setError(msg);
+    } catch (err: any) {
+      setError(err.response?.data?.message || err.message || "Failed to load consumables.");
     } finally {
       setIsLoading(false);
     }
@@ -91,33 +94,50 @@ const Consumables: React.FC = () => {
 
   useEffect(() => {
     fetchEntries();
+    getAllStaff({ isActive: "true" })
+      .then((res) => setAvailableStaff(res.data?.data ?? []))
+      .catch(() => {});
   }, [fetchEntries]);
 
   const config = CONSUMABLE_CONFIG[activeTab];
   const filtered = entries.filter((e) => e.type === activeTab);
   const summary = getSummaryFromEntries(entries, activeTab);
 
+  const toggleStaffSelection = (staffId: string) => {
+    setFormSelectedStaff(prev =>
+      prev.includes(staffId) ? prev.filter(id => id !== staffId) : [...prev, staffId]
+    );
+  };
+
   // ── Add Entry ──
   const handleAdd = async () => {
-    if (formQty < 1 || !formName.trim()) return;
+    if (formQty < 1) return;
+    if (formConsumerType === "staff" && formSelectedStaff.length === 0) return;
+    if (formConsumerType !== "staff" && !formName.trim()) return;
+
     setIsSubmitting(true);
     try {
+      const consumerName = formConsumerType === "staff"
+        ? formSelectedStaff.map(id => availableStaff.find(s => s._id === id)?.name || "").filter(Boolean).join(", ")
+        : formName.trim();
+
       await addConsumable({
         type: activeTab,
         quantity: formQty,
         pricePerUnit: config.unitPrice,
         consumerType: formConsumerType,
-        consumerName: formName.trim(),
+        consumerName,
+        staffIds: formConsumerType === "staff" ? formSelectedStaff : undefined,
       });
+
       setShowAddModal(false);
       setFormQty(1);
       setFormName("");
       setFormConsumerType("customer");
-      await fetchEntries(); // refresh
-    } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : "Failed to add entry.";
-      setError(msg);
+      setFormSelectedStaff([]);
+      await fetchEntries();
+    } catch (err: any) {
+      setError(err.response?.data?.message || err.message || "Failed to add entry.");
     } finally {
       setIsSubmitting(false);
     }
@@ -126,11 +146,9 @@ const Consumables: React.FC = () => {
   // ── Delete Entry ──
   const handleDelete = async (id: string) => {
     try {
-      // Optimistic update
       setEntries((prev) => prev.filter((e) => e._id !== id));
       await deleteConsumable(id);
     } catch {
-      // Rollback on failure
       await fetchEntries();
     }
   };
@@ -148,9 +166,7 @@ const Consumables: React.FC = () => {
               <h1 className="font-display text-2xl font-bold text-dhaba-text">
                 Consumables Tracker
               </h1>
-              <p className="text-sm text-dhaba-muted">
-                Tea, Gutka &amp; Cigarette — Sales &amp; Consumption
-              </p>
+              <p className="text-sm text-dhaba-muted">Tea, Gutka & Cigarette — Sales & Consumption</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -175,12 +191,7 @@ const Consumables: React.FC = () => {
         {error && (
           <div className="mb-4 px-4 py-3 rounded-xl bg-dhaba-danger/10 border border-dhaba-danger/30 text-dhaba-danger text-sm font-medium flex items-center justify-between">
             <span>{error}</span>
-            <button
-              onClick={() => setError(null)}
-              className="ml-4 text-dhaba-muted hover:text-dhaba-danger"
-            >
-              ✕
-            </button>
+            <button onClick={() => setError(null)} className="ml-4 text-dhaba-muted hover:text-dhaba-danger">✕</button>
           </div>
         )}
 
@@ -206,35 +217,11 @@ const Consumables: React.FC = () => {
 
         {/* ── Summary Cards ── */}
         <div className="grid grid-cols-5 gap-4 mb-6">
-          <SummaryCard
-            label="Sold (Customers)"
-            value={summary.totalSold}
-            unit={config.unit}
-            color="text-dhaba-success"
-          />
-          <SummaryCard
-            label="Revenue"
-            value={`₹${summary.totalRevenue}`}
-            color="text-dhaba-success"
-          />
-          <SummaryCard
-            label="Staff Consumed"
-            value={summary.staffConsumed}
-            unit={config.unit}
-            color="text-dhaba-warning"
-          />
-          <SummaryCard
-            label="Owner Consumed"
-            value={summary.ownerConsumed}
-            unit={config.unit}
-            color="text-dhaba-accent"
-          />
-          <SummaryCard
-            label="Wasted Value"
-            value={`₹${summary.wastedValue}`}
-            color="text-dhaba-danger"
-            highlight
-          />
+          <SummaryCard label="Sold (Customers)" value={summary.totalSold} unit={config.unit} color="text-dhaba-success" />
+          <SummaryCard label="Revenue" value={`₹${summary.totalRevenue}`} color="text-dhaba-success" />
+          <SummaryCard label="Staff Consumed" value={summary.staffConsumed} unit={config.unit} color="text-dhaba-warning" />
+          <SummaryCard label="Owner Consumed" value={summary.ownerConsumed} unit={config.unit} color="text-dhaba-accent" />
+          <SummaryCard label="Wasted Value" value={`₹${summary.wastedValue}`} color="text-dhaba-danger" highlight />
         </div>
 
         {/* ── Entries Table ── */}
@@ -253,65 +240,39 @@ const Consumables: React.FC = () => {
                 <div className="w-6 h-6 border-2 border-dhaba-accent border-t-transparent rounded-full animate-spin" />
               </div>
             ) : filtered.length === 0 ? (
-              <div className="px-6 py-10 text-center text-dhaba-muted">
-                No entries yet for today
-              </div>
+              <div className="px-6 py-10 text-center text-dhaba-muted">No entries yet</div>
             ) : (
               filtered.map((entry) => (
-                <div
-                  key={entry._id}
-                  className="px-6 py-3.5 flex items-center justify-between hover:bg-dhaba-surface-hover/50 transition-colors"
-                >
+                <div key={entry._id} className="px-6 py-3.5 flex items-center justify-between hover:bg-dhaba-surface-hover/50 transition-colors">
                   <div className="flex items-center gap-4">
-                    <div
-                      className={`h-9 w-9 rounded-xl flex items-center justify-center text-sm font-bold ${
-                        entry.consumerType === "customer"
-                          ? "bg-dhaba-success/15 text-dhaba-success"
-                          : entry.consumerType === "staff"
-                          ? "bg-dhaba-warning/15 text-dhaba-warning"
-                          : "bg-dhaba-accent/15 text-dhaba-accent"
-                      }`}
-                    >
+                    <div className={`h-9 w-9 rounded-xl flex items-center justify-center text-sm font-bold ${
+                      entry.consumerType === "customer"
+                        ? "bg-dhaba-success/15 text-dhaba-success"
+                        : entry.consumerType === "staff"
+                        ? "bg-dhaba-warning/15 text-dhaba-warning"
+                        : "bg-dhaba-accent/15 text-dhaba-accent"
+                    }`}>
                       {entry.quantity}
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-dhaba-text">
-                        {entry.consumerName}
-                      </p>
+                      <p className="text-sm font-semibold text-dhaba-text">{entry.consumerName}</p>
                       <p className="text-xs text-dhaba-muted">
-                        {entry.consumerType === "customer"
-                          ? "🛒 Customer Sale"
-                          : entry.consumerType === "staff"
-                          ? "👷 Staff"
-                          : "👑 Owner"}
+                        {entry.consumerType === "customer" ? "🛒 Customer Sale" : entry.consumerType === "staff" ? "👷 Staff" : "👑 Owner"}
                         {" · "}
-                        {new Date(entry.timestamp).toLocaleTimeString("en-IN", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                        {new Date(entry.timestamp).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <p
-                        className={`text-sm font-bold ${
-                          entry.consumerType === "customer"
-                            ? "text-dhaba-success"
-                            : "text-dhaba-danger"
-                        }`}
-                      >
-                        {entry.consumerType === "customer" ? "+" : "-"}₹
-                        {entry.quantity * entry.pricePerUnit}
+                      <p className={`text-sm font-bold ${entry.consumerType === "customer" ? "text-dhaba-success" : "text-dhaba-danger"}`}>
+                        {entry.consumerType === "customer" ? "+" : "-"}₹{entry.quantity * entry.pricePerUnit}
                       </p>
                       <p className="text-[10px] text-dhaba-muted uppercase tracking-wider">
                         {entry.quantity} × ₹{entry.pricePerUnit}
                       </p>
                     </div>
-                    <button
-                      onClick={() => handleDelete(entry._id)}
-                      className="p-2 rounded-lg hover:bg-dhaba-danger/10 text-dhaba-muted hover:text-dhaba-danger transition-colors"
-                    >
+                    <button onClick={() => handleDelete(entry._id)} className="p-2 rounded-lg hover:bg-dhaba-danger/10 text-dhaba-muted hover:text-dhaba-danger transition-colors">
                       <FaTrash size={12} />
                     </button>
                   </div>
@@ -324,53 +285,36 @@ const Consumables: React.FC = () => {
 
       {/* ── Add Entry Modal ── */}
       {showAddModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-          onClick={() => setShowAddModal(false)}
-        >
-          <div
-            className="glass-card rounded-2xl p-6 w-full max-w-md mx-4 space-y-5"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowAddModal(false)}>
+          <div className="glass-card rounded-2xl p-6 w-full max-w-md mx-4 space-y-5" onClick={(e) => e.stopPropagation()}>
             <h2 className="font-display text-xl font-bold text-dhaba-text flex items-center gap-2">
               {config.icon} Add {config.label}
             </h2>
 
             {/* Consumer Type */}
             <div>
-              <label className="text-xs text-dhaba-muted font-bold tracking-wider uppercase mb-2 block">
-                Who?
-              </label>
+              <label className="text-xs text-dhaba-muted font-bold tracking-wider uppercase mb-2 block">Who?</label>
               <div className="flex gap-2">
-                {(["customer", "staff", "owner"] as ConsumerType[]).map(
-                  (ct) => (
-                    <button
-                      key={ct}
-                      onClick={() => {
-                        setFormConsumerType(ct);
-                        setFormName("");
-                      }}
-                      className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all ${
-                        formConsumerType === ct
-                          ? "bg-dhaba-accent/15 text-dhaba-accent"
-                          : "glass-input text-dhaba-muted hover:text-dhaba-text"
-                      }`}
-                    >
-                      {ct === "customer"
-                        ? "🛒 Customer"
-                        : ct === "staff"
-                        ? "👷 Staff"
-                        : "👑 Owner"}
-                    </button>
-                  )
-                )}
+                {(["customer", "staff", "owner"] as ConsumerType[]).map((ct) => (
+                  <button
+                    key={ct}
+                    onClick={() => { setFormConsumerType(ct); setFormName(""); }}
+                    className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all ${
+                      formConsumerType === ct
+                        ? "bg-dhaba-accent/15 text-dhaba-accent"
+                        : "glass-input text-dhaba-muted hover:text-dhaba-text"
+                    }`}
+                  >
+                    {ct === "customer" ? "🛒 Customer" : ct === "staff" ? "👷 Staff" : "👑 Owner"}
+                  </button>
+                ))}
               </div>
             </div>
 
             {/* Name */}
             <div>
               <label className="text-xs text-dhaba-muted font-bold tracking-wider uppercase mb-2 block">
-                Name
+                {formConsumerType === "staff" ? "Select Staff" : "Name"}
               </label>
               {formConsumerType === "customer" ? (
                 <input
@@ -380,20 +324,40 @@ const Consumables: React.FC = () => {
                   placeholder="Customer name or Order ID"
                   className="glass-input w-full rounded-xl px-4 py-2.5 text-dhaba-text text-sm outline-none placeholder:text-dhaba-muted/50"
                 />
+              ) : formConsumerType === "staff" ? (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    {availableStaff.filter(s => s.role !== "owner").map((s) => (
+                      <button
+                        key={s._id}
+                        onClick={() => toggleStaffSelection(s._id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                          formSelectedStaff.includes(s._id)
+                            ? "bg-dhaba-accent/20 text-dhaba-accent ring-1 ring-dhaba-accent/40"
+                            : "glass-input text-dhaba-muted hover:text-dhaba-text"
+                        }`}
+                      >
+                        {ROLE_EMOJI[s.role]} {s.name}
+                        {formSelectedStaff.includes(s._id) && <FaTimes size={8} className="ml-1" />}
+                      </button>
+                    ))}
+                  </div>
+                  {formSelectedStaff.length > 0 && (
+                    <p className="text-[10px] text-dhaba-accent font-semibold">
+                      {formSelectedStaff.length} staff selected
+                    </p>
+                  )}
+                </div>
               ) : (
                 <select
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   className="glass-input w-full rounded-xl px-4 py-2.5 text-dhaba-text text-sm outline-none appearance-none"
                 >
-                  <option value="">Select {formConsumerType}</option>
-                  {(formConsumerType === "staff" ? STAFF_NAMES : OWNER_NAMES).map(
-                    (n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    )
-                  )}
+                  <option value="">Select owner</option>
+                  {availableStaff.filter(s => s.role === "owner").map((s) => (
+                    <option key={s._id} value={s.name}>{s.name}</option>
+                  ))}
                 </select>
               )}
             </div>
@@ -404,38 +368,17 @@ const Consumables: React.FC = () => {
                 Quantity ({config.unit}s)
               </label>
               <div className="glass-input rounded-xl flex items-center gap-4 px-4 py-2 w-fit">
-                <button
-                  onClick={() => setFormQty((p) => Math.max(1, p - 1))}
-                  className="text-dhaba-accent font-bold text-lg w-6"
-                >
-                  −
-                </button>
-                <span className="text-dhaba-text font-bold text-lg w-6 text-center">
-                  {formQty}
-                </span>
-                <button
-                  onClick={() => setFormQty((p) => p + 1)}
-                  className="text-dhaba-accent font-bold text-lg w-6"
-                >
-                  +
-                </button>
+                <button onClick={() => setFormQty((p) => Math.max(1, p - 1))} className="text-dhaba-accent font-bold text-lg w-6">−</button>
+                <span className="text-dhaba-text font-bold text-lg w-6 text-center">{formQty}</span>
+                <button onClick={() => setFormQty((p) => p + 1)} className="text-dhaba-accent font-bold text-lg w-6">+</button>
               </div>
             </div>
 
             {/* Price Preview */}
             <div className="glass-card rounded-xl p-4 flex justify-between items-center">
-              <span className="text-dhaba-muted text-sm font-medium">
-                Total Value
-              </span>
-              <span
-                className={`font-display text-xl font-bold ${
-                  formConsumerType === "customer"
-                    ? "text-dhaba-success"
-                    : "text-dhaba-danger"
-                }`}
-              >
-                {formConsumerType === "customer" ? "+" : "-"}₹
-                {formQty * config.unitPrice}
+              <span className="text-dhaba-muted text-sm font-medium">Total Value</span>
+              <span className={`font-display text-xl font-bold ${formConsumerType === "customer" ? "text-dhaba-success" : "text-dhaba-danger"}`}>
+                {formConsumerType === "customer" ? "+" : "-"}₹{formQty * config.unitPrice}
               </span>
             </div>
 
@@ -449,7 +392,7 @@ const Consumables: React.FC = () => {
               </button>
               <button
                 onClick={handleAdd}
-                disabled={isSubmitting || !formName.trim() || formQty < 1}
+                disabled={isSubmitting || (formConsumerType === 'staff' ? formSelectedStaff.length === 0 : !formName.trim()) || formQty < 1}
                 className="flex-1 bg-gradient-warm text-dhaba-bg rounded-xl py-2.5 font-bold text-sm hover:shadow-glow transition-all disabled:opacity-60 flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (
@@ -470,23 +413,11 @@ const Consumables: React.FC = () => {
 };
 
 // ── Helpers ──
-const SummaryCard: React.FC<{
-  label: string;
-  value: string | number;
-  unit?: string;
-  color: string;
-  highlight?: boolean;
-}> = ({ label, value, unit, color, highlight }) => (
-  <div
-    className={`glass-card rounded-2xl p-5 transition-all duration-200 ${
-      highlight
-        ? "ring-1 ring-dhaba-danger/30 shadow-glow"
-        : "hover:shadow-glow"
-    }`}
-  >
-    <p className="text-dhaba-muted text-xs font-bold tracking-wider uppercase mb-2">
-      {label}
-    </p>
+const SummaryCard: React.FC<{ label: string; value: string | number; unit?: string; color: string; highlight?: boolean }> = ({
+  label, value, unit, color, highlight,
+}) => (
+  <div className={`glass-card rounded-2xl p-5 transition-all duration-200 ${highlight ? "ring-1 ring-dhaba-danger/30 shadow-glow" : "hover:shadow-glow"}`}>
+    <p className="text-dhaba-muted text-xs font-bold tracking-wider uppercase mb-2">{label}</p>
     <p className={`font-display text-2xl font-bold ${color}`}>
       {value}
       {unit && <span className="text-sm text-dhaba-muted ml-1">{unit}s</span>}

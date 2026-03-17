@@ -1,5 +1,5 @@
 import React from "react";
-import { FaSearch, FaUserCircle, FaBell, FaCoffee } from "react-icons/fa";
+import { FaSearch, FaUserCircle, FaCoffee, FaUsers } from "react-icons/fa";
 import { MdSystemUpdateAlt } from "react-icons/md";
 import logo from "../../assets/images/logo.png";
 import { useSelector } from "react-redux";
@@ -81,9 +81,12 @@ const Header: React.FC = () => {
             <MdDashboard className="text-dhaba-muted text-xl group-hover:text-dhaba-accent transition-colors" />
           </button>
         )}
-        <button className="glass-card rounded-xl p-2.5 hover:bg-dhaba-surface-hover transition-all relative group">
-          <FaBell className="text-dhaba-muted text-xl group-hover:text-dhaba-accent transition-colors" />
-          <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-dhaba-danger border-2 border-dhaba-surface" />
+        <button
+          onClick={() => navigate("/staff")}
+          className="glass-card rounded-xl p-2.5 hover:bg-dhaba-surface-hover transition-all relative group"
+          title="Staff Management"
+        >
+          <FaUsers className="text-dhaba-muted text-xl group-hover:text-dhaba-accent transition-colors" />
         </button>
 
         <div className="h-8 w-px bg-dhaba-border/40 mx-1" />

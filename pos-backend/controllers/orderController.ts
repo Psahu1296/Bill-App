@@ -3,10 +3,70 @@ import createHttpError from "http-errors";
 import Order from "../models/orderModel";
 import DailyEarning from "../models/dailyEarningModel";
 import Table from "../models/tableModel";
+import Dish from "../models/dishModel";
+import Consumable from "../models/consumableModel";
 import mongoose from "mongoose";
 import { getZonedStartOfDayUtc } from "./earningController";
 import { CustomRequest as Request, IQueryOptions } from "../types";
 import CustomerLedger from "../models/customerLedgerModel";
+
+// ── Consumable sync helper ──────────────────────────────────────────────────
+// Maps a dish's type/name to a consumable category.
+// "beverage" teas → "tea", tobacco names are split into "cigarette" vs "gutka".
+const CIGARETTE_KEYWORDS = ["gold flake", "classic", "bristol", "four square", "wills", "navy cut", "cigarette"];
+
+const getConsumableType = (dishType: string, dishName: string): "tea" | "gutka" | "cigarette" | null => {
+  if (dishType === "beverage") {
+    const n = dishName.toLowerCase();
+    if (n.includes("tea") || n.includes("chai")) return "tea";
+  }
+  if (dishType === "tobacco") {
+    const n = dishName.toLowerCase();
+    if (CIGARETTE_KEYWORDS.some(kw => n.includes(kw))) return "cigarette";
+    return "gutka";
+  }
+  return null;
+};
+
+// Inserts one consumable entry per consumable-type dish in the order.
+// Runs fire-and-forget style — errors are logged but never bubble up to the order response.
+const syncConsumablesFromOrder = async (order: any) => {
+  try {
+    const items: any[] = order.items ?? [];
+    const dishIds = items
+      .map((i: any) => i.id)
+      .filter((id: string) => mongoose.Types.ObjectId.isValid(id));
+
+    if (dishIds.length === 0) return;
+
+    const dishes = await Dish.find({ _id: { $in: dishIds } }).select("type name");
+    const dishMap = new Map(dishes.map(d => [d._id.toString(), d]));
+
+    const entries: object[] = [];
+    for (const item of items) {
+      const dish = dishMap.get(item.id);
+      if (!dish) continue;
+      const consumableType = getConsumableType(dish.type, dish.name);
+      if (!consumableType) continue;
+      entries.push({
+        type: consumableType,
+        quantity: item.quantity,
+        pricePerUnit: item.pricePerQuantity,
+        consumerType: "customer",
+        consumerName: order.customerDetails?.name ?? "Customer",
+        orderId: order._id,
+        timestamp: order.orderDate ?? new Date(),
+      });
+    }
+
+    if (entries.length > 0) {
+      await Consumable.insertMany(entries);
+      console.log(`✅ Auto-synced ${entries.length} consumable(s) from order ${order._id.toString().slice(-6)}`);
+    }
+  } catch (err) {
+    console.error("⚠️  Failed to sync consumables from order:", err);
+  }
+};
 
 const addOrder = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -113,6 +173,9 @@ const addOrder = async (req: Request, res: Response, next: NextFunction) => {
             console.error("Error updating daily earnings during new order creation:", earningUpdateError);
         }
     }
+
+    // Auto-sync consumable entries (tea/gutka/cigarette) — non-blocking
+    syncConsumablesFromOrder(newOrder);
 
     res.status(201).json({ success: true, message: "Order created!", data: newOrder });
   } catch (error) {

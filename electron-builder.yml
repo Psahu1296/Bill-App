@@ -21,7 +21,20 @@ extraResources:
   - from: build-resources/bin
     to: bin
     filter:
-      - mongod-*
+      - mongod-win32-*
+    platform: win32
+
+  - from: build-resources/bin
+    to: bin
+    filter:
+      - mongod-darwin-*
+    platform: mac
+
+  - from: build-resources/bin
+    to: bin
+    filter:
+      - mongod-linux-*
+    platform: linux
 
 
 # Unpack the backend + frontend from the asar archive so Express file-serving

@@ -1,5 +1,5 @@
 import { axiosWrapper } from "./axiosWrapper";
-import type { AddOrderPayload, AddDishPayload, AddExpensePayload, OrderStatus, PaymentStatus, AddConsumablePayload } from "../types";
+import type { AddOrderPayload, AddDishPayload, AddExpensePayload, OrderStatus, PaymentStatus, AddConsumablePayload, AddStaffPayload, AddPaymentPayload } from "../types";
 
 // Auth Endpoints
 export const login = (data: { email: string; password: string }) =>
@@ -147,3 +147,25 @@ export const updateConsumable = (id: string, updates: object) =>
 
 export const deleteConsumable = (id: string) =>
   axiosWrapper.delete(`/api/consumables/${id}`);
+
+// Staff
+export const getAllStaff = (filters: Record<string, string> = {}) =>
+  axiosWrapper.get("/api/staff", { params: filters });
+
+export const addStaff = (data: AddStaffPayload) =>
+  axiosWrapper.post("/api/staff", data);
+
+export const updateStaff = (id: string, data: Partial<AddStaffPayload>) =>
+  axiosWrapper.put(`/api/staff/${id}`, data);
+
+export const deleteStaff = (id: string) =>
+  axiosWrapper.delete(`/api/staff/${id}`);
+
+export const toggleStaffActive = (id: string) =>
+  axiosWrapper.patch(`/api/staff/${id}/toggle-active`);
+
+export const addStaffPayment = (id: string, data: AddPaymentPayload) =>
+  axiosWrapper.post(`/api/staff/${id}/payments`, data);
+
+export const deleteStaffPayment = (staffId: string, paymentId: string) =>
+  axiosWrapper.delete(`/api/staff/${staffId}/payments/${paymentId}`);

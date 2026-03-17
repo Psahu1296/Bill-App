@@ -104,9 +104,21 @@ async function setupBackend(): Promise<void> {
     });
 
     process.env["MONGODB_URI"] = `mongodb://127.0.0.1:${dbPort}/dhaba-pos`;
-    
-    // Give it a moment to start
-    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Poll until MongoDB accepts connections (up to 15 s) instead of blind sleep.
+    // This handles slow HDDs and cold boots on Windows without risking a race condition.
+    const { MongoClient } = require("mongodb");
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      try {
+        const client = new MongoClient(`mongodb://127.0.0.1:${dbPort}`, { serverSelectionTimeoutMS: 500 });
+        await client.connect();
+        await client.close();
+        break;
+      } catch {
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
     console.log("✅ Database initialized successfully");
 
 

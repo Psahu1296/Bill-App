@@ -19,7 +19,7 @@ const dishSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["starter", "main_course", "dessert", "beverage", "bread", "soup", "salad"],
+      enum: ["starter", "main_course", "dessert", "beverage", "bread", "soup", "salad", "tobacco"],
       required: true,
     },
     category: {

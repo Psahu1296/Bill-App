@@ -250,6 +250,211 @@ const dishesData = [
     description: "Two simple boiled eggs, served with a sprinkle of salt and pepper.",
     isAvailable: true,
     isFrequent: false
+  },
+
+  // Tea
+  {
+    image: "https://as2.ftcdn.net/v2/jpg/03/55/09/42/1000_F_355094244_XZhpHC7kWz98T8OA2kEi0XaAfQLWAg3K.jpg",
+    name: "Cutting Chai",
+    numberOfOrders: 0,
+    type: "beverage",
+    category: "veg",
+    variants: [{ size: "Regular", price: 10.00 }],
+    description: "Small, strong Indian tea served in a small glass.",
+    isAvailable: true,
+    isFrequent: true
+  },
+  {
+    image: "https://as1.ftcdn.net/v2/jpg/02/79/42/89/1000_F_279428977_Oo0KZcHGXWVlQ6lQiWiSGAGJ0GmKFbhO.jpg",
+    name: "Masala Chai",
+    numberOfOrders: 0,
+    type: "beverage",
+    category: "veg",
+    variants: [
+      { size: "Small", price: 15.00 },
+      { size: "Large", price: 25.00 }
+    ],
+    description: "Spiced Indian tea brewed with ginger, cardamom, and aromatic spices.",
+    isAvailable: true,
+    isFrequent: true
+  },
+  {
+    image: "https://as2.ftcdn.net/v2/jpg/02/31/63/10/1000_F_231631050_VWDQ6e2KvDWbxvBIaFCGMJYZhWBNqvS7.jpg",
+    name: "Green Tea",
+    numberOfOrders: 0,
+    type: "beverage",
+    category: "veg",
+    variants: [{ size: "Regular", price: 30.00 }],
+    description: "Light and refreshing green tea.",
+    isAvailable: true,
+    isFrequent: false
+  },
+  {
+    image: "https://as1.ftcdn.net/v2/jpg/03/24/95/84/1000_F_324958443_HdQhfMK0p8AysmjfRhQV6TCWH7Pb8iJV.jpg",
+    name: "Lemon Tea",
+    numberOfOrders: 0,
+    type: "beverage",
+    category: "veg",
+    variants: [{ size: "Regular", price: 25.00 }],
+    description: "Refreshing tea with a squeeze of lemon and a hint of ginger.",
+    isAvailable: true,
+    isFrequent: false
+  },
+  {
+    image: "https://as2.ftcdn.net/v2/jpg/04/33/55/70/1000_F_433557046_bSqzLlJQRiWKlM3lrNJqoONXJuaHzXWb.jpg",
+    name: "Milk Tea (Special)",
+    numberOfOrders: 0,
+    type: "beverage",
+    category: "veg",
+    variants: [
+      { size: "Small", price: 20.00 },
+      { size: "Large", price: 35.00 }
+    ],
+    description: "Creamy, rich tea brewed with full-fat milk and sugar.",
+    isAvailable: true,
+    isFrequent: false
+  },
+
+  // Gutka / Puch (Mouth Freshener / Tobacco)
+  {
+    image: "https://as1.ftcdn.net/v2/jpg/05/54/15/42/1000_F_554154236_zRl5PF0QTHBfXU1uc1u7aFmPnHhMBvx6.jpg",
+    name: "Rajnigandha",
+    numberOfOrders: 0,
+    type: "tobacco",
+    category: "veg",
+    variants: [{ size: "Regular", price: 5.00 }],
+    description: "Popular pan masala with cardamom and aromatic spices.",
+    isAvailable: true,
+    isFrequent: true
+  },
+  {
+    image: "https://as1.ftcdn.net/v2/jpg/05/54/15/42/1000_F_554154236_zRl5PF0QTHBfXU1uc1u7aFmPnHhMBvx6.jpg",
+    name: "Pan Parag",
+    numberOfOrders: 0,
+    type: "tobacco",
+    category: "veg",
+    variants: [{ size: "Regular", price: 5.00 }],
+    description: "Classic pan masala blend.",
+    isAvailable: true,
+    isFrequent: false
+  },
+  {
+    image: "https://as1.ftcdn.net/v2/jpg/05/54/15/42/1000_F_554154236_zRl5PF0QTHBfXU1uc1u7aFmPnHhMBvx6.jpg",
+    name: "Tulsi Pan Masala",
+    numberOfOrders: 0,
+    type: "tobacco",
+    category: "veg",
+    variants: [{ size: "Regular", price: 5.00 }],
+    description: "Pan masala with tulsi (holy basil) flavor.",
+    isAvailable: true,
+    isFrequent: false
+  },
+  {
+    image: "https://as1.ftcdn.net/v2/jpg/05/54/15/42/1000_F_554154236_zRl5PF0QTHBfXU1uc1u7aFmPnHhMBvx6.jpg",
+    name: "Vimal Puch",
+    numberOfOrders: 0,
+    type: "tobacco",
+    category: "veg",
+    variants: [
+      { size: "Small", price: 5.00 },
+      { size: "Large", price: 10.00 }
+    ],
+    description: "Flavored tobacco puch/pouch.",
+    isAvailable: true,
+    isFrequent: false
+  },
+  {
+    image: "https://as1.ftcdn.net/v2/jpg/05/54/15/42/1000_F_554154236_zRl5PF0QTHBfXU1uc1u7aFmPnHhMBvx6.jpg",
+    name: "Goa Puch",
+    numberOfOrders: 0,
+    type: "tobacco",
+    category: "veg",
+    variants: [
+      { size: "Small", price: 5.00 },
+      { size: "Large", price: 10.00 }
+    ],
+    description: "Strong flavored tobacco puch/pouch.",
+    isAvailable: true,
+    isFrequent: false
+  },
+
+  // Cigarettes
+  {
+    image: "https://as1.ftcdn.net/v2/jpg/05/54/15/42/1000_F_554154236_zRl5PF0QTHBfXU1uc1u7aFmPnHhMBvx6.jpg",
+    name: "Gold Flake Kings",
+    numberOfOrders: 0,
+    type: "tobacco",
+    category: "veg",
+    variants: [{ size: "Regular", price: 15.00 }],
+    description: "Gold Flake Kings cigarette.",
+    isAvailable: true,
+    isFrequent: true
+  },
+  {
+    image: "https://as1.ftcdn.net/v2/jpg/05/54/15/42/1000_F_554154236_zRl5PF0QTHBfXU1uc1u7aFmPnHhMBvx6.jpg",
+    name: "Gold Flake Lights",
+    numberOfOrders: 0,
+    type: "tobacco",
+    category: "veg",
+    variants: [{ size: "Regular", price: 15.00 }],
+    description: "Gold Flake Lights cigarette.",
+    isAvailable: true,
+    isFrequent: false
+  },
+  {
+    image: "https://as1.ftcdn.net/v2/jpg/05/54/15/42/1000_F_554154236_zRl5PF0QTHBfXU1uc1u7aFmPnHhMBvx6.jpg",
+    name: "Classic Regular",
+    numberOfOrders: 0,
+    type: "tobacco",
+    category: "veg",
+    variants: [{ size: "Regular", price: 20.00 }],
+    description: "Classic Regular cigarette.",
+    isAvailable: true,
+    isFrequent: false
+  },
+  {
+    image: "https://as1.ftcdn.net/v2/jpg/05/54/15/42/1000_F_554154236_zRl5PF0QTHBfXU1uc1u7aFmPnHhMBvx6.jpg",
+    name: "Classic Milds",
+    numberOfOrders: 0,
+    type: "tobacco",
+    category: "veg",
+    variants: [{ size: "Regular", price: 20.00 }],
+    description: "Classic Milds cigarette.",
+    isAvailable: true,
+    isFrequent: false
+  },
+  {
+    image: "https://as1.ftcdn.net/v2/jpg/05/54/15/42/1000_F_554154236_zRl5PF0QTHBfXU1uc1u7aFmPnHhMBvx6.jpg",
+    name: "Bristol",
+    numberOfOrders: 0,
+    type: "tobacco",
+    category: "veg",
+    variants: [{ size: "Regular", price: 10.00 }],
+    description: "Bristol cigarette.",
+    isAvailable: true,
+    isFrequent: true
+  },
+  {
+    image: "https://as1.ftcdn.net/v2/jpg/05/54/15/42/1000_F_554154236_zRl5PF0QTHBfXU1uc1u7aFmPnHhMBvx6.jpg",
+    name: "Four Square",
+    numberOfOrders: 0,
+    type: "tobacco",
+    category: "veg",
+    variants: [{ size: "Regular", price: 10.00 }],
+    description: "Four Square cigarette.",
+    isAvailable: true,
+    isFrequent: false
+  },
+  {
+    image: "https://as1.ftcdn.net/v2/jpg/05/54/15/42/1000_F_554154236_zRl5PF0QTHBfXU1uc1u7aFmPnHhMBvx6.jpg",
+    name: "Wills Navy Cut",
+    numberOfOrders: 0,
+    type: "tobacco",
+    category: "veg",
+    variants: [{ size: "Regular", price: 15.00 }],
+    description: "Wills Navy Cut cigarette.",
+    isAvailable: true,
+    isFrequent: false
   }
 ];
 

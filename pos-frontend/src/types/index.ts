@@ -224,6 +224,7 @@ export interface AddConsumablePayload {
   consumerName: string;
   orderId?: string | null;
   timestamp?: string;
+  staffIds?: string[];
 }
 
 // Shape returned by GET /api/consumables
@@ -246,6 +247,43 @@ export interface ConsumableDailySummary {
   staffConsumed: number;
   ownerConsumed: number;
   wastedValue: number;
+}
+
+// ── Staff ─────────────────────────────────────────────────────────────────────
+
+export type StaffRole = "cook" | "supplier" | "owner" | "manager" | "delivery" | "other";
+
+export interface StaffPayment {
+  _id: string;
+  amount: number;
+  type: "daily" | "monthly" | "advance" | "bonus" | "deduction";
+  date: string;
+  note: string;
+}
+
+export interface StaffMember {
+  _id: string;
+  name: string;
+  phone: string;
+  role: StaffRole;
+  monthlySalary: number;
+  joinDate: string;
+  isActive: boolean;
+  payments: StaffPayment[];
+}
+
+export interface AddStaffPayload {
+  name: string;
+  phone: string;
+  role: StaffRole;
+  monthlySalary: number;
+  joinDate?: string;
+}
+
+export interface AddPaymentPayload {
+  amount: number;
+  type: "daily" | "monthly" | "advance" | "bonus" | "deduction";
+  note?: string;
 }
 
 // ── API response wrapper ──────────────────────────────────────────────────────

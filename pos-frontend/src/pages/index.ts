@@ -7,3 +7,4 @@ export { default as Dashboard } from './Dashboard';
 export { default as OrderSummary } from './OrderSummary';
 export { default as Consumables } from './Consumables';
 export { default as AppUpdate } from './AppUpdate';
+export { default as Staff } from './Staff';
