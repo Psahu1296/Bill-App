@@ -71,14 +71,37 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: npm run dist:linux
 
-      - name: Upload Artifacts to GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            release/*.exe
-            release/*.dmg
-            release/*.AppImage
-            release/latest*.yml
-            release/*.blockmap
-            release/*.zip
-        # Env is already set at the job level
+      # gh release upload --clobber overwrites already-existing assets,
+      # so re-running a failed job never causes 422 "already_exists" errors.
+      # Each platform only uploads the files it actually produced.
+      - name: Upload Artifacts to GitHub Release (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release upload "$TAG" \
+            release/*.exe \
+            release/*.exe.blockmap \
+            release/latest.yml \
+            --clobber
+
+      - name: Upload Artifacts to GitHub Release (macOS)
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          # Collect whatever the macOS build produced (dmg, zip, blockmap)
+          FILES=$(ls release/*.dmg release/*.zip release/*.blockmap release/latest-mac.yml 2>/dev/null || true)
+          if [ -n "$FILES" ]; then
+            gh release upload "$TAG" $FILES --clobber
+          fi
+
+      - name: Upload Artifacts to GitHub Release (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release upload "$TAG" \
+            release/*.AppImage \
+            release/latest-linux.yml \
+            --clobber
