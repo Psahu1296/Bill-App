@@ -1,5 +1,5 @@
 import React from "react";
-import { FaSearch, FaUserCircle, FaCoffee, FaUsers } from "react-icons/fa";
+import { FaSearch, FaUserCircle, FaCoffee, FaUsers, FaDatabase } from "react-icons/fa";
 import { MdSystemUpdateAlt } from "react-icons/md";
 import logo from "../../assets/images/logo.png";
 import { useSelector } from "react-redux";
@@ -77,8 +77,18 @@ const Header: React.FC = () => {
           <button
             onClick={() => navigate("/dashboard")}
             className="glass-card rounded-xl p-2.5 hover:bg-dhaba-surface-hover transition-all duration-200 group"
+            title="Dashboard"
           >
             <MdDashboard className="text-dhaba-muted text-xl group-hover:text-dhaba-accent transition-colors" />
+          </button>
+        )}
+        {userData.role === "Admin" && (
+          <button
+            onClick={() => navigate("/data-management")}
+            className="glass-card rounded-xl p-2.5 hover:bg-dhaba-surface-hover transition-all duration-200 group"
+            title="Data Management"
+          >
+            <FaDatabase className="text-dhaba-muted text-xl group-hover:text-dhaba-accent transition-colors" />
           </button>
         )}
         <button

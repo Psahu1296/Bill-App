@@ -6,7 +6,7 @@ import {
   useLocation,
   Navigate,
 } from "react-router-dom";
-import { Home, Auth, Orders, Tables, Menu, Dashboard, Consumables, AppUpdate, Staff } from "./pages";
+import { Home, Auth, Orders, Tables, Menu, Dashboard, Consumables, AppUpdate, Staff, DataManagement } from "./pages";
 import Header from "./components/shared/Header";
 import { useSelector } from "react-redux";
 import useLoadData from "./hooks/useLoadData";
@@ -99,6 +99,14 @@ function Layout() {
           element={
             <ProtectedRoutes>
               <AppUpdate />
+            </ProtectedRoutes>
+          }
+        />
+        <Route
+          path="/data-management"
+          element={
+            <ProtectedRoutes>
+              <DataManagement />
             </ProtectedRoutes>
           }
         />
