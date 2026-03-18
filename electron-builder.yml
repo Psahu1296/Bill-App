@@ -26,7 +26,6 @@ publish:
 
 files:
   - electron/dist/**
-  - pos-frontend/dist/**
   - package.json
 
 extraResources:
@@ -36,6 +35,10 @@ extraResources:
       - "**/*"
   - from: pos-backend/node_modules
     to: backend/node_modules
+    filter:
+      - "**/*"
+  - from: pos-frontend/dist
+    to: frontend/dist
     filter:
       - "**/*"
 

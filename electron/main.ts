@@ -74,11 +74,12 @@ async function setupBackend(): Promise<void> {
   }
 
   // 2. Environment variables — DATABASE_PATH tells better-sqlite3 where to store the file
-  process.env["JWT_SECRET"]     = jwtSecret;
-  process.env["NODE_ENV"]       = "production";
-  process.env["PORT"]           = String(PORT);
-  process.env["FRONTEND_URL"]   = `http://localhost:${PORT}`;
-  process.env["DATABASE_PATH"]  = path.join(userDataPath, "dhaba-pos.db");
+  process.env["JWT_SECRET"]          = jwtSecret;
+  process.env["NODE_ENV"]            = "production";
+  process.env["PORT"]                = String(PORT);
+  process.env["FRONTEND_URL"]        = `http://localhost:${PORT}`;
+  process.env["DATABASE_PATH"]       = path.join(userDataPath, "dhaba-pos.db");
+  process.env["FRONTEND_DIST_PATH"]  = path.join(process.resourcesPath, "frontend/dist");
 
   sendToSplash("server", "Starting server…", 40);
 

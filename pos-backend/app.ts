@@ -100,7 +100,9 @@ app.use("/api/staff", staffRoutes);
 app.use("/api/data", dataRoutes);
 
 // Serve frontend static files
-const frontendBuildPath = path.join(__dirname, "../pos-frontend/dist");
+// In production FRONTEND_DIST_PATH points to resources/frontend/dist (extraResources).
+// In dev it falls back to the relative path from the build output.
+const frontendBuildPath = process.env["FRONTEND_DIST_PATH"] ?? path.join(__dirname, "../../pos-frontend/dist");
 app.use(express.static(frontendBuildPath));
 
 // Serve index.html for any non-API route (React Router support)
