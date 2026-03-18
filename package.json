@@ -1,6 +1,6 @@
 {
   "name": "dhaba-pos",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Point-of-Sale system for Dhaba",
   "author": "Dhaba POS",
   "main": "electron/dist/main.js",
