@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { deleteDish, getDishes } from "../../https";
+import { deleteDish, getDishes, seedDefaultDishes } from "../../https";
 import { enqueueSnackbar } from "notistack";
 import DishCard from "./DishesCard";
 import AddDishModal from "../dashboard/AddDishModal";
 import BulkAddDishModal from "./BulkAddDishModal";
-import { FaSearch, FaCloudUploadAlt } from "react-icons/fa";
+import { FaSearch, FaCloudUploadAlt, FaPlus, FaUtensils } from "react-icons/fa";
 import type { Dish } from "../../types";
 
 const DishesList: React.FC = () => {
@@ -14,6 +14,19 @@ const DishesList: React.FC = () => {
   const [isUpdateId, setIsUpdateId] = useState<string | null>(null);
   const [selectedDish, setSelectedDish] = useState<Dish | null>(null);
   const [isBulkOpen, setIsBulkOpen] = useState(false);
+  const [isAddOpen, setIsAddOpen] = useState(false);
+
+  const seedMutation = useMutation({
+    mutationFn: seedDefaultDishes,
+    onSuccess: () => {
+      enqueueSnackbar("Default menu loaded!", { variant: "success" });
+      queryClient.invalidateQueries({ queryKey: ["dishes"] });
+      queryClient.invalidateQueries({ queryKey: ["popularDishes"] });
+    },
+    onError: () => {
+      enqueueSnackbar("Failed to load default menu.", { variant: "error" });
+    },
+  });
 
   const { data: dishes, isLoading, isError, error } = useQuery({
     queryKey: ["dishes"],
@@ -88,11 +101,42 @@ const DishesList: React.FC = () => {
           >
             <FaCloudUploadAlt /> Bulk Add
           </button>
+          <button
+            onClick={() => setIsAddOpen(true)}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-warm text-dhaba-bg font-bold text-sm hover:shadow-glow transition-all"
+          >
+            <FaPlus /> Add Dish
+          </button>
         </div>
       </div>
 
       <div className="flex-grow overflow-y-auto pr-2">
-        {filteredDishes.length === 0 ? (
+        {dishList.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center space-y-4">
+            <div className="h-16 w-16 rounded-2xl bg-dhaba-accent/10 flex items-center justify-center">
+              <FaUtensils className="text-dhaba-accent text-2xl" />
+            </div>
+            <div>
+              <p className="text-dhaba-text font-semibold">Menu is empty</p>
+              <p className="text-dhaba-muted text-sm mt-1">Load the default menu or add dishes manually.</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => seedMutation.mutate()}
+                disabled={seedMutation.isPending}
+                className="px-6 py-2.5 rounded-2xl bg-gradient-warm text-dhaba-bg font-bold text-sm hover:shadow-glow transition-all disabled:opacity-50"
+              >
+                {seedMutation.isPending ? "Loading..." : "Load Default Menu"}
+              </button>
+              <button
+                onClick={() => setIsAddOpen(true)}
+                className="px-6 py-2.5 rounded-2xl glass-card text-dhaba-text font-semibold text-sm hover:bg-dhaba-surface-hover transition-all"
+              >
+                Add Manually
+              </button>
+            </div>
+          </div>
+        ) : filteredDishes.length === 0 ? (
           <p className="text-center text-dhaba-muted py-12">No dishes found matching your search.</p>
         ) : (
           <div className="flex flex-wrap gap-5">
@@ -102,6 +146,14 @@ const DishesList: React.FC = () => {
           </div>
         )}
       </div>
+
+      {isAddOpen && (
+        <AddDishModal
+          isOpen={isAddOpen}
+          onClose={() => setIsAddOpen(false)}
+          onDishAdded={() => setIsAddOpen(false)}
+        />
+      )}
 
       {isUpdateId && (
         <AddDishModal

@@ -9,3 +9,4 @@ export { default as Consumables } from './Consumables';
 export { default as AppUpdate } from './AppUpdate';
 export { default as Staff } from './Staff';
 export { default as DataManagement } from './DataManagement';
+export { default as DishesPage } from './DishesPage';
