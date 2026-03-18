@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import createHttpError from "http-errors";
 import * as dishRepo from "../repositories/dishRepo";
+import { SEED_DISHES } from "../scripts/dishSeedData";
+import { getDb } from "../db";
 
 const addDish = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -133,4 +135,44 @@ const bulkAddDishes = async (req: Request, res: Response, next: NextFunction) =>
   }
 };
 
-export { addDish, getDishes, getFrequentDishes, getDishById, updateDish, deleteDish, bulkAddDishes };
+const seedDishes = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const db = getDb();
+
+    const insert = db.prepare(`
+      INSERT OR IGNORE INTO dishes (image, name, type, category, variants, description, is_available, is_frequent)
+      VALUES (@image, @name, @type, @category, @variants, @description, @isAvailable, @isFrequent)
+    `);
+
+    let added = 0;
+    let skipped = 0;
+
+    const run = db.transaction(() => {
+      for (const d of SEED_DISHES) {
+        const result = insert.run({
+          image: "",
+          name: d.name,
+          type: d.type,
+          category: d.category,
+          variants: JSON.stringify(d.variants),
+          description: d.description ?? "",
+          isAvailable: 1,
+          isFrequent: 0,
+        }) as { changes: number };
+        result.changes > 0 ? added++ : skipped++;
+      }
+    });
+
+    run();
+
+    res.json({
+      success: true,
+      message: `Seeded ${added} dish(es). ${skipped} already existed.`,
+      data: { added, skipped },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export { addDish, getDishes, getFrequentDishes, getDishById, updateDish, deleteDish, bulkAddDishes, seedDishes };

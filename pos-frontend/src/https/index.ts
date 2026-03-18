@@ -83,6 +83,9 @@ export const getFrequentDishes = () =>
 export const bulkAddDishes = (data: AddDishPayload[]) =>
   axiosWrapper.post("/api/dishes/bulk", data);
 
+export const seedDefaultDishes = () =>
+  axiosWrapper.post("/api/dishes/seed");
+
 // Earnings
 export const getDailyEarnings = () =>
   axiosWrapper.get("/api/earnings/daywise");

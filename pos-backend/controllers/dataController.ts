@@ -113,7 +113,7 @@ export const exportData = (req: Request, res: Response, next: NextFunction) => {
     }
 
     const moduleList = modules.split(",").filter((m) => TABLE_MAP[m]);
-    const result: Record<string, unknown[]> = {};
+    const result: Record<string, Record<string, unknown>[]> = {};
 
     for (const mod of moduleList) {
       result[mod] = fetchModuleRows(mod, startDate, endDate);

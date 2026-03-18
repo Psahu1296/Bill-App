@@ -1,5 +1,5 @@
-import React from "react";
-import { FaSearch, FaUserCircle, FaCoffee, FaUsers, FaDatabase } from "react-icons/fa";
+import React, { useState } from "react";
+import { FaSearch, FaUserCircle, FaCoffee, FaUsers, FaDatabase, FaSyncAlt } from "react-icons/fa";
 import { MdSystemUpdateAlt } from "react-icons/md";
 import logo from "../../assets/images/logo.png";
 import { useSelector } from "react-redux";
@@ -16,6 +16,12 @@ const Header: React.FC = () => {
   const userData = useSelector((state: RootState) => state.user);
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => window.location.reload(), 400);
+  };
 
   const logoutMutation = useMutation({
     mutationFn: () => logout(),
@@ -48,14 +54,14 @@ const Header: React.FC = () => {
         </div>
       </div>
 
-      <div className="glass-input flex items-center gap-3 rounded-2xl px-5 py-2.5 w-[420px]">
+      {/* <div className="glass-input flex items-center gap-3 rounded-2xl px-5 py-2.5 w-[420px]">
         <FaSearch className="text-dhaba-muted text-sm" />
         <input
           type="text"
           placeholder="Search orders, dishes, tables..."
           className="bg-transparent outline-none text-dhaba-text text-sm font-medium placeholder:text-dhaba-muted/60 flex-1"
         />
-      </div>
+      </div> */}
 
       <div className="flex items-center gap-3">
         <button
@@ -97,6 +103,15 @@ const Header: React.FC = () => {
           title="Staff Management"
         >
           <FaUsers className="text-dhaba-muted text-xl group-hover:text-dhaba-accent transition-colors" />
+        </button>
+
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="glass-card rounded-xl p-2.5 hover:bg-dhaba-surface-hover transition-all duration-200 group"
+          title="Refresh page"
+        >
+          <FaSyncAlt className={`text-dhaba-muted text-xl group-hover:text-dhaba-accent transition-colors ${refreshing ? "animate-spin text-dhaba-accent" : ""}`} />
         </button>
 
         <div className="h-8 w-px bg-dhaba-border/40 mx-1" />

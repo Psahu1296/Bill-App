@@ -29,8 +29,7 @@ Head to the [**Releases page**](../../releases/latest) and download the installe
 | macOS | `Dhaba POS-x.x.x.dmg` | Drag to Applications |
 | Linux | `Dhaba POS-x.x.x.AppImage` | Make executable (`chmod +x`), then run |
 
-> **First launch note:** The app downloads a small database engine (~70 MB) on its first start.
-> An internet connection is required **only for this one-time download**. Everything works offline afterwards.
+> The app works fully offline from the first launch. No internet connection required after installation.
 
 ---
 
@@ -39,12 +38,19 @@ Head to the [**Releases page**](../../releases/latest) and download the installe
 - **Order Management** — create, update, and track orders in real time
 - **Table Management** — visual table grid with booking status
 - **Menu Management** — add/edit dishes with variants (Half / Full / Regular etc.)
+  - Filter by type (Veg / Non-Veg) and category (Rice, Roti, Sabji, Drinks, and any custom categories)
+  - "Available only" toggle to hide sold-out items during a busy shift
 - **Billing & Invoicing** — auto-generated bills with tax, print-ready invoices
 - **Dashboard** — daily earnings, popular dishes, recent orders at a glance
 - **Customer Ledger** — track credit/balance for regular customers
 - **Expenses Tracking** — log daily expenses by category
+- **Consumables Tracking** — track tea, gutka, cigarette consumption by staff/customer/owner
+- **Staff Management** — staff profiles, salary records, payment history
+- **Data Management** *(Admin only)* — export data as JSON, CSV or Excel (XLSX), bulk delete by module and date range, live DB stats
 - **Razorpay Integration** — online payment support (requires internet)
-- **Fully offline** — database runs embedded on your machine, no cloud needed
+- **Splash screen** — animated launch screen showing startup progress
+- **Auto-updater** — silent background updates via GitHub Releases
+- **Fully offline** — SQLite database embedded on your machine, no cloud needed
 
 ---
 
@@ -55,10 +61,11 @@ Head to the [**Releases page**](../../releases/latest) and download the installe
 | Desktop shell | Electron |
 | Frontend | React, Redux Toolkit, Tailwind CSS, TypeScript |
 | Backend | Node.js, Express, TypeScript |
-| Database | MongoDB (embedded via `mongodb-memory-server`, persistent) |
+| Database | SQLite via `better-sqlite3` (embedded, zero-config) |
 | Auth | JWT, bcrypt |
 | State | Redux Toolkit + React Query |
 | Payments | Razorpay |
+| Export | SheetJS (`xlsx`) for Excel export |
 
 ---
 
@@ -82,38 +89,41 @@ cd pos-backend && npm install
 cd pos-frontend && npm install
 ```
 
-### Seed Initial Data (Optional)
-
-To populate the database with default menu items:
-
-```bash
-cd pos-backend
-npx tsx scripts/script.ts
-```
-
 ### Run in development
 
 ```bash
-# Terminal 1 — local database (MongoDB on :27017)
-node start-mongo.js
-
-# Terminal 2 — backend (Express on :5000)
+# Terminal 1 — backend (Express on :5001)
 cd pos-backend && npm run dev
 
-# Terminal 3 — frontend (Vite on :5173)
+# Terminal 2 — frontend (Vite on :5173)
 cd pos-frontend && npm run dev
 
-# Terminal 4 — open Electron window (optional, points to Vite dev server)
+# Terminal 3 — open Electron window (optional, points to Vite dev server)
 npm run electron:dev
 ```
+
+> The SQLite database file is created automatically at startup. No separate database process needed.
+
+### Seed the default menu (optional)
+
+If the dish list is empty, the **Menu page** will show a "Load Default Menu" button that seeds the database in one click — no terminal needed.
+
+To seed from the terminal instead:
+
+```bash
+cd pos-backend
+npx tsx scripts/seedDishes.ts
+```
+
+This inserts ~30 typical dhaba dishes (roti, rice, sabji, drinks) and skips any that already exist. Images are left blank — update them via the UI later.
 
 ### Environment variables (backend)
 
 Create `pos-backend/.env`:
 
 ```env
-PORT=5000
-MONGODB_URI=mongodb://127.0.0.1:27017/posdb   # local MongoDB for dev
+PORT=5001
+DATABASE_PATH=./dhaba-pos.db    # path to the SQLite file (auto-created)
 JWT_SECRET=your_secret_here
 RAZORPAY_KEY_ID=your_key
 RAZORPAY_KEY_SECRET=your_secret
@@ -137,8 +147,30 @@ npm run dist:win      # → release/*.exe
 npm run dist:linux    # → release/*.AppImage
 ```
 
-> Cross-compiling for Windows from macOS requires [Wine](https://www.winehq.org/).
-> Linux AppImage can be built on macOS without extra tools.
+> CI/CD via GitHub Actions builds for all three platforms on every version tag push (`v*`).
+
+### Releasing a new version
+
+Always bump `package.json` **before** creating the git tag so `app.getVersion()` shows the correct version in both dev and production:
+
+```bash
+# Patch release (1.4.0 → 1.4.1)
+npm version patch
+
+# Minor release (1.4.0 → 1.5.0)
+npm version minor
+
+# Major release (1.4.0 → 2.0.0)
+npm version major
+```
+
+`npm version` bumps `package.json`, commits the change, and creates a matching git tag automatically. Then push both:
+
+```bash
+git push && git push --tags
+```
+
+GitHub Actions picks up the tag and builds installers for all three platforms.
 
 ---
 
@@ -146,24 +178,29 @@ npm run dist:linux    # → release/*.AppImage
 
 ```
 Bill-App/
-├── electron/            # Electron main process
-│   ├── main.ts          # Starts MongoDB + Express + BrowserWindow
-│   └── preload.ts       # Context bridge (v2: native dialogs, updates)
-├── pos-backend/         # Express + Mongoose API
-│   ├── app.ts           # Express app (no listen — imported by server.ts & Electron)
-│   ├── server.ts        # Standalone entry: connectDB + app.listen
-│   ├── controllers/
-│   ├── models/
+├── electron/                  # Electron main process
+│   ├── main.ts                # Sets up DATABASE_PATH, starts Express, manages splash + BrowserWindow
+│   ├── preload.ts             # Context bridge (IPC for renderer)
+│   ├── splash.html            # Animated launch/loading screen
+│   └── splash-preload.ts      # Context bridge for splash window
+├── pos-backend/               # Express + better-sqlite3 API
+│   ├── app.ts                 # Express app setup (routes, middleware)
+│   ├── server.ts              # Standalone entry: initDB + app.listen
+│   ├── db/
+│   │   ├── index.ts           # SQLite singleton (WAL mode, foreign keys)
+│   │   └── schema.ts          # CREATE TABLE IF NOT EXISTS for all tables
+│   ├── repositories/          # Typed data-access functions (one file per domain)
+│   ├── controllers/           # HTTP request handlers
 │   └── routes/
-├── pos-frontend/        # React + Vite + TypeScript
+├── pos-frontend/              # React + Vite + TypeScript
 │   └── src/
-│       ├── types/       # Shared domain types
-│       ├── redux/       # Store, slices, hooks
+│       ├── types/             # Shared domain types
+│       ├── redux/             # Store, slices, hooks
 │       ├── components/
 │       └── pages/
-├── build-resources/     # App icons (icon.png / .ico / .icns)
-├── electron-builder.yml # Installer configuration
-└── package.json         # Root: Electron + build scripts
+├── build-resources/           # App icons (icon.png / .ico / .icns)
+├── electron-builder.yml       # Installer configuration
+└── package.json               # Root: Electron + build scripts
 ```
 
 ---
@@ -173,12 +210,18 @@ Bill-App/
 - [x] Order, table, menu, billing management
 - [x] Customer ledger (credit tracking)
 - [x] Expense tracking
+- [x] Consumables tracking (tea, gutka, cigarette)
+- [x] Staff management & salary payments
 - [x] TypeScript migration (FE + BE)
 - [x] Electron desktop app (offline, zero config)
-- [x] Auto-updater (v2)
-- [ ] Cloud sync / multi-device (v2)
-- [ ] Print receipt directly from app (v2)
-- [ ] Inventory / stock management (v2)
+- [x] SQLite migration (replaced MongoDB — instant startup, no extra binary)
+- [x] Splash screen with startup progress
+- [x] Auto-updater
+- [x] Menu filters (Veg/Non-Veg, category, availability, search)
+- [x] Data Management — export (JSON/CSV/XLSX), bulk delete, live DB stats
+- [ ] Cloud sync / multi-device
+- [ ] Print receipt directly from app
+- [ ] Inventory / stock management
 
 ---
 
