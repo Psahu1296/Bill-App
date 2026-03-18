@@ -61,15 +61,15 @@ jobs:
       # Our gh release upload steps below handle all artifact uploads.
       - name: Build and Package Installer (macOS)
         if: matrix.os == 'macos-latest'
-        run: npm run build && electron-builder --mac --publish never
+        run: npm run build && npx electron-builder --mac --publish never
 
       - name: Build and Package Installer (Windows)
         if: matrix.os == 'windows-latest'
-        run: npm run build && electron-builder --win --publish never
+        run: npm run build && npx electron-builder --win --publish never
 
       - name: Build and Package Installer (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: npm run build && electron-builder --linux --publish never
+        run: npm run build && npx electron-builder --linux --publish never
 
       # gh release upload --clobber overwrites already-existing assets,
       # so re-running a failed job never causes 422 "already_exists" errors.
