@@ -6,7 +6,7 @@ import {
   useLocation,
   Navigate,
 } from "react-router-dom";
-import { Home, Auth, Orders, Tables, Menu, Dashboard, Consumables, AppUpdate, Staff, DataManagement, DishesPage } from "./pages";
+import { Home, Auth, Orders, Tables, Menu, Dashboard, OrderSummary, Consumables, AppUpdate, Staff, DataManagement, DishesPage } from "./pages";
 import Header from "./components/shared/Header";
 import { useSelector } from "react-redux";
 import useLoadData from "./hooks/useLoadData";
@@ -115,6 +115,14 @@ function Layout() {
           element={
             <ProtectedRoutes>
               <DishesPage />
+            </ProtectedRoutes>
+          }
+        />
+        <Route
+          path="/order-summary"
+          element={
+            <ProtectedRoutes>
+              <OrderSummary />
             </ProtectedRoutes>
           }
         />

@@ -8,6 +8,8 @@ directories:
 
 publish:
   provider: github
+  owner: Psahu1296
+  repo: Bill-App
 
 # ── What gets packaged ─────────────────────────────────────────────────────────
 # The asar contains only what Electron itself needs:

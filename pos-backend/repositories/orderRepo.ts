@@ -74,13 +74,13 @@ export function findAll(filters: OrderFilters = {}) {
 
   if (filters.startDate) {
     conditions.push("o.order_date >= ?");
-    params.push(new Date(filters.startDate).toISOString().replace('T', ' ').slice(0, 19));
+    params.push(new Date(filters.startDate).toISOString());
   }
   if (filters.endDate) {
     conditions.push("o.order_date <= ?");
     const end = new Date(filters.endDate);
     end.setUTCHours(23, 59, 59, 999);
-    params.push(end.toISOString().replace('T', ' ').slice(0, 19));
+    params.push(end.toISOString());
   }
   if (filters.tableId) {
     conditions.push("o.table_id = ?");

@@ -5,7 +5,6 @@ import { enqueueSnackbar } from "notistack";
 import type { Order, PaymentMethod, OrderStatus } from "../../types";
 
 interface PayRemainingModalProps {
-  isOpen: boolean;
   onClose: () => void;
   order: Order;
   balanceDue: number;
@@ -13,7 +12,6 @@ interface PayRemainingModalProps {
 }
 
 const PayRemainingModal: React.FC<PayRemainingModalProps> = ({
-  isOpen,
   onClose,
   order,
   balanceDue,
@@ -23,8 +21,6 @@ const PayRemainingModal: React.FC<PayRemainingModalProps> = ({
   const [payMethod, setPayMethod] = useState<PaymentMethod>("Cash");
   const [amount, setAmount] = useState<string>(balanceDue.toString());
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  if (!isOpen) return null;
 
   const paymentMutation = useMutation({
     mutationFn: (updates: Partial<Order> & { id: string }) =>

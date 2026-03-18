@@ -177,9 +177,8 @@ const OrderSummary: React.FC = () => {
       <BottomNav />
       
       {isPayModalOpen && (
-         <PayRemainingModal 
-           isOpen={isPayModalOpen} 
-           onClose={() => setIsPayModalOpen(false)} 
+         <PayRemainingModal
+           onClose={() => setIsPayModalOpen(false)}
            order={order} 
            balanceDue={balanceDue} 
            onSuccess={() => {

@@ -11,17 +11,18 @@ import { CustomRequest as Request } from "../types";
 
 // ── Consumable sync helper ────────────────────────────────────────────────────
 const CIGARETTE_KEYWORDS = ["gold flake", "classic", "bristol", "four square", "wills", "navy cut", "cigarette"];
+const GUTKA_KEYWORDS = ["gutka", "pauch", "pan masala", "pouch", "manikchand", "rajnigandha", "goa"];
 
-const getConsumableType = (dishType: string, dishName: string): "tea" | "gutka" | "cigarette" | null => {
-  if (dishType === "beverage") {
-    const n = dishName.toLowerCase();
-    if (n.includes("tea") || n.includes("chai")) return "tea";
-  }
-  if (dishType === "tobacco") {
-    const n = dishName.toLowerCase();
-    if (CIGARETTE_KEYWORDS.some(kw => n.includes(kw))) return "cigarette";
-    return "gutka";
-  }
+const getConsumableType = (dishName: string, dishCategory?: string): "tea" | "gutka" | "cigarette" | null => {
+  const n = dishName.toLowerCase();
+  // Tea/chai — match by name
+  if (n.includes("tea") || n.includes("chai")) return "tea";
+  // Cigarette — match by name
+  if (CIGARETTE_KEYWORDS.some(kw => n.includes(kw))) return "cigarette";
+  // Gutka — match by name
+  if (GUTKA_KEYWORDS.some(kw => n.includes(kw))) return "gutka";
+  // Tobacco category fallback (for future dishes)
+  if (dishCategory === "tobacco") return "gutka";
   return null;
 };
 
@@ -37,8 +38,8 @@ const syncConsumablesFromOrder = (order: Record<string, unknown>) => {
       const dish = dishRepo.findById(dishId);
       if (!dish) continue;
       const consumableType = getConsumableType(
-        (dish as Record<string, unknown>).type as string,
-        (dish as Record<string, unknown>).name as string
+        (dish as Record<string, unknown>).name as string,
+        (dish as Record<string, unknown>).category as string
       );
       if (!consumableType) continue;
       entries.push({
@@ -92,8 +93,10 @@ const addOrder = async (req: Request, res: Response, next: NextFunction) => {
         tableId: Number(tableId),
         amountPaid,
         balanceDueOnOrder,
-      });
+      }) as Record<string, unknown>;
       if (!updatedOrder) return next(createHttpError(404, "Order not found for update!"));
+      consumableRepo.removeByOrderId(_id);
+      syncConsumablesFromOrder(updatedOrder);
       return res.status(200).json({ success: true, message: "Order updated!", data: updatedOrder });
     }
 
@@ -150,6 +153,12 @@ const addOrder = async (req: Request, res: Response, next: NextFunction) => {
         earningRepo.incrementEarnings(dateIso, amountPaid);
       } catch (e) { console.error("Earnings error on addOrder:", e); }
     }
+
+    // Increment dish order counts for popularity tracking
+    try {
+      const items = (newOrder.items as { id: string; quantity: number }[]) ?? [];
+      if (items.length > 0) dishRepo.incrementOrderCounts(items);
+    } catch (e) { console.error("Failed to increment dish order counts:", e); }
 
     // Auto-sync consumables (fire-and-forget)
     syncConsumablesFromOrder(newOrder);
@@ -276,6 +285,12 @@ const updateOrderById = async (req: Request, res: Response, next: NextFunction) 
           tableRepo.update(tableId, { status: "Available", currentOrderId: null });
         }
       }
+    }
+
+    // Re-sync consumables if items changed
+    if (requestBodyUpdates.items !== undefined) {
+      consumableRepo.removeByOrderId(id);
+      syncConsumablesFromOrder(updatedOrder);
     }
 
     res.status(200).json({ success: true, message: "Order updated successfully!", data: updatedOrder });

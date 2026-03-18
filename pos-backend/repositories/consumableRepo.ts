@@ -125,3 +125,7 @@ export function remove(id: string | number) {
   db.prepare("DELETE FROM consumables WHERE id = ?").run(Number(id));
   return rowToApi(row);
 }
+
+export function removeByOrderId(orderId: string | number) {
+  getDb().prepare("DELETE FROM consumables WHERE order_id = ?").run(Number(orderId));
+}

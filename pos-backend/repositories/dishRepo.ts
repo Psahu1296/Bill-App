@@ -108,3 +108,12 @@ export function remove(id: string | number) {
   getDb().prepare("DELETE FROM dishes WHERE id = ?").run(Number(id));
   return dish;
 }
+
+export function incrementOrderCounts(items: { id: string | number; quantity: number }[]) {
+  const db = getDb();
+  const stmt = db.prepare("UPDATE dishes SET number_of_orders = number_of_orders + ? WHERE id = ?");
+  const runAll = db.transaction((list: typeof items) => {
+    for (const item of list) stmt.run(item.quantity, Number(item.id));
+  });
+  runAll(items);
+}

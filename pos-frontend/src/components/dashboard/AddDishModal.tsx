@@ -8,7 +8,7 @@ import { addDish, updateDish } from "../../https";
 import type { Dish, AddDishPayload } from "../../types";
 
 const DISH_TYPES = [
-  "starter", "main_course", "dessert", "beverage", "bread", "soup", "salad",
+  "starter", "main_course", "dessert", "beverage", "bread", "soup", "salad", "tobacco",
 ];
 const DISH_CATEGORIES = ["veg", "non_veg", "egg"];
 const DISH_VARIANT_SIZES = ["Half", "Full", "Regular", "Small", "Large"];
