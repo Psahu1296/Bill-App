@@ -18,10 +18,15 @@ publish:
 # better-sqlite3 is a native addon — it must be unpacked from the asar so the
 # .node binary can be loaded by Node at runtime.
 
-asarUnpack:
+files:
+  - electron/dist/**
   - pos-backend/dist/**
   - pos-backend/node_modules/**
   - pos-frontend/dist/**
+  - package.json
+
+asarUnpack:
+  - pos-backend/node_modules/**
 
 # ── Windows installer ──────────────────────────────────────────────────────────
 win:

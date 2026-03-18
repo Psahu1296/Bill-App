@@ -78,6 +78,13 @@ jobs:
           cd pos-backend && npm install
           cd ../pos-frontend && npm install
 
+      - name: Rebuild native modules for Electron
+        shell: bash
+        run: |
+          ELECTRON_VERSION=$(node -e "console.log(require('./node_modules/electron/package.json').version)")
+          cd pos-backend
+          npx @electron/rebuild -f -w better-sqlite3 --version "$ELECTRON_VERSION"
+
       - name: Build and Package Installer (macOS)
         if: matrix.os == 'macos-latest'
         run: npm run build && npx electron-builder --mac --publish never
