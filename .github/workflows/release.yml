@@ -56,20 +56,20 @@ jobs:
       - name: Prepare MongoDB Binaries
         run: node scripts/prepare-mongodb.js
 
-      # Note: --publish never has been removed so that electron-builder generates
-      # the latest-mac.yml / latest.yml / latest-linux.yml update manifests.
-      # softprops/action-gh-release below handles all artifact uploads via GITHUB_TOKEN.
+      # --publish never prevents electron-builder from uploading to GitHub itself.
+      # The manifest files (latest.yml etc.) are still generated on disk.
+      # Our gh release upload steps below handle all artifact uploads.
       - name: Build and Package Installer (macOS)
         if: matrix.os == 'macos-latest'
-        run: npm run dist:mac
+        run: npm run build && electron-builder --mac --publish never
 
       - name: Build and Package Installer (Windows)
         if: matrix.os == 'windows-latest'
-        run: npm run dist:win
+        run: npm run build && electron-builder --win --publish never
 
       - name: Build and Package Installer (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: npm run dist:linux
+        run: npm run build && electron-builder --linux --publish never
 
       # gh release upload --clobber overwrites already-existing assets,
       # so re-running a failed job never causes 422 "already_exists" errors.
@@ -90,10 +90,16 @@ jobs:
         shell: bash
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          # Collect whatever the macOS build produced (dmg, zip, blockmap)
-          FILES=$(ls release/*.dmg release/*.zip release/*.blockmap release/latest-mac.yml 2>/dev/null || true)
-          if [ -n "$FILES" ]; then
-            gh release upload "$TAG" $FILES --clobber
+          # Build the file list using globs — bash expansion preserves spaces in filenames.
+          # Use a bash array so each path is a separate argument to gh.
+          FILES=()
+          for pattern in "release/*.dmg" "release/*.zip" "release/*.blockmap" "release/latest-mac.yml"; do
+            for f in $pattern; do
+              [ -f "$f" ] && FILES+=("$f")
+            done
+          done
+          if [ ${#FILES[@]} -gt 0 ]; then
+            gh release upload "$TAG" "${FILES[@]}" --clobber
           fi
 
       - name: Upload Artifacts to GitHub Release (Linux)
