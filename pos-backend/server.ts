@@ -2,7 +2,7 @@ import app from "./app";
 import connectDB from "./config/database";
 
 const startServer = async (port: number = Number(process.env.PORT) || 5001): Promise<void> => {
-  await connectDB();
+  connectDB();
   return new Promise((resolve, reject) => {
     const server = app.listen(port, "0.0.0.0", () => {
       console.log(`☑️  POS Server is listening on port ${port}`);

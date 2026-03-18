@@ -12,12 +12,12 @@ publish:
 # ── What gets packaged ─────────────────────────────────────────────────────────
 # electron/dist  : compiled Electron main + preload
 # pos-backend/dist : compiled Express server
-# pos-backend/node_modules : Express/Mongoose/etc. runtime deps
+# pos-backend/node_modules : Express/better-sqlite3/etc. runtime deps
 # pos-frontend/dist : built React app (served by Express as static files)
-# node_modules   : root deps — mongodb-memory-server (auto-included via dependencies)
+#
+# better-sqlite3 is a native addon — it must be unpacked from the asar so the
+# .node binary can be loaded by Node at runtime.
 
-# Unpack the backend + frontend from the asar archive so Express file-serving
-# and native module paths work correctly without asar quirks
 asarUnpack:
   - pos-backend/dist/**
   - pos-backend/node_modules/**
@@ -25,11 +25,6 @@ asarUnpack:
 
 # ── Windows installer ──────────────────────────────────────────────────────────
 win:
-  extraResources:
-    - from: build-resources/bin
-      to: bin
-      filter:
-        - mongod-win32-*
   target:
     - target: nsis
       arch:
@@ -44,11 +39,6 @@ nsis:
 
 # ── macOS installer ────────────────────────────────────────────────────────────
 mac:
-  extraResources:
-    - from: build-resources/bin
-      to: bin
-      filter:
-        - mongod-darwin-*
   target:
     - target: dmg
       arch:
@@ -58,11 +48,6 @@ mac:
 
 # ── Linux installer ────────────────────────────────────────────────────────────
 linux:
-  extraResources:
-    - from: build-resources/bin
-      to: bin
-      filter:
-        - mongod-linux-*
   target:
     - target: AppImage
       arch:

@@ -6,15 +6,13 @@ import { autoUpdater } from "electron-updater";
 
 const PORT = 5001;
 
-// In dev mode Electron loads the Vite dev server; backend is started separately.
-// In production (packaged) mode Electron starts everything itself.
 const isDev = !app.isPackaged;
 
 let win: BrowserWindow | null = null;
 let splash: BrowserWindow | null = null;
 let backendStarted = false;
 
-// ── Updater helper: push events to the renderer window ───────────────────────
+// ── Updater helper ────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function sendToRenderer(event: string, payload?: any) {
@@ -39,7 +37,6 @@ function createSplash(): BrowserWindow {
     frame: false,
     resizable: false,
     center: true,
-    transparent: false,
     alwaysOnTop: true,
     skipTaskbar: true,
     webPreferences: {
@@ -58,7 +55,7 @@ function createSplash(): BrowserWindow {
   return s;
 }
 
-// ── Backend + MongoDB setup ────────────────────────────────────────────────────
+// ── Backend setup ─────────────────────────────────────────────────────────────
 
 async function setupBackend(): Promise<void> {
   if (backendStarted) return;
@@ -66,7 +63,7 @@ async function setupBackend(): Promise<void> {
 
   const userDataPath = app.getPath("userData");
 
-  // 1. Generate (or load) a persistent JWT secret so tokens survive restarts
+  // 1. Persistent JWT secret
   const secretFile = path.join(userDataPath, "jwt-secret.txt");
   let jwtSecret: string;
   if (fs.existsSync(secretFile)) {
@@ -76,94 +73,16 @@ async function setupBackend(): Promise<void> {
     fs.writeFileSync(secretFile, jwtSecret, "utf-8");
   }
 
-  // 2. Set ALL env vars BEFORE requiring backend modules.
-  //    CJS require() is lazy — modules evaluate at this point, so they see these values.
-  process.env["JWT_SECRET"] = jwtSecret;
-  process.env["NODE_ENV"] = "production";
-  process.env["PORT"] = String(PORT);
-  process.env["FRONTEND_URL"] = `http://localhost:${PORT}`;
+  // 2. Environment variables — DATABASE_PATH tells better-sqlite3 where to store the file
+  process.env["JWT_SECRET"]     = jwtSecret;
+  process.env["NODE_ENV"]       = "production";
+  process.env["PORT"]           = String(PORT);
+  process.env["FRONTEND_URL"]   = `http://localhost:${PORT}`;
+  process.env["DATABASE_PATH"]  = path.join(userDataPath, "dhaba-pos.db");
 
-  // 3. Start embedded MongoDB with a persistent data directory.
-  const dbDataPath = path.join(userDataPath, "mongodb-data");
-  fs.mkdirSync(dbDataPath, { recursive: true });
+  sendToSplash("server", "Starting server…", 40);
 
-  sendToSplash("db-start", "Starting database…", 10);
-
-  const { spawn } = require("child_process");
-
-  // Resolve the bundled mongod binary path
-  function getMongodPath() {
-    const platform = process.platform; // 'win32', 'darwin', 'linux'
-    const arch = process.arch;         // 'x64', 'arm64'
-    const binaryName = platform === "win32"
-      ? `mongod-${platform}-${arch}.exe`
-      : `mongod-${platform}-${arch}`;
-
-    if (isDev) {
-      return path.join(app.getAppPath(), "build-resources", "bin", binaryName);
-    } else {
-      return path.join(process.resourcesPath, "bin", binaryName);
-    }
-  }
-
-  const mongodPath = getMongodPath();
-  const dbPort = 27017;
-
-  if (!fs.existsSync(mongodPath)) {
-    if (isDev) {
-      throw new Error(`MongoDB binary not found at ${mongodPath}. Please run 'node scripts/prepare-mongodb.js' first.`);
-    } else {
-      throw new Error(`Critical Error: MongoDB binary missing from package: ${mongodPath}`);
-    }
-  }
-
-  const mongodProcess = spawn(mongodPath, [
-    "--dbpath", dbDataPath,
-    "--port", String(dbPort),
-    "--bind_ip", "127.0.0.1",
-    "--storageEngine", "wiredTiger",
-  ], {
-    detached: false,
-    stdio: "ignore",
-  });
-
-  mongodProcess.on("error", (err: Error) => {
-    console.error("❌ MongoDB failed to start:", err);
-  });
-
-  // Ensure MongoDB is killed when the app exits
-  app.on("will-quit", () => {
-    mongodProcess.kill();
-  });
-
-  process.env["MONGODB_URI"] = `mongodb://127.0.0.1:${dbPort}/dhaba-pos`;
-
-  // Poll until MongoDB accepts connections (up to 30 s)
-  sendToSplash("db-start", "Waiting for database to be ready…", 25);
-  const { MongoClient } = require("mongodb");
-  const deadline = Date.now() + 30_000;
-  let mongoReady = false;
-  while (Date.now() < deadline) {
-    try {
-      const client = new MongoClient(`mongodb://127.0.0.1:${dbPort}`, { serverSelectionTimeoutMS: 500 });
-      await client.connect();
-      await client.close();
-      mongoReady = true;
-      break;
-    } catch {
-      await new Promise(r => setTimeout(r, 300));
-    }
-  }
-
-  if (!mongoReady) {
-    throw new Error(`MongoDB failed to start within 30 seconds. The mongod process may have crashed or port ${dbPort} is already in use.`);
-  }
-
-  sendToSplash("db-ready", "Database ready", 50);
-
-  // 4. Load and start the Express backend.
-  sendToSplash("server", "Starting server…", 65);
-
+  // 3. Load and start Express (SQLite opens automatically inside the server)
   const serverPath = isDev
     ? path.resolve(__dirname, "../pos-backend/dist/server.js")
     : path.join(app.getAppPath(), "pos-backend/dist/server.js");
@@ -192,42 +111,28 @@ function createWindow(): void {
     autoHideMenuBar: true,
   });
 
-  // Dev → load Vite dev server (proxy handles /api/* → backend)
-  // Production → Express serves both the API and the built frontend
-  const url = isDev
-    ? "http://localhost:5173"
-    : `http://localhost:${PORT}`;
-
+  const url = isDev ? "http://localhost:5173" : `http://localhost:${PORT}`;
   win.loadURL(url);
 
   win.once("ready-to-show", () => {
     sendToSplash("done", "Ready!", 100);
-
-    // Brief pause so the user can see "Ready!" before the splash closes
     setTimeout(() => {
-      if (splash && !splash.isDestroyed()) {
-        splash.close();
-        splash = null;
-      }
+      if (splash && !splash.isDestroyed()) { splash.close(); splash = null; }
       win?.show();
     }, 600);
   });
 
-  // Open external links (e.g. Razorpay) in the system browser, not Electron
   win.webContents.setWindowOpenHandler(({ url: openUrl }) => {
     shell.openExternal(openUrl);
     return { action: "deny" };
   });
 
-  win.on("closed", () => {
-    win = null;
-  });
+  win.on("closed", () => { win = null; });
 }
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
-  // Show splash immediately (production only — in dev the backend isn't started here)
   if (!isDev) {
     splash = createSplash();
 
@@ -236,15 +141,10 @@ app.whenReady().then(async () => {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("Backend startup failed:", message);
-
-      if (splash && !splash.isDestroyed()) {
-        splash.close();
-        splash = null;
-      }
-
+      if (splash && !splash.isDestroyed()) { splash.close(); splash = null; }
       dialog.showErrorBox(
         "Startup Error",
-        `The application failed to start its backend services:\n\n${message}\n\nPlease reinstall the application or contact support.`
+        `The application failed to start:\n\n${message}\n\nPlease reinstall the application or contact support.`
       );
       app.quit();
       return;
@@ -255,37 +155,26 @@ app.whenReady().then(async () => {
 
   createWindow();
 
-  // Check for updates silently after the window is ready (production only)
   if (!isDev) {
     setTimeout(() => autoUpdater.checkForUpdates(), 3000);
   }
 });
 
-// Quit when all windows are closed (except on macOS)
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
-// Re-create window on macOS when dock icon is clicked with no open windows
 app.on("activate", () => {
   if (win === null) createWindow();
 });
 
-// ── IPC handlers: renderer → main ─────────────────────────────────────────────
+// ── IPC: updater ──────────────────────────────────────────────────────────────
 
-ipcMain.on("updater:check", () => {
-  autoUpdater.checkForUpdates();
-});
+ipcMain.on("updater:check",   () => autoUpdater.checkForUpdates());
+ipcMain.on("updater:download",() => autoUpdater.downloadUpdate());
+ipcMain.on("updater:install", () => autoUpdater.quitAndInstall());
 
-ipcMain.on("updater:download", () => {
-  autoUpdater.downloadUpdate();
-});
-
-ipcMain.on("updater:install", () => {
-  autoUpdater.quitAndInstall();
-});
-
-// ── Auto Updater Events: main → renderer ──────────────────────────────────────
+// ── Auto Updater Events ───────────────────────────────────────────────────────
 
 autoUpdater.on("checking-for-update", () => {
   console.log("Checking for update...");
@@ -328,9 +217,7 @@ autoUpdater.on("update-downloaded", async (info) => {
     cancelId: 1,
   });
 
-  if (result.response === 0) {
-    autoUpdater.quitAndInstall();
-  }
+  if (result.response === 0) autoUpdater.quitAndInstall();
 });
 
 autoUpdater.on("error", (err) => {

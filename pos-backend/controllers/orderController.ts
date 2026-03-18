@@ -1,18 +1,15 @@
 import { Response, NextFunction } from "express";
 import createHttpError from "http-errors";
-import Order from "../models/orderModel";
-import DailyEarning from "../models/dailyEarningModel";
-import Table from "../models/tableModel";
-import Dish from "../models/dishModel";
-import Consumable from "../models/consumableModel";
-import mongoose from "mongoose";
+import * as orderRepo from "../repositories/orderRepo";
+import * as tableRepo from "../repositories/tableRepo";
+import * as dishRepo from "../repositories/dishRepo";
+import * as consumableRepo from "../repositories/consumableRepo";
+import * as ledgerRepo from "../repositories/ledgerRepo";
+import * as earningRepo from "../repositories/earningRepo";
 import { getZonedStartOfDayUtc } from "./earningController";
-import { CustomRequest as Request, IQueryOptions } from "../types";
-import CustomerLedger from "../models/customerLedgerModel";
+import { CustomRequest as Request } from "../types";
 
-// ── Consumable sync helper ──────────────────────────────────────────────────
-// Maps a dish's type/name to a consumable category.
-// "beverage" teas → "tea", tobacco names are split into "cigarette" vs "gutka".
+// ── Consumable sync helper ────────────────────────────────────────────────────
 const CIGARETTE_KEYWORDS = ["gold flake", "classic", "bristol", "four square", "wills", "navy cut", "cigarette"];
 
 const getConsumableType = (dishType: string, dishName: string): "tea" | "gutka" | "cigarette" | null => {
@@ -28,153 +25,133 @@ const getConsumableType = (dishType: string, dishName: string): "tea" | "gutka" 
   return null;
 };
 
-// Inserts one consumable entry per consumable-type dish in the order.
-// Runs fire-and-forget style — errors are logged but never bubble up to the order response.
-const syncConsumablesFromOrder = async (order: any) => {
+const syncConsumablesFromOrder = (order: Record<string, unknown>) => {
   try {
-    const items: any[] = order.items ?? [];
-    const dishIds = items
-      .map((i: any) => i.id)
-      .filter((id: string) => mongoose.Types.ObjectId.isValid(id));
+    const items: Record<string, unknown>[] = (order.items as Record<string, unknown>[]) ?? [];
+    if (items.length === 0) return;
 
-    if (dishIds.length === 0) return;
-
-    const dishes = await Dish.find({ _id: { $in: dishIds } }).select("type name");
-    const dishMap = new Map(dishes.map(d => [d._id.toString(), d]));
-
-    const entries: object[] = [];
+    const entries: Parameters<typeof consumableRepo.bulkCreate>[0] = [];
     for (const item of items) {
-      const dish = dishMap.get(item.id);
+      const dishId = item.id as string;
+      if (!dishId || isNaN(Number(dishId))) continue;
+      const dish = dishRepo.findById(dishId);
       if (!dish) continue;
-      const consumableType = getConsumableType(dish.type, dish.name);
+      const consumableType = getConsumableType(
+        (dish as Record<string, unknown>).type as string,
+        (dish as Record<string, unknown>).name as string
+      );
       if (!consumableType) continue;
       entries.push({
         type: consumableType,
-        quantity: item.quantity,
-        pricePerUnit: item.pricePerQuantity,
+        quantity: item.quantity as number,
+        pricePerUnit: item.pricePerQuantity as number,
         consumerType: "customer",
-        consumerName: order.customerDetails?.name ?? "Customer",
-        orderId: order._id,
-        timestamp: order.orderDate ?? new Date(),
+        consumerName: ((order.customerDetails as Record<string, unknown>)?.name as string) ?? "Customer",
+        orderId: Number(order._id),
+        timestamp: (order.orderDate as string) ?? new Date().toISOString(),
       });
     }
 
     if (entries.length > 0) {
-      await Consumable.insertMany(entries);
-      console.log(`✅ Auto-synced ${entries.length} consumable(s) from order ${order._id.toString().slice(-6)}`);
+      consumableRepo.bulkCreate(entries);
+      console.log(`✅ Auto-synced ${entries.length} consumable(s) from order ${order._id}`);
     }
   } catch (err) {
     console.error("⚠️  Failed to sync consumables from order:", err);
   }
 };
 
+// ── Controllers ───────────────────────────────────────────────────────────────
+
 const addOrder = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { _id, amountPaid = 0, ...orderData } = req.body;
 
     if (!orderData.customerDetails?.name || !orderData.customerDetails?.phone) {
-        const error = createHttpError(400, "Customer name and phone are required!");
-        return next(error);
+      return next(createHttpError(400, "Customer name and phone are required!"));
     }
-    if (!orderData.bills?.totalWithTax && orderData.bills?.totalWithTax !== 0) {
-        const error = createHttpError(400, "Bill total is required!");
-        return next(error);
+    if (orderData.bills?.totalWithTax === undefined && orderData.bills?.totalWithTax !== 0) {
+      return next(createHttpError(400, "Bill total is required!"));
     }
 
     const tableId = orderData.table;
-    if (!mongoose.Types.ObjectId.isValid(tableId)) {
-        const error = createHttpError(400, "Invalid Table ID in order data!");
-        return next(error);
+    if (!tableId || isNaN(Number(tableId))) {
+      return next(createHttpError(400, "Invalid Table ID in order data!"));
     }
-    const table = await Table.findById(tableId);
-    if (!table) {
-        const error = createHttpError(404, "Table not found for order!");
-        return next(error);
-    }
+    const table = tableRepo.findById(tableId);
+    if (!table) return next(createHttpError(404, "Table not found for order!"));
 
     const totalBill = orderData.bills?.totalWithTax;
-    const balanceDueOnOrder = totalBill - amountPaid;
+    const balanceDueOnOrder = Math.max(0, totalBill - amountPaid);
 
+    // If _id provided — update existing order
     if (_id) {
-        if (!mongoose.Types.ObjectId.isValid(_id)) {
-            const error = createHttpError(400, "Invalid Order ID format in body for update!");
-            return next(error);
-        }
-        const updatedOrder = await Order.findByIdAndUpdate(
-            _id,
-            {
-                $set: {
-                    ...orderData,
-                    amountPaid: amountPaid,
-                    balanceDueOnOrder: balanceDueOnOrder > 0 ? balanceDueOnOrder : 0,
-                }
-            },
-            { new: true, runValidators: true }
-        );
-        if (!updatedOrder) {
-            const error = createHttpError(404, "Order not found for update!");
-            return next(error);
-        }
-        return res.status(200).json({ success: true, message: "Order updated!", data: updatedOrder });
+      if (isNaN(Number(_id))) return next(createHttpError(400, "Invalid Order ID format in body for update!"));
+      const updatedOrder = orderRepo.update(_id, {
+        ...orderData,
+        tableId: Number(tableId),
+        amountPaid,
+        balanceDueOnOrder,
+      });
+      if (!updatedOrder) return next(createHttpError(404, "Order not found for update!"));
+      return res.status(200).json({ success: true, message: "Order updated!", data: updatedOrder });
     }
 
-    // Create a new order
-    const newOrder = new Order({
-        ...orderData,
-        amountPaid: amountPaid,
-        balanceDueOnOrder: balanceDueOnOrder > 0 ? balanceDueOnOrder : 0,
-    });
-    await newOrder.save();
+    // Create new order (wrapped in a SQLite transaction for atomicity)
+    const db = require("../db").getDb();
+    const createOrderTx = db.transaction(() => {
+      const newOrder = orderRepo.create({
+        customerDetails: orderData.customerDetails,
+        orderStatus: orderData.orderStatus ?? "Pending",
+        orderDate: orderData.orderDate,
+        bills: orderData.bills,
+        items: orderData.items ?? [],
+        tableId: Number(tableId),
+        paymentMethod: orderData.paymentMethod,
+        paymentData: orderData.paymentData,
+        paymentStatus: orderData.paymentStatus ?? "Pending",
+        amountPaid,
+        balanceDueOnOrder,
+      });
 
-    await Table.findByIdAndUpdate(
-        tableId,
-        { $set: { status: 'Booked', currentOrder: newOrder._id } },
-        { new: true, runValidators: true }
-    );
+      // Mark table as Booked
+      tableRepo.update(tableId, { status: "Booked", currentOrderId: Number(newOrder!._id) });
+
+      return newOrder!;
+    });
+
+    const newOrder = createOrderTx() as Record<string, unknown>;
 
     // Ledger: only record if there is an outstanding balance
-    const customerPhone = newOrder.customerDetails?.phone;
-    const customerName = newOrder.customerDetails?.name;
-    const amountOwing = newOrder.balanceDueOnOrder;
-
-    if (amountOwing > 0) {
-        await CustomerLedger.findOneAndUpdate(
-            { customerPhone: customerPhone },
-            {
-                $inc: { balanceDue: amountOwing },
-                $set: { customerName: customerName, lastActivity: new Date() },
-                $push: {
-                    transactions: {
-                        orderId: newOrder._id,
-                        transactionType: "full_payment_due",
-                        amount: totalBill,
-                        notes: `Bill for Order #${newOrder._id.toString().slice(-6)}`,
-                    }
-                }
-            },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
-        );
+    const customerPhone = orderData.customerDetails?.phone;
+    const customerName  = orderData.customerDetails?.name;
+    if (balanceDueOnOrder > 0) {
+      try {
+        ledgerRepo.upsertWithTransaction({
+          customerPhone,
+          customerName,
+          balanceDelta: balanceDueOnOrder,
+          transaction: {
+            orderId: Number(newOrder._id),
+            transactionType: "full_payment_due",
+            amount: totalBill,
+            notes: `Bill for Order #${newOrder._id}`,
+          },
+        });
+      } catch (e) { console.error("Ledger error on addOrder:", e); }
     }
 
-    // Earnings: only count amountPaid at creation (not the full bill, which isn't fully paid yet).
-    // The remaining balance will be counted when paymentStatus is updated to "Paid".
+    // Daily earnings: count amountPaid immediately
     if (amountPaid > 0) {
-        const dateForEarningUpdate = getZonedStartOfDayUtc(newOrder.orderDate);
-        try {
-            await DailyEarning.findOneAndUpdate(
-                { date: dateForEarningUpdate },
-                {
-                    $inc: { totalEarnings: amountPaid },
-                    $setOnInsert: { date: dateForEarningUpdate, percentageChangeFromYesterday: 0 }
-                },
-                { upsert: true, new: true, setDefaultsOnInsert: true }
-            );
-        } catch (earningUpdateError) {
-            console.error("Error updating daily earnings during new order creation:", earningUpdateError);
-        }
+      try {
+        const dateIso = getZonedStartOfDayUtc(
+          new Date((newOrder.orderDate as string) ?? new Date())
+        ).toISOString();
+        earningRepo.incrementEarnings(dateIso, amountPaid);
+      } catch (e) { console.error("Earnings error on addOrder:", e); }
     }
 
-    // Auto-sync consumable entries (tea/gutka/cigarette) — non-blocking
+    // Auto-sync consumables (fire-and-forget)
     syncConsumablesFromOrder(newOrder);
 
     res.status(201).json({ success: true, message: "Order created!", data: newOrder });
@@ -185,19 +162,11 @@ const addOrder = async (req: Request, res: Response, next: NextFunction) => {
 
 const getOrderById = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
+    if (!id || isNaN(Number(id))) return next(createHttpError(400, "Invalid id!"));
 
-    if (!mongoose.Types.ObjectId.isValid(id as string)) {
-      const error = createHttpError(400, "Invalid id!");
-      return next(error);
-    }
-
-    const order = await Order.findById(id).populate("table");
-    if (!order) {
-      const error = createHttpError(404, "Order not found!");
-      return next(error);
-    }
-
+    const order = orderRepo.findById(id, true);
+    if (!order) return next(createHttpError(404, "Order not found!"));
     res.status(200).json({ success: true, data: order });
   } catch (error) {
     next(error);
@@ -207,33 +176,14 @@ const getOrderById = async (req: Request, res: Response, next: NextFunction) => 
 const getOrders = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { startDate, endDate, tableId, customerPhone, orderStatus, paymentStatus } = req.query;
-
-    let query: IQueryOptions = {};
-
-    if (startDate) {
-      const start = new Date(startDate as string);
-      start.setUTCHours(0, 0, 0, 0);
-      query.orderDate = { ...query.orderDate, $gte: start };
-    }
-    if (endDate) {
-      const end = new Date(endDate as string);
-      end.setUTCHours(23, 59, 59, 999);
-      query.orderDate = { ...query.orderDate, $lte: end };
-    }
-    if (tableId && mongoose.Types.ObjectId.isValid(tableId as string)) {
-        query.table = tableId as string;
-    }
-    if (customerPhone) {
-        query["customerDetails.phone"] = customerPhone as string;
-    }
-    if (orderStatus) {
-        query.orderStatus = orderStatus as string;
-    }
-    if (paymentStatus) {
-        query.paymentStatus = paymentStatus as string;
-    }
-
-    const orders = await Order.find(query).populate("table").sort({ orderDate: -1 });
+    const orders = orderRepo.findAll({
+      startDate: startDate as string | undefined,
+      endDate:   endDate   as string | undefined,
+      tableId:   tableId   as string | undefined,
+      customerPhone: customerPhone as string | undefined,
+      orderStatus:   orderStatus   as string | undefined,
+      paymentStatus: paymentStatus as string | undefined,
+    });
     res.status(200).json({ success: true, data: orders });
   } catch (error) {
     next(error);
@@ -242,133 +192,90 @@ const getOrders = async (req: Request, res: Response, next: NextFunction) => {
 
 const updateOrderById = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { id } = req.params;
-    const requestBodyUpdates = { ...req.body };
+    const id = req.params.id as string;
+    if (!id || isNaN(Number(id))) return next(createHttpError(400, "Invalid Order ID format!"));
 
-    // Strip _id and id from the body to prevent accidental overwrites
-    delete requestBodyUpdates._id;
-    delete requestBodyUpdates.id;
+    const { _id: _bodyId, id: _bodyId2, ...requestBodyUpdates } = req.body;
 
-    if (!mongoose.Types.ObjectId.isValid(id as string)) {
-      const error = createHttpError(400, "Invalid Order ID format!");
-      return next(error);
-    }
+    const currentOrder = orderRepo.findById(id, false) as Record<string, unknown> | null;
+    if (!currentOrder) return next(createHttpError(404, "Order not found!"));
 
-    const currentOrder = await Order.findById(id);
-    if (!currentOrder) {
-      const error = createHttpError(404, "Order not found!");
-      return next(error);
-    }
+    const orderTotalWithTax = ((currentOrder.bills as Record<string,unknown>)?.totalWithTax as number) ?? 0;
+    const orderCreationDate = new Date((currentOrder.orderDate as string));
+    const oldPaymentStatus  = currentOrder.paymentStatus as string;
+    const oldAmountPaid     = currentOrder.amountPaid as number;
 
-    const orderTotalWithTax = (currentOrder.bills?.totalWithTax || 0);
-    const orderCreationDate = currentOrder.orderDate;
-    const oldPaymentStatus = currentOrder.paymentStatus;
-    const oldAmountPaid = currentOrder.amountPaid;
-
-    // Build Mongoose update payload
-    const updatePayloadForMongoose = { ...requestBodyUpdates };
+    const updatePayload: Record<string, unknown> = { ...requestBodyUpdates };
 
     if (requestBodyUpdates.amountPaid !== undefined) {
-        const newAmountPaid = requestBodyUpdates.amountPaid;
-        updatePayloadForMongoose.amountPaid = newAmountPaid;
-        updatePayloadForMongoose.balanceDueOnOrder = Math.max(0, orderTotalWithTax - newAmountPaid);
+      updatePayload.amountPaid = requestBodyUpdates.amountPaid;
+      updatePayload.balanceDueOnOrder = Math.max(0, orderTotalWithTax - requestBodyUpdates.amountPaid);
     }
 
-    // --- Determine Earning Change ---
+    // Determine earning delta
     let amountChangeForEarnings = 0;
-    const dateForEarningUpdate = getZonedStartOfDayUtc(orderCreationDate);
-
     if (requestBodyUpdates.amountPaid !== undefined) {
-        // If amountPaid is explicitly provided, earning change is exactly the delta
-        amountChangeForEarnings = updatePayloadForMongoose.amountPaid - oldAmountPaid;
-    } else if (requestBodyUpdates.paymentStatus === 'Paid' && oldPaymentStatus !== 'Paid') {
-        amountChangeForEarnings = orderTotalWithTax - oldAmountPaid;
-        // Auto-fix amount paid if only status is sent
-        updatePayloadForMongoose.amountPaid = orderTotalWithTax;
-        updatePayloadForMongoose.balanceDueOnOrder = 0;
+      amountChangeForEarnings = (updatePayload.amountPaid as number) - oldAmountPaid;
+    } else if (requestBodyUpdates.paymentStatus === "Paid" && oldPaymentStatus !== "Paid") {
+      amountChangeForEarnings = orderTotalWithTax - oldAmountPaid;
+      updatePayload.amountPaid = orderTotalWithTax;
+      updatePayload.balanceDueOnOrder = 0;
     } else if (
-        (requestBodyUpdates.paymentStatus === 'Refunded' || requestBodyUpdates.paymentStatus === 'Pending') &&
-        oldAmountPaid > 0
+      (requestBodyUpdates.paymentStatus === "Refunded" || requestBodyUpdates.paymentStatus === "Pending") &&
+      oldAmountPaid > 0
     ) {
-        amountChangeForEarnings = -oldAmountPaid;
-        updatePayloadForMongoose.amountPaid = 0;
-        updatePayloadForMongoose.balanceDueOnOrder = orderTotalWithTax;
+      amountChangeForEarnings = -oldAmountPaid;
+      updatePayload.amountPaid = 0;
+      updatePayload.balanceDueOnOrder = orderTotalWithTax;
     }
 
-    const updatedOrder = await Order.findByIdAndUpdate(
-      id,
-      { $set: updatePayloadForMongoose },
-      { new: true, runValidators: true }
-    );
+    const updatedOrder = orderRepo.update(id, updatePayload) as Record<string, unknown>;
+    if (!updatedOrder) return next(createHttpError(404, "Order not found after update!"));
 
-    if (!updatedOrder) {
-      const error = createHttpError(404, "Order not found after attempted update!");
-      return next(error);
+    // Ledger delta
+    const oldBalanceDue = Math.max(0, orderTotalWithTax - oldAmountPaid);
+    const newBalanceDue = updatedOrder.balanceDueOnOrder as number;
+    const netChange     = newBalanceDue - oldBalanceDue;
+
+    if (netChange !== 0) {
+      const phone = (updatedOrder.customerDetails as Record<string,unknown>)?.phone as string;
+      const name  = (updatedOrder.customerDetails as Record<string,unknown>)?.name  as string;
+      try {
+        ledgerRepo.upsertWithTransaction({
+          customerPhone: phone,
+          customerName: name,
+          balanceDelta: netChange,
+          transaction: {
+            orderId: Number(updatedOrder._id),
+            transactionType: netChange > 0 ? "balance_increased" : "balance_decreased",
+            amount: Math.abs(netChange),
+            notes: `Order #${updatedOrder._id} updated. Net change: ${netChange.toFixed(2)}`,
+          },
+        });
+      } catch (e) { console.error("Ledger error on updateOrder:", e); }
     }
 
-    // --- Ledger Update ---
-    const oldBalanceDueOnThisOrder = Math.max(0, orderTotalWithTax - oldAmountPaid);
-    const newBalanceDueOnThisOrder = updatedOrder.balanceDueOnOrder;
-    const netBalanceChangeForCustomer = newBalanceDueOnThisOrder - oldBalanceDueOnThisOrder;
-
-    if (netBalanceChangeForCustomer !== 0) {
-        const customerPhone = updatedOrder.customerDetails?.phone;
-        const customerName = updatedOrder.customerDetails?.name;
-        try {
-            await CustomerLedger.findOneAndUpdate(
-                { customerPhone: customerPhone },
-                {
-                    $inc: { balanceDue: netBalanceChangeForCustomer },
-                    $set: { lastActivity: new Date() },
-                    $push: {
-                        transactions: {
-                            orderId: updatedOrder._id,
-                            transactionType: netBalanceChangeForCustomer > 0 ? "balance_increased" : "balance_decreased",
-                            amount: Math.abs(netBalanceChangeForCustomer),
-                            notes: `Order #${updatedOrder._id.toString().slice(-6)} updated. Net change: ${netBalanceChangeForCustomer.toFixed(2)}`,
-                            timestamp: new Date()
-                        }
-                    }
-                },
-                { upsert: true, new: true, setDefaultsOnInsert: true }
-            );
-        } catch (ledgerError) {
-            console.error("Error updating ledger during order update (orderId:", id, "):", ledgerError);
-        }
-    }
-
-    // --- Daily Earning Update ---
+    // Earnings delta
     if (amountChangeForEarnings !== 0) {
       try {
-        await DailyEarning.findOneAndUpdate(
-          { date: dateForEarningUpdate },
-          {
-            $inc: { totalEarnings: amountChangeForEarnings },
-            $setOnInsert: { date: dateForEarningUpdate, percentageChangeFromYesterday: 0 }
-          },
-          { upsert: true, new: true, setDefaultsOnInsert: true }
+        earningRepo.incrementEarnings(
+          getZonedStartOfDayUtc(orderCreationDate).toISOString(),
+          amountChangeForEarnings
         );
-      } catch (earningUpdateError) {
-        console.error("Error updating daily earnings:", earningUpdateError);
-      }
+      } catch (e) { console.error("Earnings error on updateOrder:", e); }
     }
 
-    // --- Automated Table Status Update ---
-    if (updatedOrder.table) {
-        const targetTable = await Table.findById(updatedOrder.table);
-
-        if (targetTable && targetTable.currentOrder && targetTable.currentOrder.equals(currentOrder._id)) {
-            const isOrderFullySettled = updatedOrder.orderStatus === "Completed" && updatedOrder.paymentStatus === "Paid";
-            const isOrderCancelled = updatedOrder.orderStatus === "Cancelled";
-
-            if ((isOrderFullySettled || isOrderCancelled) && targetTable.status !== "Available") {
-                await Table.findByIdAndUpdate(
-                    updatedOrder.table,
-                    { status: "Available", currentOrder: null },
-                    { new: true }
-                );
-            }
+    // Auto table status
+    const tableId = currentOrder.table as string | null;
+    if (tableId) {
+      const targetTable = tableRepo.findById(tableId) as Record<string, unknown> | null;
+      if (targetTable && String(targetTable.currentOrder) === String(currentOrder._id)) {
+        const isSettled   = updatedOrder.orderStatus === "Completed" && updatedOrder.paymentStatus === "Paid";
+        const isCancelled = updatedOrder.orderStatus === "Cancelled";
+        if ((isSettled || isCancelled) && targetTable.status !== "Available") {
+          tableRepo.update(tableId, { status: "Available", currentOrderId: null });
         }
+      }
     }
 
     res.status(200).json({ success: true, message: "Order updated successfully!", data: updatedOrder });

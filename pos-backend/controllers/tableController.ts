@@ -1,27 +1,20 @@
 import { Request, Response, NextFunction } from "express";
-import Table from "../models/tableModel";
 import createHttpError from "http-errors";
-import mongoose from "mongoose";
+import * as tableRepo from "../repositories/tableRepo";
 
 const addTable = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { tableNo, seats } = req.body;
     if (!tableNo || !seats) {
-      const error = createHttpError(400, "Please provide table number and seats!");
-      return next(error);
-    }
-    const isTablePresent = await Table.findOne({ tableNo });
-
-    if (isTablePresent) {
-      const error = createHttpError(400, "Table already exist!");
-      return next(error);
+      return next(createHttpError(400, "Please provide table number and seats!"));
     }
 
-    const newTable = new Table({ tableNo, seats });
-    await newTable.save();
-    res
-      .status(201)
-      .json({ success: true, message: "Table added!", data: newTable });
+    if (tableRepo.findByTableNo(Number(tableNo))) {
+      return next(createHttpError(400, "Table already exist!"));
+    }
+
+    const newTable = tableRepo.create({ tableNo: Number(tableNo), seats: Number(seats) });
+    res.status(201).json({ success: true, message: "Table added!", data: newTable });
   } catch (error) {
     next(error);
   }
@@ -29,10 +22,7 @@ const addTable = async (req: Request, res: Response, next: NextFunction) => {
 
 const getTables = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const tables = await Table.find().populate({
-      path: "currentOrder",
-      select: "customerDetails"
-    });
+    const tables = tableRepo.findAll();
     res.status(200).json({ success: true, data: tables });
   } catch (error) {
     next(error);
@@ -42,30 +32,25 @@ const getTables = async (req: Request, res: Response, next: NextFunction) => {
 const updateTable = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status, orderId } = req.body;
+    const id = req.params.id as string;
 
-    const { id } = req.params;
-
-    if(!mongoose.Types.ObjectId.isValid(id as string)){
-        const error = createHttpError(400, "Invalid table ID format!");
-        return next(error);
+    if (!id || isNaN(Number(id))) {
+      return next(createHttpError(400, "Invalid table ID format!"));
     }
 
-    const table = await Table.findByIdAndUpdate(
-        id,
-      { status, currentOrder: orderId },
-      { new: true }
-    );
+    const table = tableRepo.update(id, {
+      status,
+      currentOrderId: orderId != null ? Number(orderId) : null,
+    });
 
     if (!table) {
-      const error = createHttpError(404, "Table not found!");
-      return next(error);
+      return next(createHttpError(404, "Table not found!"));
     }
 
-    res.status(200).json({success: true, message: "Table updated!", data: table});
-
+    res.status(200).json({ success: true, message: "Table updated!", data: table });
   } catch (error) {
     next(error);
   }
 };
 
-export {  addTable, getTables, updateTable  };
+export { addTable, getTables, updateTable };

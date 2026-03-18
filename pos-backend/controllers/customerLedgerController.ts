@@ -1,24 +1,17 @@
 import { Response, NextFunction } from "express";
-import { CustomRequest as Request, IQueryOptions } from "../types";
+import { CustomRequest as Request } from "../types";
 import createHttpError from "http-errors";
-import CustomerLedger from "../models/customerLedgerModel";
-import mongoose from "mongoose";
-import DailyEarning from "../models/dailyEarningModel";
+import * as ledgerRepo from "../repositories/ledgerRepo";
+import * as earningRepo from "../repositories/earningRepo";
 import { getZonedStartOfDayUtc } from "./earningController";
 
 const getCustomerLedger = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { phone } = req.params;
-    if (!phone) {
-        const error = createHttpError(400, "Phone number is required.");
-        return next(error);
-    }
-    const ledger = await CustomerLedger.findOne({ customerPhone: phone });
+    const phone = req.params.phone as string;
+    if (!phone) return next(createHttpError(400, "Phone number is required."));
 
-    if (!ledger) {
-      const error = createHttpError(404, "Customer not found in ledger!");
-      return next(error);
-    }
+    const ledger = ledgerRepo.findByPhone(phone);
+    if (!ledger) return next(createHttpError(404, "Customer not found in ledger!"));
 
     res.status(200).json({ success: true, data: ledger });
   } catch (error) {
@@ -28,97 +21,55 @@ const getCustomerLedger = async (req: Request, res: Response, next: NextFunction
 
 const recordCustomerPayment = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { phone } = req.params;
+    const phone = req.params.phone as string;
     const { amountPaid, orderId, notes } = req.body;
 
     if (!phone || amountPaid === undefined || amountPaid <= 0) {
-      const error = createHttpError(400, "Phone and valid amountPaid are required.");
-      return next(error);
-    }
-    if (orderId && !mongoose.Types.ObjectId.isValid(orderId)) {
-        const error = createHttpError(400, "Invalid Order ID format.");
-        return next(error);
+      return next(createHttpError(400, "Phone and valid amountPaid are required."));
     }
 
-    const customerLedger = await CustomerLedger.findOneAndUpdate(
-      { customerPhone: phone },
-      {
-        $inc: { balanceDue: -amountPaid },
-        $set: { lastActivity: new Date() },
-        $push: {
-          transactions: {
-            orderId: orderId || null,
-            transactionType: "payment_received",
-            amount: amountPaid,
-            timestamp: new Date(),
-            notes: notes || `Payment received for Order #${orderId ? orderId.toString().slice(-6) : 'N/A'}`,
-          },
-        },
-      },
-      { new: true, runValidators: true }
-    );
+    const ledger = ledgerRepo.findByPhone(phone);
+    if (!ledger) return next(createHttpError(404, "Customer not found in ledger to record payment!"));
 
-    if (!customerLedger) {
-      const error = createHttpError(404, "Customer not found in ledger to record payment!");
-      return next(error);
-    }
+    const updated = ledgerRepo.recordPayment({
+      customerPhone: phone,
+      amountPaid,
+      orderId: orderId != null && !isNaN(Number(orderId)) ? Number(orderId) : null,
+      notes: notes || `Payment received for Order #${orderId ?? "N/A"}`,
+    });
 
-    const dateForEarningUpdate = getZonedStartOfDayUtc(new Date());
     try {
-        await DailyEarning.findOneAndUpdate(
-            { date: dateForEarningUpdate },
-            {
-                $inc: { totalEarnings: amountPaid },
-                $setOnInsert: { date: dateForEarningUpdate, percentageChangeFromYesterday: 0 }
-            },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
-        );
-    } catch (earningUpdateError) {
-        console.error("Error updating daily earnings during manual customer payment:", earningUpdateError);
+      earningRepo.incrementEarnings(getZonedStartOfDayUtc(new Date()).toISOString(), amountPaid);
+    } catch (e) {
+      console.error("Error updating daily earnings during manual customer payment:", e);
     }
 
-    res.status(200).json({ success: true, message: "Payment recorded successfully!", data: customerLedger });
+    res.status(200).json({ success: true, message: "Payment recorded successfully!", data: updated });
   } catch (error) {
     next(error);
   }
 };
 
-// Call this when a customer pays partial amount and we want to push the remaining to ledger.
-// This creates or upserts the ledger entry for the customer.
 const addDebtToLedger = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { phone } = req.params;
+    const phone = req.params.phone as string;
     const { amountDue, orderId, customerName, notes } = req.body;
 
     if (!phone || amountDue === undefined || amountDue <= 0) {
-      const error = createHttpError(400, "Phone and valid amountDue are required.");
-      return next(error);
-    }
-    if (orderId && !mongoose.Types.ObjectId.isValid(orderId)) {
-      const error = createHttpError(400, "Invalid Order ID format.");
-      return next(error);
+      return next(createHttpError(400, "Phone and valid amountDue are required."));
     }
 
-    const ledger = await CustomerLedger.findOneAndUpdate(
-      { customerPhone: phone },
-      {
-        $inc: { balanceDue: amountDue },
-        $set: {
-          customerName: customerName || phone,
-          lastActivity: new Date(),
-        },
-        $push: {
-          transactions: {
-            orderId: orderId || null,
-            transactionType: "full_payment_due",
-            amount: amountDue,
-            timestamp: new Date(),
-            notes: notes || `Remaining balance for Order #${orderId ? orderId.toString().slice(-6) : "N/A"}`,
-          },
-        },
+    const ledger = ledgerRepo.upsertWithTransaction({
+      customerPhone: phone,
+      customerName: customerName || phone,
+      balanceDelta: amountDue,
+      transaction: {
+        orderId: orderId != null && !isNaN(Number(orderId)) ? Number(orderId) : null,
+        transactionType: "full_payment_due",
+        amount: amountDue,
+        notes: notes || `Remaining balance for Order #${orderId ?? "N/A"}`,
       },
-      { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
-    );
+    });
 
     res.status(200).json({ success: true, message: "Debt added to ledger.", data: ledger });
   } catch (error) {
@@ -129,23 +80,11 @@ const addDebtToLedger = async (req: Request, res: Response, next: NextFunction) 
 const getAllCustomerLedgers = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { name, phone, status } = req.query;
-
-    let query: IQueryOptions = {};
-
-    if (name) {
-      const escapedName = (name as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      query.customerName = { $regex: escapedName, $options: "i" };
-    }
-    if (phone) {
-      query.customerPhone = phone as string;
-    }
-    if (status === 'unpaid') {
-      query.balanceDue = { $gt: 0 };
-    } else if (status === 'paid') {
-        query.balanceDue = 0;
-    }
-
-    const ledgers = await CustomerLedger.find(query).sort({ lastActivity: -1 });
+    const ledgers = ledgerRepo.findAll({
+      name: name as string | undefined,
+      phone: phone as string | undefined,
+      status: status as string | undefined,
+    });
     res.status(200).json({ success: true, data: ledgers });
   } catch (error) {
     next(error);

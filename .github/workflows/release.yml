@@ -53,9 +53,6 @@ jobs:
           cd pos-backend && npm install
           cd ../pos-frontend && npm install
 
-      - name: Prepare MongoDB Binaries
-        run: node scripts/prepare-mongodb.js
-
       # --publish never prevents electron-builder from uploading to GitHub itself.
       # The manifest files (latest.yml etc.) are still generated on disk.
       # Our gh release upload steps below handle all artifact uploads.
