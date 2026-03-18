@@ -83,9 +83,11 @@ async function setupBackend(): Promise<void> {
   sendToSplash("server", "Starting server…", 40);
 
   // 3. Load and start Express (SQLite opens automatically inside the server)
+  // In production, the backend lives in resources/backend/ (extraResources) — NOT inside
+  // the asar — so node_modules/express etc. are accessible as plain files on disk.
   const serverPath = isDev
     ? path.resolve(__dirname, "../pos-backend/dist/server.js")
-    : path.join(app.getAppPath(), "pos-backend/dist/server.js");
+    : path.join(process.resourcesPath, "backend/dist/server.js");
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const startServer: (port: number) => Promise<void> = require(serverPath).default;

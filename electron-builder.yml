@@ -10,23 +10,34 @@ publish:
   provider: github
 
 # ── What gets packaged ─────────────────────────────────────────────────────────
-# electron/dist  : compiled Electron main + preload
-# pos-backend/dist : compiled Express server
-# pos-backend/node_modules : Express/better-sqlite3/etc. runtime deps
-# pos-frontend/dist : built React app (served by Express as static files)
+# The asar contains only what Electron itself needs:
+#   electron/dist  : compiled Electron main + preload
+#   pos-frontend/dist : built React app (served by Express as static files)
 #
-# better-sqlite3 is a native addon — it must be unpacked from the asar so the
-# .node binary can be loaded by Node at runtime.
+# The backend is placed in extraResources (outside the asar) so that:
+#   1. pos-backend/node_modules is NOT subject to .gitignore filtering
+#   2. better-sqlite3's native .node binary is directly accessible (no asarUnpack needed)
+#   3. require('express') resolves correctly relative to the server file path
+#
+# Layout inside the installed app:
+#   resources/app.asar              ← electron main + preload + frontend
+#   resources/backend/dist/         ← compiled Express server JS
+#   resources/backend/node_modules/ ← express, better-sqlite3, etc.
 
 files:
   - electron/dist/**
-  - pos-backend/dist/**
-  - pos-backend/node_modules/**
   - pos-frontend/dist/**
   - package.json
 
-asarUnpack:
-  - pos-backend/node_modules/**
+extraResources:
+  - from: pos-backend/dist
+    to: backend/dist
+    filter:
+      - "**/*"
+  - from: pos-backend/node_modules
+    to: backend/node_modules
+    filter:
+      - "**/*"
 
 # ── Windows installer ──────────────────────────────────────────────────────────
 win:
