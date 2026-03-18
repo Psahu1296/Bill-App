@@ -1,6 +1,7 @@
 import { Response, NextFunction } from "express";
 import createHttpError from "http-errors";
 import * as consumableRepo from "../repositories/consumableRepo";
+import * as earningRepo from "../repositories/earningRepo";
 import { CustomRequest as Request } from "../types";
 import { getZonedStartOfDayUtc, getZonedEndOfDayUtc } from "./earningController";
 
@@ -14,12 +15,23 @@ const addConsumable = async (req: Request, res: Response, next: NextFunction) =>
       return next(createHttpError(400, "Missing required fields: type, quantity, consumerType, consumerName."));
     }
 
+    const resolvedPrice = pricePerUnit ?? UNIT_PRICES[type] ?? 0;
+    const resolvedTimestamp = timestamp ? new Date(timestamp).toISOString() : new Date().toISOString();
+
     const entry = consumableRepo.create({
       type, quantity, consumerType, consumerName,
-      pricePerUnit: pricePerUnit ?? UNIT_PRICES[type] ?? 0,
+      pricePerUnit: resolvedPrice,
       orderId: orderId != null && !isNaN(Number(orderId)) ? Number(orderId) : null,
-      timestamp: timestamp ? new Date(timestamp).toISOString() : new Date().toISOString(),
+      timestamp: resolvedTimestamp,
     });
+
+    // Customer sales count as revenue
+    if (consumerType === "customer") {
+      try {
+        const dateIso = getZonedStartOfDayUtc(new Date(resolvedTimestamp)).toISOString();
+        earningRepo.incrementEarnings(dateIso, quantity * resolvedPrice);
+      } catch (e) { console.error("Earnings error on addConsumable:", e); }
+    }
 
     res.status(201).json({ success: true, message: "Consumable entry added.", data: entry });
   } catch (error) {
@@ -106,8 +118,17 @@ const deleteConsumable = async (req: Request, res: Response, next: NextFunction)
     if (!id || isNaN(Number(id))) {
       return next(createHttpError(400, "Invalid Consumable ID format."));
     }
-    const entry = consumableRepo.remove(id);
+    const entry = consumableRepo.remove(id) as Record<string, unknown> | null;
     if (!entry) return next(createHttpError(404, "Consumable entry not found."));
+
+    // Reverse the revenue if it was a customer sale
+    if (entry.consumerType === "customer") {
+      try {
+        const dateIso = getZonedStartOfDayUtc(new Date(entry.timestamp as string)).toISOString();
+        earningRepo.incrementEarnings(dateIso, -((entry.quantity as number) * (entry.pricePerUnit as number)));
+      } catch (e) { console.error("Earnings error on deleteConsumable:", e); }
+    }
+
     res.status(200).json({ success: true, message: "Entry deleted.", data: entry });
   } catch (error) {
     next(error);
