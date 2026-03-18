@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dhaba POS</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0f1117;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      overflow: hidden;
+      -webkit-app-region: drag;
+    }
+
+    .logo-wrap {
+      margin-bottom: 32px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 72px;
+      height: 72px;
+      background: linear-gradient(135deg, #f97316, #ea580c);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      box-shadow: 0 8px 32px rgba(249, 115, 22, 0.35);
+    }
+
+    .app-name {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #f1f5f9;
+    }
+
+    .app-subtitle {
+      font-size: 12px;
+      color: #64748b;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+
+    .progress-wrap {
+      width: 280px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .track {
+      width: 100%;
+      height: 3px;
+      background: #1e293b;
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #f97316, #fb923c);
+      border-radius: 99px;
+      transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid #1e293b;
+      border-top-color: #f97316;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+
+    .spinner.done {
+      border-color: #22c55e;
+      border-top-color: #22c55e;
+      animation: none;
+    }
+
+    .status-text {
+      font-size: 13px;
+      color: #94a3b8;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .steps {
+      margin-top: 20px;
+      width: 280px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #334155;
+      transition: color 0.3s;
+    }
+
+    .step.active { color: #94a3b8; }
+    .step.complete { color: #22c55e; }
+
+    .step-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #1e293b;
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+
+    .step.active .step-dot { background: #f97316; }
+    .step.complete .step-dot { background: #22c55e; }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .version {
+      position: fixed;
+      bottom: 16px;
+      font-size: 11px;
+      color: #1e293b;
+      letter-spacing: 0.5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="logo-wrap">
+    <div class="logo-icon">🍽️</div>
+    <div class="app-name">Dhaba POS</div>
+    <div class="app-subtitle">Point of Sale</div>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="track"><div class="bar" id="bar"></div></div>
+    <div class="status-row">
+      <div class="spinner" id="spinner"></div>
+      <div class="status-text" id="status">Starting…</div>
+    </div>
+  </div>
+
+  <div class="steps" id="steps">
+    <div class="step" id="step-db">
+      <div class="step-dot"></div>
+      <span>Database</span>
+    </div>
+    <div class="step" id="step-server">
+      <div class="step-dot"></div>
+      <span>Server</span>
+    </div>
+    <div class="step" id="step-ui">
+      <div class="step-dot"></div>
+      <span>Loading interface</span>
+    </div>
+  </div>
+
+  <div class="version" id="version"></div>
+
+  <script>
+    const bar = document.getElementById("bar");
+    const status = document.getElementById("status");
+    const spinner = document.getElementById("spinner");
+
+    function setStep(id, state) {
+      const el = document.getElementById("step-" + id);
+      if (!el) return;
+      el.className = "step " + state;
+    }
+
+    // Receives progress updates from the main process via contextBridge
+    window.splashBridge.onProgress(({ step, message, percent }) => {
+      bar.style.width = percent + "%";
+      status.textContent = message;
+
+      if (step === "db-start")   { setStep("db", "active"); }
+      if (step === "db-ready")   { setStep("db", "complete"); }
+      if (step === "server")     { setStep("db", "complete"); setStep("server", "active"); }
+      if (step === "server-ready") { setStep("server", "complete"); setStep("ui", "active"); }
+      if (step === "done") {
+        setStep("server", "complete");
+        setStep("ui", "complete");
+        spinner.classList.add("done");
+      }
+    });
+
+    window.splashBridge.onVersion((v) => {
+      document.getElementById("version").textContent = "v" + v;
+    });
+  </script>
+</body>
+</html>

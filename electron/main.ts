@@ -11,6 +11,7 @@ const PORT = 5001;
 const isDev = !app.isPackaged;
 
 let win: BrowserWindow | null = null;
+let splash: BrowserWindow | null = null;
 let backendStarted = false;
 
 // ── Updater helper: push events to the renderer window ───────────────────────
@@ -20,6 +21,41 @@ function sendToRenderer(event: string, payload?: any) {
   if (win && !win.isDestroyed()) {
     win.webContents.send("updater:status", { event, ...payload });
   }
+}
+
+// ── Splash helpers ────────────────────────────────────────────────────────────
+
+function sendToSplash(step: string, message: string, percent: number) {
+  if (splash && !splash.isDestroyed()) {
+    splash.webContents.send("splash:progress", { step, message, percent });
+  }
+  console.log(`[setup] ${message}`);
+}
+
+function createSplash(): BrowserWindow {
+  const s = new BrowserWindow({
+    width: 400,
+    height: 460,
+    frame: false,
+    resizable: false,
+    center: true,
+    transparent: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    webPreferences: {
+      preload: path.join(__dirname, "splash-preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  s.loadFile(path.join(__dirname, "../splash.html"));
+
+  s.webContents.once("did-finish-load", () => {
+    s.webContents.send("splash:version", app.getVersion());
+  });
+
+  return s;
 }
 
 // ── Backend + MongoDB setup ────────────────────────────────────────────────────
@@ -47,83 +83,87 @@ async function setupBackend(): Promise<void> {
   process.env["PORT"] = String(PORT);
   process.env["FRONTEND_URL"] = `http://localhost:${PORT}`;
 
-// 3. Start embedded MongoDB with a persistent data directory.
-    const dbDataPath = path.join(userDataPath, "mongodb-data");
-    fs.mkdirSync(dbDataPath, { recursive: true });
+  // 3. Start embedded MongoDB with a persistent data directory.
+  const dbDataPath = path.join(userDataPath, "mongodb-data");
+  fs.mkdirSync(dbDataPath, { recursive: true });
 
-    console.log("🔄 Setting up embedded database...");
-    
-    const { spawn } = require("child_process");
+  sendToSplash("db-start", "Starting database…", 10);
 
-    // Resolve the bundled mongod binary path
-    function getMongodPath() {
-      // In development, we use the ones downloaded by our script in build-resources/bin
-      // In production, electron-builder puts them in the 'bin' folder under resources
-      const platform = process.platform; // 'win32', 'darwin', 'linux'
-      const arch = process.arch; // 'x64', 'arm64'
-      const binaryName = platform === 'win32' ? `mongod-${platform}-${arch}.exe` : `mongod-${platform}-${arch}`;
-      
-      if (isDev) {
-        return path.join(app.getAppPath(), 'build-resources', 'bin', binaryName);
-      } else {
-        // process.resourcesPath is the 'Resources' directory in the app bundle
-        return path.join(process.resourcesPath, 'bin', binaryName);
-      }
+  const { spawn } = require("child_process");
+
+  // Resolve the bundled mongod binary path
+  function getMongodPath() {
+    const platform = process.platform; // 'win32', 'darwin', 'linux'
+    const arch = process.arch;         // 'x64', 'arm64'
+    const binaryName = platform === "win32"
+      ? `mongod-${platform}-${arch}.exe`
+      : `mongod-${platform}-${arch}`;
+
+    if (isDev) {
+      return path.join(app.getAppPath(), "build-resources", "bin", binaryName);
+    } else {
+      return path.join(process.resourcesPath, "bin", binaryName);
     }
+  }
 
-    const mongodPath = getMongodPath();
-    const dbPort = 27017;
-    
-    if (!fs.existsSync(mongodPath)) {
-      if (isDev) {
-        throw new Error(`MongoDB binary not found at ${mongodPath}. Please run 'node scripts/prepare-mongodb.js' first.`);
-      } else {
-        throw new Error(`Critical Error: MongoDB binary missing from package: ${mongodPath}`);
-      }
+  const mongodPath = getMongodPath();
+  const dbPort = 27017;
+
+  if (!fs.existsSync(mongodPath)) {
+    if (isDev) {
+      throw new Error(`MongoDB binary not found at ${mongodPath}. Please run 'node scripts/prepare-mongodb.js' first.`);
+    } else {
+      throw new Error(`Critical Error: MongoDB binary missing from package: ${mongodPath}`);
     }
+  }
 
-    console.log(`🚀 Starting MongoDB from: ${mongodPath}`);
-    
-    const mongodProcess = spawn(mongodPath, [
-      "--dbpath", dbDataPath,
-      "--port", String(dbPort),
-      "--bind_ip", "127.0.0.1",
-      "--storageEngine", "wiredTiger",
-    ], {
-      detached: false,
-      stdio: 'ignore' // We don't want to pipe logs to parent to avoid the JSON parse error mentioned in the issue
-    });
+  const mongodProcess = spawn(mongodPath, [
+    "--dbpath", dbDataPath,
+    "--port", String(dbPort),
+    "--bind_ip", "127.0.0.1",
+    "--storageEngine", "wiredTiger",
+  ], {
+    detached: false,
+    stdio: "ignore",
+  });
 
-    mongodProcess.on('error', (err: Error) => {
-      console.error("❌ MongoDB failed to start:", err);
-    });
+  mongodProcess.on("error", (err: Error) => {
+    console.error("❌ MongoDB failed to start:", err);
+  });
 
-    // Ensure MongoDB is killed when the app exits
-    app.on('will-quit', () => {
-        mongodProcess.kill();
-    });
+  // Ensure MongoDB is killed when the app exits
+  app.on("will-quit", () => {
+    mongodProcess.kill();
+  });
 
-    process.env["MONGODB_URI"] = `mongodb://127.0.0.1:${dbPort}/dhaba-pos`;
+  process.env["MONGODB_URI"] = `mongodb://127.0.0.1:${dbPort}/dhaba-pos`;
 
-    // Poll until MongoDB accepts connections (up to 15 s) instead of blind sleep.
-    // This handles slow HDDs and cold boots on Windows without risking a race condition.
-    const { MongoClient } = require("mongodb");
-    const deadline = Date.now() + 15_000;
-    while (Date.now() < deadline) {
-      try {
-        const client = new MongoClient(`mongodb://127.0.0.1:${dbPort}`, { serverSelectionTimeoutMS: 500 });
-        await client.connect();
-        await client.close();
-        break;
-      } catch {
-        await new Promise(r => setTimeout(r, 300));
-      }
+  // Poll until MongoDB accepts connections (up to 30 s)
+  sendToSplash("db-start", "Waiting for database to be ready…", 25);
+  const { MongoClient } = require("mongodb");
+  const deadline = Date.now() + 30_000;
+  let mongoReady = false;
+  while (Date.now() < deadline) {
+    try {
+      const client = new MongoClient(`mongodb://127.0.0.1:${dbPort}`, { serverSelectionTimeoutMS: 500 });
+      await client.connect();
+      await client.close();
+      mongoReady = true;
+      break;
+    } catch {
+      await new Promise(r => setTimeout(r, 300));
     }
-    console.log("✅ Database initialized successfully");
+  }
 
+  if (!mongoReady) {
+    throw new Error(`MongoDB failed to start within 30 seconds. The mongod process may have crashed or port ${dbPort} is already in use.`);
+  }
+
+  sendToSplash("db-ready", "Database ready", 50);
 
   // 4. Load and start the Express backend.
-  //    Path differs between dev (source tree) and packaged (app resources).
+  sendToSplash("server", "Starting server…", 65);
+
   const serverPath = isDev
     ? path.resolve(__dirname, "../pos-backend/dist/server.js")
     : path.join(app.getAppPath(), "pos-backend/dist/server.js");
@@ -131,6 +171,8 @@ async function setupBackend(): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const startServer: (port: number) => Promise<void> = require(serverPath).default;
   await startServer(PORT);
+
+  sendToSplash("server-ready", "Server started", 80);
 }
 
 // ── Window creation ───────────────────────────────────────────────────────────
@@ -159,7 +201,16 @@ function createWindow(): void {
   win.loadURL(url);
 
   win.once("ready-to-show", () => {
-    win?.show();
+    sendToSplash("done", "Ready!", 100);
+
+    // Brief pause so the user can see "Ready!" before the splash closes
+    setTimeout(() => {
+      if (splash && !splash.isDestroyed()) {
+        splash.close();
+        splash = null;
+      }
+      win?.show();
+    }, 600);
   });
 
   // Open external links (e.g. Razorpay) in the system browser, not Electron
@@ -176,14 +227,36 @@ function createWindow(): void {
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  // Show splash immediately (production only — in dev the backend isn't started here)
   if (!isDev) {
-    await setupBackend();
+    splash = createSplash();
+
+    try {
+      await setupBackend();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("Backend startup failed:", message);
+
+      if (splash && !splash.isDestroyed()) {
+        splash.close();
+        splash = null;
+      }
+
+      dialog.showErrorBox(
+        "Startup Error",
+        `The application failed to start its backend services:\n\n${message}\n\nPlease reinstall the application or contact support.`
+      );
+      app.quit();
+      return;
+    }
+
+    sendToSplash("server-ready", "Loading interface…", 90);
   }
+
   createWindow();
 
   // Check for updates silently after the window is ready (production only)
   if (!isDev) {
-    // Small delay so the window is visible before any update UI appears
     setTimeout(() => autoUpdater.checkForUpdates(), 3000);
   }
 });
@@ -199,7 +272,6 @@ app.on("activate", () => {
 });
 
 // ── IPC handlers: renderer → main ─────────────────────────────────────────────
-// These are triggered by window.appBridge.checkForUpdates() etc. in the page.
 
 ipcMain.on("updater:check", () => {
   autoUpdater.checkForUpdates();
@@ -214,8 +286,6 @@ ipcMain.on("updater:install", () => {
 });
 
 // ── Auto Updater Events: main → renderer ──────────────────────────────────────
-// All events are forwarded to the renderer via sendToRenderer() so AppUpdate.tsx
-// can react to the real update lifecycle without any simulation.
 
 autoUpdater.on("checking-for-update", () => {
   console.log("Checking for update...");
@@ -246,10 +316,8 @@ autoUpdater.on("download-progress", (progress) => {
 
 autoUpdater.on("update-downloaded", async (info) => {
   console.log(`Update downloaded: v${info.version}`);
-  // Notify the renderer that the update is ready to install
   sendToRenderer("downloaded", { version: info.version });
 
-  // Also show a native OS dialog as a fallback (e.g. if the user is not on the update page)
   const result = await dialog.showMessageBox({
     type: "info",
     title: "Update Ready",
