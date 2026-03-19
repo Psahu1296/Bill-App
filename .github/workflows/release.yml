@@ -42,6 +42,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       NODE_OPTIONS: "--max-old-space-size=4096"
+      # Disable macOS keychain auto-discovery (we don't sign mac builds in CI)
       CSC_IDENTITY_AUTO_DISCOVERY: false
     strategy:
       matrix:
@@ -91,6 +92,12 @@ jobs:
 
       - name: Build and Package Installer (Windows)
         if: matrix.os == 'windows-latest'
+        # WIN_CSC_LINK  — base64-encoded .pfx certificate (GitHub Secret)
+        # WIN_CSC_KEY_PASSWORD — password for the .pfx (GitHub Secret)
+        # If the secrets are not set, electron-builder builds unsigned (no error).
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: npm run build && npx electron-builder --win --publish never
 
       - name: Build and Package Installer (Linux)

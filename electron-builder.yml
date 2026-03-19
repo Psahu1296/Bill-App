@@ -45,11 +45,21 @@ extraResources:
       - "**/*"
 
 # ── Windows installer ──────────────────────────────────────────────────────────
+# Code signing — set WIN_CSC_LINK (base64 .pfx) and WIN_CSC_KEY_PASSWORD in
+# GitHub Secrets (or env). When absent the build still succeeds but shows the
+# SmartScreen "Unknown Publisher" warning. With an OV/EV cert it is suppressed.
 win:
   target:
     - target: nsis
       arch:
         - x64
+  # Timestamp server ensures the signature stays valid after the cert expires.
+  rfc3161TimeStampServer: http://timestamp.digicert.com
+  signingHashAlgorithms:
+    - sha256
+  # publisherName must match the Common Name on your certificate.
+  # Once set, Windows associates downloads with this name for SmartScreen reputation.
+  publisherName: Dhaba POS
 
 nsis:
   oneClick: false
@@ -57,6 +67,10 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: Dhaba POS
+  # Require admin elevation so Windows marks it as a known installer pattern
+  # (reduces SmartScreen friction even without a cert)
+  perMachine: false
+  runAfterFinish: true
 
 # ── macOS installer ────────────────────────────────────────────────────────────
 mac:

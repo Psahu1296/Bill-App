@@ -20,6 +20,7 @@ import customerLedgerRoutes from "./routes/customerLedgerRoutes";
 import consumableRoutes from "./routes/consumableRoutes";
 import staffRoutes from "./routes/staffRoutes";
 import dataRoutes from "./routes/dataRoutes";
+import updateRoutes from "./routes/updateRoutes";
 
 const app = express();
 
@@ -100,6 +101,7 @@ app.use("/api/ledger", customerLedgerRoutes);
 app.use("/api/consumables", consumableRoutes);
 app.use("/api/staff", staffRoutes);
 app.use("/api/data", dataRoutes);
+app.use("/api/updates", updateRoutes);
 
 // Serve frontend static files
 // In production FRONTEND_DIST_PATH points to resources/frontend/dist (extraResources).

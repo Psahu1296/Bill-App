@@ -51,10 +51,11 @@ const AppUpdate: React.FC = () => {
   useEffect(() => {
     const fetchReleases = async () => {
       try {
-        const response = await fetch("https://api.github.com/repos/Psahu1296/Bill-App/releases");
-        if (!response.ok) throw new Error("Failed to fetch releases");
-        
-        const data = await response.json();
+        const response = await fetch("/api/updates/releases");
+        if (!response.ok) throw new Error(`Failed to fetch releases (${response.status})`);
+
+        const json = await response.json();
+        const data = json.data;
         
         const mappedNotes: ReleaseNote[] = data.map((release: any, index: number) => {
           // Parse markdown list from body into an array of strings
