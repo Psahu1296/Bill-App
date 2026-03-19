@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { IoMdClose } from "react-icons/io";
+import { FaTimes, FaUtensils, FaPlus, FaTrash } from "react-icons/fa";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { enqueueSnackbar } from "notistack";
 import { useForm, useFieldArray } from "react-hook-form";
@@ -60,10 +60,7 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
     },
   });
 
-  const { fields, append, remove } = useFieldArray({
-    control,
-    name: "variants",
-  });
+  const { fields, append, remove } = useFieldArray({ control, name: "variants" });
 
   const addDishMutation = useMutation({
     mutationFn: (dishData: AddDishPayload) => addDish(dishData),
@@ -78,16 +75,12 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
       onDishAdded?.();
     },
     onError: (error: { response?: { data?: { message?: string } } }) => {
-      enqueueSnackbar(
-        error.response?.data?.message || "Failed to add dish.",
-        { variant: "error" }
-      );
+      enqueueSnackbar(error.response?.data?.message || "Failed to add dish.", { variant: "error" });
     },
   });
 
   const updateDishMutation = useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: object }) =>
-      updateDish(id, updates),
+    mutationFn: ({ id, updates }: { id: string; updates: object }) => updateDish(id, updates),
     onSuccess: (data) => {
       enqueueSnackbar(
         (data.data as { message?: string })?.message || "Dish updated!",
@@ -98,28 +91,19 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
       onDishAdded?.();
     },
     onError: (error: { response?: { data?: { message?: string } } }) => {
-      enqueueSnackbar(
-        error.response?.data?.message || "Failed to update dish.",
-        { variant: "error" }
-      );
+      enqueueSnackbar(error.response?.data?.message || "Failed to update dish.", { variant: "error" });
     },
   });
 
   const onSubmit = (data: DishFormData) => {
-    const dishDataWithParsedPrices = {
+    const payload = {
       ...data,
-      variants: data.variants.map((v) => ({
-        ...v,
-        price: parseFloat(String(v.price)),
-      })),
+      variants: data.variants.map((v) => ({ ...v, price: parseFloat(String(v.price)) })),
     };
     if (isEditMode && dish) {
-      updateDishMutation.mutate({
-        id: dish._id,
-        updates: dishDataWithParsedPrices,
-      });
+      updateDishMutation.mutate({ id: dish._id, updates: payload });
     } else {
-      addDishMutation.mutate(dishDataWithParsedPrices);
+      addDishMutation.mutate(payload);
     }
   };
 
@@ -145,226 +129,240 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
     }
   }, [isOpen, dish, isEditMode, reset]);
 
-  const isActionPending =
-    isFormSubmitting || addDishMutation.isPending || updateDishMutation.isPending;
+  const isActionPending = isFormSubmitting || addDishMutation.isPending || updateDishMutation.isPending;
+
+  const inputClass =
+    "w-full glass-input rounded-xl px-4 py-2.5 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50 placeholder:text-dhaba-muted/50";
+  const selectClass =
+    "w-full glass-input rounded-xl px-4 py-2.5 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50 appearance-none";
+  const labelClass = "block text-xs font-bold text-dhaba-muted uppercase tracking-wider mb-1.5";
 
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-dhaba-bg/80 backdrop-blur-sm p-4">
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
+            initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="bg-[#262626] p-6 rounded-lg shadow-lg w-full max-w-lg mx-auto border border-[#333] max-h-[90vh] overflow-y-auto"
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="glass-card w-full max-w-xl rounded-3xl overflow-hidden max-h-[90vh] flex flex-col"
           >
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-[#f5f5f5] text-xl font-semibold">
-                {isEditMode ? "Edit Dish" : "Add New Dish"}
-              </h2>
-              <button onClick={onClose} className="text-[#f5f5f5] hover:text-red-500 transition-colors">
-                <IoMdClose size={24} />
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-dhaba-border/20 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-dhaba-accent/10 flex items-center justify-center">
+                  <FaUtensils className="text-dhaba-accent" />
+                </div>
+                <div>
+                  <h2 className="font-display text-xl font-bold text-dhaba-text">
+                    {isEditMode ? "Edit Dish" : "Add New Dish"}
+                  </h2>
+                  <p className="text-xs text-dhaba-muted">
+                    {isEditMode ? "Update dish details" : "Fill in the dish details below"}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="p-2 hover:bg-dhaba-danger/10 rounded-xl transition-colors group"
+              >
+                <FaTimes className="text-dhaba-muted group-hover:text-dhaba-danger" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-4">
+            {/* Body */}
+            <form
+              id="dish-form"
+              onSubmit={handleSubmit(onSubmit)}
+              className="overflow-y-auto flex-1 px-6 py-5 space-y-5"
+            >
+              {/* Name */}
               <div>
-                <label htmlFor="name" className="block text-[#ababab] mb-1 text-sm font-medium">
-                  Dish Name
-                </label>
+                <label className={labelClass}>Dish Name *</label>
                 <input
                   type="text"
-                  id="name"
                   {...register("name", { required: "Dish name is required" })}
-                  className="w-full rounded-lg p-3 px-4 bg-[#1f1f1f] text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                  className={inputClass}
+                  placeholder="e.g. Paneer Butter Masala"
                 />
-                {errors.name && (
-                  <p className="text-red-400 text-xs mt-1">{errors.name.message}</p>
-                )}
+                {errors.name && <p className="text-dhaba-danger text-xs mt-1">{errors.name.message}</p>}
               </div>
 
+              {/* Image URL (optional) */}
               <div>
-                <label htmlFor="image" className="block text-[#ababab] mb-1 text-sm font-medium">
-                  Image URL
-                </label>
+                <label className={labelClass}>Image URL <span className="normal-case text-dhaba-muted font-normal">(optional)</span></label>
                 <input
-                  type="url"
-                  id="image"
-                  {...register("image", {
-                    required: "Image URL is required",
-                    pattern: {
-                      value: /^https?:\/\/.+\.(png|jpg|jpeg|gif|svg|webp|avif)$/i,
-                      message: "Must be a valid image URL",
-                    },
-                  })}
-                  className="w-full rounded-lg p-3 px-4 bg-[#1f1f1f] text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                  type="text"
+                  {...register("image")}
+                  className={inputClass}
+                  placeholder="https://example.com/image.jpg"
                 />
-                {errors.image && (
-                  <p className="text-red-400 text-xs mt-1">{errors.image.message}</p>
-                )}
               </div>
 
+              {/* Type + Category row */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>Dish Type *</label>
+                  <select
+                    {...register("type", { required: true })}
+                    className={selectClass}
+                  >
+                    {DISH_TYPES.map((t) => (
+                      <option key={t} value={t} className="bg-dhaba-surface text-dhaba-text">
+                        {t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelClass}>Category *</label>
+                  <select
+                    {...register("category", { required: true })}
+                    className={selectClass}
+                  >
+                    {DISH_CATEGORIES.map((c) => (
+                      <option key={c} value={c} className="bg-dhaba-surface text-dhaba-text">
+                        {c === "non_veg" ? "Non-Veg" : c.charAt(0).toUpperCase() + c.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Variants table */}
               <div>
-                <label htmlFor="type" className="block text-[#ababab] mb-1 text-sm font-medium">
-                  Dish Type
-                </label>
-                <select
-                  id="type"
-                  {...register("type", { required: "Dish type is required" })}
-                  className="w-full rounded-lg p-3 px-4 bg-[#1f1f1f] text-white focus:outline-none focus:ring-2 focus:ring-yellow-400 appearance-none pr-8"
-                >
-                  <option value="" disabled>Select a type</option>
-                  {DISH_TYPES.map((type) => (
-                    <option key={type} value={type} className="bg-[#262626] text-white">
-                      {type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-                    </option>
-                  ))}
-                </select>
-                {errors.type && (
-                  <p className="text-red-400 text-xs mt-1">{errors.type.message}</p>
-                )}
-              </div>
+                <label className={labelClass}>Variants / Pricing *</label>
+                <div className="rounded-2xl border border-dhaba-border/30 overflow-hidden">
+                  {/* Table header */}
+                  <div className="grid grid-cols-[1fr_1fr_2.5rem] gap-2 px-4 py-2 bg-dhaba-surface/60 border-b border-dhaba-border/20">
+                    <span className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">Size</span>
+                    <span className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">Price (₹)</span>
+                    <span />
+                  </div>
 
-              <div>
-                <label htmlFor="category" className="block text-[#ababab] mb-1 text-sm font-medium">
-                  Category
-                </label>
-                <select
-                  id="category"
-                  {...register("category", { required: "Category is required" })}
-                  className="w-full rounded-lg p-3 px-4 bg-[#1f1f1f] text-white focus:outline-none focus:ring-2 focus:ring-yellow-400 appearance-none pr-8"
-                >
-                  <option value="" disabled>Select a category</option>
-                  {DISH_CATEGORIES.map((category) => (
-                    <option key={category} value={category} className="bg-[#262626] text-white">
-                      {category.charAt(0).toUpperCase() + category.slice(1)}
-                    </option>
-                  ))}
-                </select>
-                {errors.category && (
-                  <p className="text-red-400 text-xs mt-1">{errors.category.message}</p>
-                )}
-              </div>
+                  {/* Table rows */}
+                  <div className="divide-y divide-dhaba-border/10">
+                    {fields.map((field, index) => (
+                      <div key={field.id} className="grid grid-cols-[1fr_1fr_2.5rem] gap-2 items-center px-4 py-2.5">
+                        <div>
+                          <select
+                            {...register(`variants.${index}.size`, {
+                              required: "Required",
+                              validate: (value) => {
+                                const all = watch("variants");
+                                return all.filter((v) => v.size === value).length <= 1 || "Duplicate";
+                              },
+                            })}
+                            className="w-full glass-input rounded-lg px-3 py-2 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50 appearance-none"
+                          >
+                            <option value="" disabled className="bg-dhaba-surface">Select</option>
+                            {DISH_VARIANT_SIZES.map((s) => (
+                              <option key={s} value={s} className="bg-dhaba-surface text-dhaba-text">{s}</option>
+                            ))}
+                          </select>
+                          {errors.variants?.[index]?.size && (
+                            <p className="text-dhaba-danger text-[10px] mt-0.5">{errors.variants[index]?.size?.message}</p>
+                          )}
+                        </div>
+                        <div>
+                          <input
+                            type="number"
+                            step="0.01"
+                            {...register(`variants.${index}.price`, {
+                              required: "Required",
+                              min: { value: 0, message: "≥ 0" },
+                              valueAsNumber: true,
+                            })}
+                            className="w-full glass-input rounded-lg px-3 py-2 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50"
+                            placeholder="0.00"
+                          />
+                          {errors.variants?.[index]?.price && (
+                            <p className="text-dhaba-danger text-[10px] mt-0.5">{errors.variants[index]?.price?.message}</p>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => remove(index)}
+                          disabled={fields.length === 1}
+                          className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-dhaba-danger/15 text-dhaba-muted hover:text-dhaba-danger transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <FaTrash size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
 
-              <div className="border border-[#333] rounded-lg p-4">
-                <h3 className="text-lg font-semibold mb-3">Dish Variants</h3>
-                {fields.map((field, index) => (
-                  <div key={field.id} className="flex items-center space-x-2 mb-3">
-                    <div className="flex-grow">
-                      <select
-                        id={`variants.${index}.size`}
-                        {...register(`variants.${index}.size`, {
-                          required: "Size is required",
-                          validate: (value) => {
-                            const currentVariants = watch("variants");
-                            const sizeCount = currentVariants.filter(
-                              (v) => v.size === value
-                            ).length;
-                            return sizeCount <= 1 || "Duplicate size not allowed";
-                          },
-                        })}
-                        className="w-full p-2 rounded bg-[#333] border border-[#555] text-[#f5f5f5] focus:outline-none focus:ring-2 focus:ring-yellow-400 appearance-none"
-                      >
-                        <option value="" disabled>Select Size</option>
-                        {DISH_VARIANT_SIZES.map((size) => (
-                          <option key={size} value={size} className="bg-[#262626] text-white">
-                            {size}
-                          </option>
-                        ))}
-                      </select>
-                      {errors.variants?.[index]?.size && (
-                        <p className="text-red-400 text-xs mt-1">
-                          {errors.variants[index]?.size?.message}
-                        </p>
-                      )}
-                    </div>
-                    <div className="w-1/3">
-                      <input
-                        type="number"
-                        step="0.01"
-                        {...register(`variants.${index}.price`, {
-                          required: "Price is required",
-                          min: { value: 0, message: "Price cannot be negative" },
-                          valueAsNumber: true,
-                        })}
-                        className="w-full p-2 rounded bg-[#333] border border-[#555] text-[#f5f5f5] focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                        placeholder="Price"
-                      />
-                      {errors.variants?.[index]?.price && (
-                        <p className="text-red-400 text-xs mt-1">
-                          {errors.variants[index]?.price?.message}
-                        </p>
-                      )}
-                    </div>
+                  {/* Add row */}
+                  <div className="px-4 py-2.5 border-t border-dhaba-border/20 bg-dhaba-surface/30">
                     <button
                       type="button"
-                      onClick={() => remove(index)}
-                      className="text-red-400 hover:text-red-500 p-2 rounded-full"
+                      onClick={() => append({ size: "", price: "" })}
+                      className="flex items-center gap-1.5 text-dhaba-accent text-xs font-bold hover:underline"
                     >
-                      <IoMdClose size={20} />
+                      <FaPlus size={10} /> Add Variant
                     </button>
                   </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => append({ size: "", price: "" })}
-                  className="mt-2 text-blue-400 hover:text-blue-500 font-medium text-sm"
-                >
-                  + Add Another Variant
-                </button>
+                </div>
               </div>
 
+              {/* Description */}
               <div>
-                <label htmlFor="description" className="block text-[#ababab] mb-1 text-sm font-medium">
-                  Description
-                </label>
+                <label className={labelClass}>Description <span className="normal-case text-dhaba-muted font-normal">(optional)</span></label>
                 <textarea
-                  id="description"
-                  rows={3}
+                  rows={2}
                   {...register("description")}
-                  className="w-full rounded-lg p-3 px-4 bg-[#1f1f1f] text-white focus:outline-none focus:ring-2 focus:ring-yellow-400 resize-y"
+                  className={`${inputClass} resize-none`}
+                  placeholder="Short description of the dish..."
                 />
               </div>
 
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="isAvailable"
-                  {...register("isAvailable")}
-                  className="h-4 w-4 text-yellow-400 rounded border-gray-600 focus:ring-yellow-500 bg-[#1f1f1f]"
-                />
-                <label htmlFor="isAvailable" className="ml-2 block text-sm text-[#f5f5f5]">
-                  Available for Order
-                </label>
+              {/* Toggles */}
+              <div className="flex gap-3">
+                {(
+                  [
+                    { id: "isAvailable", label: "Available for Order" },
+                    { id: "isFrequent",  label: "Frequently Ordered" },
+                  ] as { id: "isAvailable" | "isFrequent"; label: string }[]
+                ).map(({ id, label }) => (
+                  <label
+                    key={id}
+                    className="flex-1 flex items-center gap-3 cursor-pointer glass-input rounded-xl px-4 py-3 hover:bg-dhaba-surface-hover transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      {...register(id)}
+                      className="h-4 w-4 accent-dhaba-accent rounded"
+                    />
+                    <span className="text-dhaba-text text-sm font-medium">{label}</span>
+                  </label>
+                ))}
               </div>
+            </form>
 
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="isFrequent"
-                  {...register("isFrequent")}
-                  className="h-4 w-4 text-yellow-400 rounded border-gray-600 focus:ring-yellow-500 bg-[#1f1f1f]"
-                />
-                <label htmlFor="isFrequent" className="ml-2 block text-sm text-[#f5f5f5]">
-                  Frequently Ordered (e.g., Tea/Coffee)
-                </label>
-              </div>
-
+            {/* Footer */}
+            <div className="px-6 py-4 bg-dhaba-surface/30 border-t border-dhaba-border/20 flex gap-3 justify-end shrink-0">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-2.5 rounded-xl text-dhaba-muted font-bold text-sm hover:text-dhaba-text transition-colors"
+              >
+                Cancel
+              </button>
               <button
                 type="submit"
+                form="dish-form"
                 disabled={isActionPending}
-                className="w-full rounded-lg mt-6 py-3 text-lg bg-yellow-400 text-gray-900 font-bold hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="bg-gradient-warm text-dhaba-bg px-8 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:shadow-glow transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
+                {isActionPending && (
+                  <div className="h-4 w-4 border-2 border-dhaba-bg border-t-transparent rounded-full animate-spin" />
+                )}
                 {isActionPending
-                  ? isEditMode
-                    ? "Updating Dish..."
-                    : "Adding Dish..."
-                  : isEditMode
-                  ? "Update Dish"
-                  : "Add Dish"}
+                  ? isEditMode ? "Updating..." : "Adding..."
+                  : isEditMode ? "Update Dish" : "Add Dish"}
               </button>
-            </form>
+            </div>
           </motion.div>
         </div>
       )}

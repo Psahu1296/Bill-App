@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { IoMdClose } from "react-icons/io";
+import { FaTimes, FaReceipt } from "react-icons/fa";
 import { useMutation } from "@tanstack/react-query";
 import { addExpense } from "../../https";
 import type { AddExpensePayload } from "../../types";
@@ -30,11 +30,7 @@ interface AddExpenseModalProps {
   onExpenseAdded?: () => void;
 }
 
-const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
-  isOpen,
-  onClose,
-  onExpenseAdded,
-}) => {
+const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClose, onExpenseAdded }) => {
   const defaultExpenseData: ExpenseFormData = {
     type: "",
     name: "",
@@ -43,39 +39,13 @@ const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     expenseDate: new Date().toISOString().split("T")[0],
   };
 
-  const [expenseData, setExpenseData] =
-    useState<ExpenseFormData>(defaultExpenseData);
+  const [expenseData, setExpenseData] = useState<ExpenseFormData>(defaultExpenseData);
 
   const handleInputChange = (
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-    >
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
     setExpenseData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (
-      !expenseData.type ||
-      !expenseData.name ||
-      expenseData.amount === "" ||
-      parseFloat(expenseData.amount) < 0
-    ) {
-      enqueueSnackbar("Please fill all required fields and ensure amount is valid.", {
-        variant: "error",
-      });
-      return;
-    }
-    const dataToSend = {
-      ...expenseData,
-      amount: parseFloat(expenseData.amount),
-      expenseDate: expenseData.expenseDate
-        ? new Date(expenseData.expenseDate)
-        : undefined,
-    };
-    expenseMutation.mutate(dataToSend);
   };
 
   const handleCloseModal = () => {
@@ -83,142 +53,166 @@ const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     onClose();
   };
 
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!expenseData.type || !expenseData.name || expenseData.amount === "" || parseFloat(expenseData.amount) < 0) {
+      enqueueSnackbar("Please fill all required fields and ensure amount is valid.", { variant: "error" });
+      return;
+    }
+    expenseMutation.mutate({
+      ...expenseData,
+      amount: parseFloat(expenseData.amount),
+      expenseDate: expenseData.expenseDate ? new Date(expenseData.expenseDate) : undefined,
+    });
+  };
+
   const expenseMutation = useMutation({
     mutationFn: (reqData: AddExpensePayload) => addExpense(reqData),
     onSuccess: (res) => {
-      enqueueSnackbar(
-        (res.data as { message?: string })?.message || "Expense added!",
-        { variant: "success" }
-      );
+      enqueueSnackbar((res.data as { message?: string })?.message || "Expense added!", { variant: "success" });
       handleCloseModal();
       onExpenseAdded?.();
     },
     onError: (error: { response?: { data?: { message?: string } } }) => {
-      enqueueSnackbar(
-        error.response?.data?.message || "Failed to add expense.",
-        { variant: "error" }
-      );
+      enqueueSnackbar(error.response?.data?.message || "Failed to add expense.", { variant: "error" });
     },
   });
+
+  const inputClass =
+    "w-full glass-input rounded-xl px-4 py-2.5 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50 placeholder:text-dhaba-muted/50";
+  const labelClass = "block text-xs font-bold text-dhaba-muted uppercase tracking-wider mb-1.5";
 
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-dhaba-bg/80 backdrop-blur-sm p-4">
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
+            initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="bg-[#262626] p-6 rounded-lg shadow-lg w-full max-w-lg mx-auto max-h-[90vh] overflow-y-auto"
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="glass-card w-full max-w-md rounded-3xl overflow-hidden flex flex-col"
           >
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-[#f5f5f5] text-xl font-semibold">
-                Add New Expense
-              </h2>
-              <button onClick={handleCloseModal} className="text-[#f5f5f5] hover:text-red-500">
-                <IoMdClose size={24} />
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-dhaba-border/20">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-dhaba-accent/10 flex items-center justify-center">
+                  <FaReceipt className="text-dhaba-accent" />
+                </div>
+                <div>
+                  <h2 className="font-display text-xl font-bold text-dhaba-text">Add Expense</h2>
+                  <p className="text-xs text-dhaba-muted">Record a new business expense</p>
+                </div>
+              </div>
+              <button
+                onClick={handleCloseModal}
+                className="p-2 hover:bg-dhaba-danger/10 rounded-xl transition-colors group"
+              >
+                <FaTimes className="text-dhaba-muted group-hover:text-dhaba-danger" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+            {/* Body */}
+            <form id="expense-form" onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+              {/* Type */}
               <div>
-                <label className="block text-[#ababab] mb-2 text-sm font-medium">
-                  Expense Type
-                </label>
-                <div className="flex items-center rounded-lg p-3 px-4 bg-[#1f1f1f]">
-                  <select
-                    name="type"
-                    value={expenseData.type}
-                    onChange={handleInputChange}
-                    className="bg-transparent flex-1 text-white focus:outline-none appearance-none pr-8"
-                    required
-                  >
-                    <option value="" disabled>Select Type</option>
-                    {EXPENSE_TYPES.map((type) => (
-                      <option key={type} value={type} className="bg-[#262626] text-white">
-                        {type
-                          .replace(/_/g, " ")
-                          .replace(/\b\w/g, (c) => c.toUpperCase())}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <label className={labelClass}>Expense Type *</label>
+                <select
+                  name="type"
+                  value={expenseData.type}
+                  onChange={handleInputChange}
+                  required
+                  className={`${inputClass} appearance-none`}
+                >
+                  <option value="" disabled className="bg-dhaba-surface">Select type</option>
+                  {EXPENSE_TYPES.map((type) => (
+                    <option key={type} value={type} className="bg-dhaba-surface text-dhaba-text">
+                      {type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                    </option>
+                  ))}
+                </select>
               </div>
 
+              {/* Name */}
               <div>
-                <label className="block text-[#ababab] mb-2 text-sm font-medium">
-                  Name / Description
-                </label>
-                <div className="flex items-center rounded-lg p-3 px-4 bg-[#1f1f1f]">
-                  <input
-                    type="text"
-                    name="name"
-                    value={expenseData.name}
-                    onChange={handleInputChange}
-                    className="bg-transparent flex-1 text-white focus:outline-none"
-                    placeholder="e.g., Potatoes, John Doe Salary"
-                    required
-                  />
-                </div>
+                <label className={labelClass}>Name *</label>
+                <input
+                  type="text"
+                  name="name"
+                  value={expenseData.name}
+                  onChange={handleInputChange}
+                  required
+                  className={inputClass}
+                  placeholder="e.g. Potatoes, John Doe Salary"
+                />
               </div>
 
-              <div>
-                <label className="block text-[#ababab] mb-2 text-sm font-medium">
-                  Amount
-                </label>
-                <div className="flex items-center rounded-lg p-3 px-4 bg-[#1f1f1f]">
+              {/* Amount + Date row */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>Amount (₹) *</label>
                   <input
                     type="number"
                     name="amount"
                     value={expenseData.amount}
                     onChange={handleInputChange}
-                    className="bg-transparent flex-1 text-white focus:outline-none"
-                    step="0.01"
                     required
+                    step="0.01"
+                    min="0"
+                    className={inputClass}
+                    placeholder="0.00"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-[#ababab] mb-2 text-sm font-medium">
-                  Date
-                </label>
-                <div className="flex items-center rounded-lg p-3 px-4 bg-[#1f1f1f]">
+                <div>
+                  <label className={labelClass}>Date *</label>
                   <input
                     type="date"
                     name="expenseDate"
                     value={expenseData.expenseDate}
                     onChange={handleInputChange}
-                    className="bg-transparent flex-1 text-white focus:outline-none"
                     required
+                    className={inputClass}
                   />
                 </div>
               </div>
 
+              {/* Notes */}
               <div>
-                <label className="block text-[#ababab] mb-2 text-sm font-medium">
-                  Additional Notes (Optional)
+                <label className={labelClass}>
+                  Notes <span className="normal-case text-dhaba-muted font-normal">(optional)</span>
                 </label>
-                <div className="flex items-center rounded-lg p-3 px-4 bg-[#1f1f1f]">
-                  <textarea
-                    name="description"
-                    value={expenseData.description}
-                    onChange={handleInputChange}
-                    className="bg-transparent flex-1 text-white focus:outline-none resize-y"
-                    rows={3}
-                  />
-                </div>
+                <textarea
+                  name="description"
+                  value={expenseData.description}
+                  onChange={handleInputChange}
+                  rows={2}
+                  className={`${inputClass} resize-none`}
+                  placeholder="Any additional details..."
+                />
               </div>
+            </form>
 
+            {/* Footer */}
+            <div className="px-6 py-4 bg-dhaba-surface/30 border-t border-dhaba-border/20 flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={handleCloseModal}
+                className="px-6 py-2.5 rounded-xl text-dhaba-muted font-bold text-sm hover:text-dhaba-text transition-colors"
+              >
+                Cancel
+              </button>
               <button
                 type="submit"
+                form="expense-form"
                 disabled={expenseMutation.isPending}
-                className="w-full rounded-lg py-3 text-lg bg-yellow-400 text-gray-900 font-bold hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="bg-gradient-warm text-dhaba-bg px-8 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:shadow-glow transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {expenseMutation.isPending ? "Adding Expense..." : "Add Expense"}
+                {expenseMutation.isPending && (
+                  <div className="h-4 w-4 border-2 border-dhaba-bg border-t-transparent rounded-full animate-spin" />
+                )}
+                {expenseMutation.isPending ? "Adding..." : "Add Expense"}
               </button>
-            </form>
+            </div>
           </motion.div>
         </div>
       )}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { IoMdClose } from "react-icons/io";
+import { FaTimes, FaMoneyBillWave } from "react-icons/fa";
 import { enqueueSnackbar } from "notistack";
 import type { UseMutationResult } from "@tanstack/react-query";
 import type { CustomerLedger } from "../../types";
@@ -17,6 +17,8 @@ interface PaymentModalProps {
   >;
 }
 
+const PAYMENT_METHODS = ["Cash", "Card", "UPI", "Other"];
+
 const PaymentModal: React.FC<PaymentModalProps> = ({
   isOpen,
   onClose,
@@ -26,8 +28,6 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   const [amountPaidInput, setAmountPaidInput] = useState("");
   const [notes, setNotes] = useState("");
   const [selectedMethod, setSelectedMethod] = useState("Cash");
-
-  const isLoading = recordPaymentMutation.isPending;
 
   useEffect(() => {
     if (isOpen && customer) {
@@ -47,93 +47,120 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
       return;
     }
     if (amount > customer.balanceDue + 0.01) {
-      enqueueSnackbar("Amount cannot exceed outstanding balance.", {
-        variant: "warning",
-      });
+      enqueueSnackbar("Amount cannot exceed outstanding balance.", { variant: "warning" });
       return;
     }
 
     recordPaymentMutation.mutate({
       phone: customer.customerPhone,
       amountPaid: amount,
-      notes: notes,
+      notes: notes ? `${notes} (${selectedMethod})` : selectedMethod,
     });
   };
+
+  const isLoading = recordPaymentMutation.isPending;
+  const remaining = customer
+    ? Math.max(0, customer.balanceDue - (parseFloat(amountPaidInput) || 0))
+    : 0;
+  const isFullPay =
+    customer && parseFloat(amountPaidInput) >= customer.balanceDue - 0.01;
+
+  const inputClass =
+    "w-full glass-input rounded-xl px-4 py-2.5 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50 placeholder:text-dhaba-muted/50";
+  const labelClass = "block text-xs font-bold text-dhaba-muted uppercase tracking-wider mb-1.5";
 
   return (
     <AnimatePresence>
       {isOpen && customer && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-dhaba-bg/80 backdrop-blur-sm p-4">
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
+            initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="bg-[#262626] p-6 rounded-lg shadow-lg w-full max-w-sm mx-auto text-[#f5f5f5]"
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="glass-card w-full max-w-sm rounded-3xl overflow-hidden"
           >
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">
-                Record Payment for {customer.customerName}
-              </h2>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-dhaba-border/20">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-dhaba-success/10 flex items-center justify-center">
+                  <FaMoneyBillWave className="text-dhaba-success" />
+                </div>
+                <div>
+                  <h2 className="font-display text-lg font-bold text-dhaba-text">Record Payment</h2>
+                  <p className="text-xs text-dhaba-muted truncate max-w-[180px]">{customer.customerName}</p>
+                </div>
+              </div>
               <button
                 onClick={onClose}
-                className="text-[#f5f5f5] hover:text-red-500"
+                className="p-2 hover:bg-dhaba-danger/10 rounded-xl transition-colors group"
               >
-                <IoMdClose size={24} />
+                <FaTimes className="text-dhaba-muted group-hover:text-dhaba-danger" />
               </button>
             </div>
 
-            <div className="mb-4 text-sm bg-[#1f1f1f] p-3 rounded-lg">
-              <p className="flex justify-between">
-                Phone:{" "}
-                <span className="font-semibold">{customer.customerPhone}</span>
-              </p>
-              <p className="flex justify-between border-t border-gray-600 pt-2 mt-2">
-                Outstanding:{" "}
-                <span className="font-bold text-red-400">
+            {/* Summary strip */}
+            <div className="grid grid-cols-2 divide-x divide-dhaba-border/20 border-b border-dhaba-border/20">
+              <div className="px-5 py-3 text-center">
+                <p className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">Outstanding</p>
+                <p className="font-display text-xl font-bold text-dhaba-danger mt-0.5">
                   ₹{customer.balanceDue.toFixed(2)}
-                </span>
-              </p>
+                </p>
+              </div>
+              <div className="px-5 py-3 text-center">
+                <p className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">Remaining After</p>
+                <p className={`font-display text-xl font-bold mt-0.5 ${remaining === 0 ? "text-dhaba-success" : "text-dhaba-warning"}`}>
+                  ₹{remaining.toFixed(2)}
+                </p>
+              </div>
             </div>
 
-            <form onSubmit={handlePaySubmit} className="space-y-4">
+            {/* Form */}
+            <form id="payment-form" onSubmit={handlePaySubmit} className="px-6 py-5 space-y-4">
+              {/* Amount */}
               <div>
-                <label
-                  htmlFor="amount"
-                  className="block text-sm font-medium text-[#ababab] mb-2"
-                >
-                  Amount Being Paid
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className={labelClass} style={{ marginBottom: 0 }}>Amount *</label>
+                  <button
+                    type="button"
+                    onClick={() => setAmountPaidInput(customer.balanceDue.toFixed(2))}
+                    className="text-[10px] font-bold text-dhaba-accent hover:underline"
+                  >
+                    Pay Full
+                  </button>
+                </div>
                 <input
                   type="number"
-                  id="amount"
                   value={amountPaidInput}
                   onChange={(e) => setAmountPaidInput(e.target.value)}
-                  className="w-full rounded-lg p-3 px-4 bg-[#1f1f1f] text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                  className={inputClass}
                   step="0.01"
-                  placeholder={customer.balanceDue.toFixed(2)}
+                  min="0.01"
+                  max={customer.balanceDue}
                   required
+                  placeholder={customer.balanceDue.toFixed(2)}
                 />
+                {isFullPay && (
+                  <p className="text-[10px] text-dhaba-success font-semibold mt-1">
+                    ✓ Full balance will be cleared
+                  </p>
+                )}
               </div>
 
+              {/* Payment method */}
               <div>
-                <label className="block text-sm font-medium text-[#ababab] mb-2">
-                  Payment Method
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {["Cash", "Card", "UPI", "Other"].map((method) => (
+                <label className={labelClass}>Payment Method</label>
+                <div className="flex gap-2 flex-wrap">
+                  {PAYMENT_METHODS.map((method) => (
                     <button
                       key={method}
                       type="button"
                       onClick={() => setSelectedMethod(method)}
-                      className={`px-3 py-1 rounded-lg text-sm font-semibold
-                        ${
-                          selectedMethod === method
-                            ? "bg-yellow-400 text-gray-900"
-                            : "bg-[#1f1f1f] text-[#ababab] hover:bg-[#333]"
-                        }
-                        transition-colors
-                      `}
+                      className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                        selectedMethod === method
+                          ? "bg-dhaba-accent/15 text-dhaba-accent border border-dhaba-accent/30"
+                          : "glass-input text-dhaba-muted hover:text-dhaba-text"
+                      }`}
                     >
                       {method}
                     </button>
@@ -141,30 +168,42 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 </div>
               </div>
 
+              {/* Notes */}
               <div>
-                <label
-                  htmlFor="notes"
-                  className="block text-sm font-medium text-[#ababab] mb-2"
-                >
-                  Notes (Optional)
+                <label className={labelClass}>
+                  Notes <span className="normal-case text-dhaba-muted font-normal">(optional)</span>
                 </label>
                 <textarea
-                  id="notes"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full rounded-lg p-3 px-4 bg-[#1f1f1f] text-white focus:outline-none focus:ring-2 focus:ring-yellow-400 resize-y"
                   rows={2}
+                  className={`${inputClass} resize-none`}
+                  placeholder="Any remarks..."
                 />
               </div>
+            </form>
 
+            {/* Footer */}
+            <div className="px-6 py-4 bg-dhaba-surface/30 border-t border-dhaba-border/20 flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-2.5 rounded-xl text-dhaba-muted font-bold text-sm hover:text-dhaba-text transition-colors"
+              >
+                Cancel
+              </button>
               <button
                 type="submit"
+                form="payment-form"
                 disabled={isLoading}
-                className="w-full rounded-lg py-3 text-lg bg-yellow-400 text-gray-900 font-bold hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="bg-gradient-warm text-dhaba-bg px-8 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:shadow-glow transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
+                {isLoading && (
+                  <div className="h-4 w-4 border-2 border-dhaba-bg border-t-transparent rounded-full animate-spin" />
+                )}
                 {isLoading ? "Recording..." : "Record Payment"}
               </button>
-            </form>
+            </div>
           </motion.div>
         </div>
       )}

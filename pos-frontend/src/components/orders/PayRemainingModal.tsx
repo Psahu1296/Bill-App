@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { FaTimes, FaMoneyBillWave } from "react-icons/fa";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { updateOrder } from "../../https";
 import { enqueueSnackbar } from "notistack";
@@ -11,6 +13,8 @@ interface PayRemainingModalProps {
   onSuccess: () => void;
 }
 
+const PAYMENT_METHODS: PaymentMethod[] = ["Cash", "Online"];
+
 const PayRemainingModal: React.FC<PayRemainingModalProps> = ({
   onClose,
   order,
@@ -19,8 +23,11 @@ const PayRemainingModal: React.FC<PayRemainingModalProps> = ({
 }) => {
   const queryClient = useQueryClient();
   const [payMethod, setPayMethod] = useState<PaymentMethod>("Cash");
-  const [amount, setAmount] = useState<string>(balanceDue.toString());
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [amount, setAmount] = useState<string>(balanceDue.toFixed(2));
+
+  const paying    = parseFloat(amount) || 0;
+  const remaining = Math.max(0, balanceDue - paying);
+  const isFullPay = paying >= balanceDue - 0.01;
 
   const paymentMutation = useMutation({
     mutationFn: (updates: Partial<Order> & { id: string }) =>
@@ -32,106 +39,159 @@ const PayRemainingModal: React.FC<PayRemainingModalProps> = ({
       queryClient.invalidateQueries({ queryKey: ["customerLedgers"] });
       enqueueSnackbar("Payment recorded successfully!", { variant: "success" });
       onSuccess();
-      setIsSubmitting(false);
     },
     onError: (error: { response?: { data?: { message?: string } } }) => {
-      const msg = error.response?.data?.message || "Failed to process payment.";
-      enqueueSnackbar(msg, { variant: "error" });
-      setIsSubmitting(false);
+      enqueueSnackbar(error.response?.data?.message || "Failed to process payment.", { variant: "error" });
     },
   });
 
   const handlePay = () => {
-    const paidAmount = parseFloat(amount || "0");
-    if (paidAmount <= 0) {
+    if (paying <= 0) {
       enqueueSnackbar("Enter a valid amount.", { variant: "warning" });
       return;
     }
-    if (paidAmount > balanceDue) {
+    if (paying > balanceDue + 0.01) {
       enqueueSnackbar("Payment cannot exceed the balance due.", { variant: "warning" });
       return;
     }
 
-    setIsSubmitting(true);
-    const newAmountPaid = (order.amountPaid || 0) + paidAmount;
-    const isFullyPaid = newAmountPaid >= order.bills.totalWithTax;
+    const newAmountPaid = (order.amountPaid || 0) + paying;
+    const fullyPaid = newAmountPaid >= order.bills.totalWithTax - 0.01;
 
-    const updates = {
+    paymentMutation.mutate({
       id: order._id,
       amountPaid: newAmountPaid,
       paymentMethod: payMethod,
-      paymentStatus: (isFullyPaid ? "Paid" : "Pending") as typeof order.paymentStatus,
+      paymentStatus: (fullyPaid ? "Paid" : "Pending") as typeof order.paymentStatus,
       orderStatus: "Completed" as OrderStatus,
-    };
-
-    paymentMutation.mutate(updates);
+    });
   };
 
+  const labelClass = "block text-xs font-bold text-dhaba-muted uppercase tracking-wider mb-1.5";
+
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="glass-card rounded-2xl w-[400px] shadow-2xl overflow-hidden border border-dhaba-border/30">
-        <div className="flex justify-between items-center p-5 border-b border-dhaba-border/20">
-          <h2 className="font-display text-xl font-bold text-dhaba-text">Pay Remaining Balance</h2>
-          <button
-            onClick={onClose}
-            className="text-dhaba-muted hover:text-dhaba-text transition-colors text-2xl"
-          >
-            &times;
-          </button>
-        </div>
-
-        <div className="p-6">
-          <label className="block text-dhaba-muted mb-2 text-xs font-bold tracking-wider uppercase">Payment Method</label>
-          <div className="flex gap-2 mb-6">
+    <AnimatePresence>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-dhaba-bg/80 backdrop-blur-sm p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          className="glass-card w-full max-w-sm rounded-3xl overflow-hidden"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-5 border-b border-dhaba-border/20">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-dhaba-success/10 flex items-center justify-center">
+                <FaMoneyBillWave className="text-dhaba-success" />
+              </div>
+              <div>
+                <h2 className="font-display text-lg font-bold text-dhaba-text">Pay Remaining Balance</h2>
+                <p className="text-xs text-dhaba-muted">Order #{order._id.slice(-6)}</p>
+              </div>
+            </div>
             <button
-              onClick={() => setPayMethod("Cash")}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                payMethod === "Cash" ? "bg-dhaba-accent/15 text-dhaba-accent border border-dhaba-accent/30" : "glass-input text-dhaba-muted"
-              }`}
+              onClick={onClose}
+              className="p-2 hover:bg-dhaba-danger/10 rounded-xl transition-colors group"
             >
-              💵 Cash
-            </button>
-            <button
-              disabled
-              onClick={() => setPayMethod("Online")}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all opacity-50 ${
-                payMethod === "Online" ? "bg-dhaba-accent/15 text-dhaba-accent border border-dhaba-accent/30" : "glass-input text-dhaba-muted"
-              }`}
-            >
-              💳 Online
+              <FaTimes className="text-dhaba-muted group-hover:text-dhaba-danger" />
             </button>
           </div>
 
-          <label className="block text-dhaba-muted mb-2 text-xs font-bold tracking-wider uppercase">Amount to Pay</label>
-          <div className="relative mb-6">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-dhaba-muted font-bold">
-              ₹
-            </span>
-            <input
-              type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="w-full glass-input text-dhaba-text rounded-xl pl-8 pr-4 py-3 focus:outline-none placeholder:text-dhaba-muted/50 font-bold"
-            />
+          {/* Bill summary strip */}
+          <div className="grid grid-cols-3 divide-x divide-dhaba-border/20 border-b border-dhaba-border/20">
+            {[
+              { label: "Total Bill",  value: `₹${order.bills.totalWithTax.toFixed(2)}`, color: "text-dhaba-text" },
+              { label: "Paid",        value: `₹${(order.amountPaid || 0).toFixed(2)}`,  color: "text-dhaba-success" },
+              { label: "Outstanding", value: `₹${balanceDue.toFixed(2)}`,               color: "text-dhaba-danger" },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="px-3 py-3 text-center">
+                <p className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">{label}</p>
+                <p className={`font-display text-base font-bold mt-0.5 ${color}`}>{value}</p>
+              </div>
+            ))}
           </div>
 
-          <div className="flex justify-between items-center mb-6 px-1">
-            <span className="text-dhaba-muted text-sm">Target Balance Due</span>
-            <span className="font-display text-lg font-bold text-dhaba-danger">₹{balanceDue.toFixed(2)}</span>
+          {/* Form */}
+          <div className="px-6 py-5 space-y-4">
+            {/* Amount */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className={labelClass} style={{ marginBottom: 0 }}>Amount to Pay *</label>
+                <button
+                  type="button"
+                  onClick={() => setAmount(balanceDue.toFixed(2))}
+                  className="text-[10px] font-bold text-dhaba-accent hover:underline"
+                >
+                  Pay Full
+                </button>
+              </div>
+              <input
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="w-full glass-input rounded-xl px-4 py-2.5 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50 placeholder:text-dhaba-muted/50"
+                step="0.01"
+                min="0.01"
+                max={balanceDue}
+                placeholder={balanceDue.toFixed(2)}
+              />
+              {paying > 0 && (
+                <p className={`text-[10px] font-semibold mt-1 ${isFullPay ? "text-dhaba-success" : "text-dhaba-warning"}`}>
+                  {isFullPay
+                    ? "✓ Full balance will be cleared"
+                    : `₹${remaining.toFixed(2)} will remain outstanding`}
+                </p>
+              )}
+            </div>
+
+            {/* Payment method */}
+            <div>
+              <label className={labelClass}>Payment Method</label>
+              <div className="flex gap-2">
+                {PAYMENT_METHODS.map((method) => (
+                  <button
+                    key={method}
+                    type="button"
+                    disabled={method === "Online"}
+                    onClick={() => setPayMethod(method)}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-40 ${
+                      payMethod === method
+                        ? "bg-dhaba-accent/15 text-dhaba-accent border border-dhaba-accent/30"
+                        : "glass-input text-dhaba-muted hover:text-dhaba-text"
+                    }`}
+                  >
+                    {method === "Cash" ? "💵 " : "💳 "}{method}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
-          <button
-            onClick={handlePay}
-            disabled={isSubmitting}
-            className={`w-full py-3.5 rounded-xl font-bold tracking-wide text-sm transition-all shadow-glow-lg ${
-              isSubmitting ? "opacity-50 cursor-not-allowed btn-accent" : "btn-accent hover:-translate-y-1"
-            }`}
-          >
-            {isSubmitting ? "Processing..." : "Confirm Payment"}
-          </button>
-        </div>
+          {/* Footer */}
+          <div className="px-6 py-4 bg-dhaba-surface/30 border-t border-dhaba-border/20 flex gap-3 justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-6 py-2.5 rounded-xl text-dhaba-muted font-bold text-sm hover:text-dhaba-text transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handlePay}
+              disabled={paymentMutation.isPending || paying <= 0 || paying > balanceDue + 0.01}
+              className="bg-gradient-warm text-dhaba-bg px-8 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:shadow-glow transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {paymentMutation.isPending && (
+                <div className="h-4 w-4 border-2 border-dhaba-bg border-t-transparent rounded-full animate-spin" />
+              )}
+              {paymentMutation.isPending ? "Processing..." : "Confirm Payment"}
+            </button>
+          </div>
+        </motion.div>
       </div>
-    </div>
+    </AnimatePresence>
   );
 };
 

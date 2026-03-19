@@ -1,5 +1,6 @@
 import React from "react";
-import { FaCheckDouble, FaLongArrowAltRight, FaCircle } from "react-icons/fa";
+import { FaCheckDouble, FaCircle, FaUtensils } from "react-icons/fa";
+import { MdTableRestaurant } from "react-icons/md";
 import { getAvatarName } from "../../utils/index";
 import { useNavigate } from "react-router-dom";
 import { updateList } from "../../redux/slices/cartSlice";
@@ -15,6 +16,9 @@ const OrderList: React.FC<OrderListProps> = ({ order }) => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
+  const isReady = order.orderStatus === "Ready";
+  const balanceDue = Math.max(0, order.bills.totalWithTax - (order.amountPaid || 0));
+
   const onOrderClick = () => {
     if (order.orderStatus === "Completed") {
       navigate(`/order-summary?orderId=${order._id}`);
@@ -29,33 +33,48 @@ const OrderList: React.FC<OrderListProps> = ({ order }) => {
 
   return (
     <div
-      className="flex items-center gap-4 p-3 rounded-2xl hover:bg-dhaba-surface-hover cursor-pointer transition-all duration-200 group"
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-2xl cursor-pointer transition-all duration-200 hover:bg-dhaba-surface-hover group
+        border-l-2 ${isReady ? "border-l-dhaba-success" : "border-l-dhaba-accent"}
+      `}
       onClick={onOrderClick}
     >
-      <div className="h-12 w-12 rounded-xl bg-gradient-warm flex items-center justify-center text-sm font-bold text-dhaba-bg flex-shrink-0 group-hover:shadow-glow transition-shadow">
+      {/* Avatar */}
+      <div className={`h-9 w-9 rounded-xl flex items-center justify-center text-xs font-bold text-dhaba-bg shrink-0
+        ${isReady ? "bg-dhaba-success" : "bg-gradient-warm"}
+      `}>
         {getAvatarName(order.customerDetails.name)}
       </div>
-      <div className="flex items-center justify-between flex-1 min-w-0">
-        <div className="flex flex-col gap-0.5">
-          <h3 className="text-dhaba-text font-semibold text-sm truncate">
-            {order.customerDetails.name}
-          </h3>
-          <p className="text-dhaba-muted text-xs">{order.items.length} Items</p>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <p className="text-dhaba-text font-semibold text-sm truncate leading-tight">
+          {order.customerDetails.name}
+        </p>
+        <div className="flex items-center gap-1.5 text-[11px] text-dhaba-muted mt-0.5">
+          <MdTableRestaurant className="text-xs" />
+          <span>T-{order.table.tableNo}</span>
+          <span className="opacity-40">·</span>
+          <FaUtensils className="text-[9px]" />
+          <span>{order.items.length} items</span>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-dhaba-accent text-xs font-bold border border-dhaba-accent/30 rounded-lg px-2.5 py-1 bg-dhaba-accent/5">
-            T-{order.table.tableNo}
-          </span>
-          {order.orderStatus === "Ready" ? (
-            <span className="status-chip bg-dhaba-success/15 text-dhaba-success">
-              <FaCheckDouble className="inline mr-1" /> Ready
+      </div>
+
+      {/* Right side */}
+      <div className="flex flex-col items-end gap-1 shrink-0">
+        <p className="text-dhaba-text font-bold text-sm">₹{order.bills.totalWithTax.toFixed(0)}</p>
+        {balanceDue > 0.01 ? (
+          <span className="text-[10px] text-dhaba-danger font-semibold">₹{balanceDue.toFixed(0)} due</span>
+        ) : (
+          isReady ? (
+            <span className="flex items-center gap-1 text-[10px] font-bold text-dhaba-success">
+              <FaCheckDouble className="text-[8px]" /> Ready
             </span>
           ) : (
-            <span className="status-chip bg-dhaba-accent/15 text-dhaba-accent">
-              <FaCircle className="inline mr-1 text-[6px]" /> In Progress
+            <span className="flex items-center gap-1 text-[10px] font-bold text-dhaba-accent">
+              <FaCircle className="text-[6px] animate-pulse" /> Cooking
             </span>
-          )}
-        </div>
+          )
+        )}
       </div>
     </div>
   );

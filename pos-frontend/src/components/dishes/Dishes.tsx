@@ -78,7 +78,7 @@ const DishesList: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col px-6 pb-4 pt-0 h-full max-h-[calc(100vh-16rem)] overflow-hidden">
+    <div className="flex flex-col px-6 pb-8 pt-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="font-display text-2xl font-bold text-dhaba-text">Dishes</h1>
@@ -110,7 +110,7 @@ const DishesList: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-grow overflow-y-auto pr-2">
+      <div>
         {dishList.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center space-y-4">
             <div className="h-16 w-16 rounded-2xl bg-dhaba-accent/10 flex items-center justify-center">

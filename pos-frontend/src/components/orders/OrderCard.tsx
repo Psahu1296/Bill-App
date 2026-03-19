@@ -1,32 +1,92 @@
-import React from "react";
-import { FaCheckDouble, FaCircle } from "react-icons/fa";
+import React, { useState } from "react";
+import { FaCheckDouble, FaPhone, FaUser, FaUtensils } from "react-icons/fa";
+import { IoCheckmarkDoneCircle, IoTimeOutline } from "react-icons/io5";
+import { MdTableRestaurant } from "react-icons/md";
 import { formatDateAndTime, getAvatarName } from "../../utils/index";
-import { IoCheckmarkDoneCircle } from "react-icons/io5";
 import { useNavigate } from "react-router-dom";
 import { setCustomer, updateTable as tableStateUpdate } from "../../redux/slices/customerSlice";
 import { updateList } from "../../redux/slices/cartSlice";
 import { useAppDispatch } from "../../redux/hooks";
-import type { Order } from "../../types";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { updateOrderStatus } from "../../https/index";
+import { enqueueSnackbar } from "notistack";
+import PayRemainingModal from "./PayRemainingModal";
+import type { Order, OrderStatus } from "../../types";
 
 interface OrderCardProps {
   order: Order;
-  type: string;
 }
 
-const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
-  const dispatch = useAppDispatch();
-  const navigate = useNavigate();
+const STATUS_OPTIONS: OrderStatus[] = ["In Progress", "Ready", "Completed"];
 
-  const isCompleted = order.orderStatus === "Completed";
-  const isCompletedAndFullyPaid = isCompleted && (order.paymentStatus === "Paid" || (order.amountPaid || 0) >= order.bills.totalWithTax);
+const statusBtnCfg: Record<OrderStatus, { active: string; idle: string; label: string }> = {
+  "In Progress": {
+    active: "bg-dhaba-accent/20 text-dhaba-accent border border-dhaba-accent/40 shadow-sm",
+    idle:   "text-dhaba-muted hover:text-dhaba-accent hover:bg-dhaba-accent/10",
+    label:  "In Progress",
+  },
+  "Ready": {
+    active: "bg-dhaba-success/20 text-dhaba-success border border-dhaba-success/40 shadow-sm",
+    idle:   "text-dhaba-muted hover:text-dhaba-success hover:bg-dhaba-success/10",
+    label:  "Ready",
+  },
+  "Completed": {
+    active: "bg-dhaba-surface text-dhaba-text border border-dhaba-border/40 shadow-sm",
+    idle:   "text-dhaba-muted hover:text-dhaba-text hover:bg-dhaba-surface-hover",
+    label:  "Done",
+  },
+  "Cancelled": {
+    active: "bg-dhaba-danger/20 text-dhaba-danger border border-dhaba-danger/40 shadow-sm",
+    idle:   "text-dhaba-muted hover:text-dhaba-danger hover:bg-dhaba-danger/10",
+    label:  "Cancelled",
+  },
+};
+
+const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
+  const dispatch      = useAppDispatch();
+  const navigate      = useNavigate();
+  const queryClient   = useQueryClient();
+
+  const [showPayModal, setShowPayModal] = useState(false);
+
+  const isCompleted   = order.orderStatus === "Completed";
+  const isReady       = order.orderStatus === "Ready";
+  const isInProgress  = order.orderStatus === "In Progress";
+  const balanceDue    = Math.max(0, order.bills.totalWithTax - (order.amountPaid || 0));
+  const isFullyPaid   = balanceDue < 0.01;
+
+  const statusMutation = useMutation({
+    mutationFn: (newStatus: OrderStatus) =>
+      updateOrderStatus({
+        orderId: order._id,
+        orderStatus: newStatus,
+        paymentStatus: order.paymentStatus,
+      }),
+    onSuccess: (_, newStatus) => {
+      enqueueSnackbar(`Status updated to "${newStatus}"`, { variant: "success" });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+    },
+    onError: () => {
+      enqueueSnackbar("Failed to update status.", { variant: "error" });
+    },
+  });
+
+  const handleStatusChange = (e: React.MouseEvent, newStatus: OrderStatus) => {
+    e.stopPropagation();
+    if (newStatus === order.orderStatus || statusMutation.isPending) return;
+    // If marking complete with unpaid balance → show payment modal first
+    if (newStatus === "Completed" && balanceDue > 0.01) {
+      setShowPayModal(true);
+      return;
+    }
+    statusMutation.mutate(newStatus);
+  };
 
   const onOrderClick = () => {
-    // Completed orders always go to the read-only summary page
     if (isCompleted) {
       navigate(`/order-summary?orderId=${order._id}`);
       return;
     }
-    // Active orders → load into menu editor
     const { customerDetails, table, items } = order;
     dispatch(setCustomer({ ...customerDetails } as { name: string; phone: string; guests: number }));
     dispatch(tableStateUpdate({ table: { tableId: table._id, tableNo: table.tableNo } }));
@@ -34,59 +94,192 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
     navigate(`/menu?orderId=${order._id}`);
   };
 
-  const statusConfig = {
-    "Ready": { chip: "bg-dhaba-success/15 text-dhaba-success", icon: <FaCheckDouble className="inline mr-1.5" />, sub: "Ready to serve" },
-    "Completed": { chip: "bg-dhaba-success/15 text-dhaba-success", icon: <IoCheckmarkDoneCircle className="inline h-4 w-4 mr-1.5" />, sub: "Order completed" },
-    "In Progress": { chip: "bg-dhaba-accent/15 text-dhaba-accent", icon: <FaCircle className="inline mr-1.5 text-[6px]" />, sub: "Preparing your order" },
-  };
-  const cfg = statusConfig[order.orderStatus as keyof typeof statusConfig] || statusConfig["In Progress"];
+  // ── Status config (card styling) ──────────────────────────────
+  const cardCfg = {
+    "In Progress": {
+      border:   "border-l-4 border-l-dhaba-accent",
+      headerBg: "bg-dhaba-accent/5",
+      badge:    "bg-dhaba-accent/15 text-dhaba-accent",
+      icon:     <span className="inline-block h-2 w-2 rounded-full bg-dhaba-accent animate-pulse mr-1.5 align-middle" />,
+      subtext:  "Kitchen is preparing",
+    },
+    "Ready": {
+      border:   "border-l-4 border-l-dhaba-success",
+      headerBg: "bg-dhaba-success/5",
+      badge:    "bg-dhaba-success/15 text-dhaba-success",
+      icon:     <FaCheckDouble className="inline mr-1.5 text-xs" />,
+      subtext:  "Ready to serve",
+    },
+    "Completed": {
+      border:   balanceDue > 0.01 ? "border-l-4 border-l-dhaba-danger" : "border-l-4 border-l-dhaba-border/40",
+      headerBg: "bg-transparent",
+      badge:    "bg-dhaba-success/15 text-dhaba-success",
+      icon:     <IoCheckmarkDoneCircle className="inline h-4 w-4 mr-1.5" />,
+      subtext:  balanceDue > 0.01 ? "Balance pending" : "Fully paid",
+    },
+    "Cancelled": {
+      border:   "border-l-4 border-l-dhaba-danger",
+      headerBg: "bg-dhaba-danger/5",
+      badge:    "bg-dhaba-danger/15 text-dhaba-danger",
+      icon:     null,
+      subtext:  "Order cancelled",
+    },
+  } as const;
+
+  const cfg = cardCfg[order.orderStatus as keyof typeof cardCfg] ?? cardCfg["In Progress"];
+
+  // ── Items preview (first 3) ───────────────────────────────────
+  const previewItems = order.items.slice(0, 3);
+  const extraItems   = order.items.length - 3;
 
   return (
+    <>
     <div
-      className={`w-[480px] glass-card rounded-2xl p-5 transition-all duration-300 ${
-        isCompleted && isCompletedAndFullyPaid ? "opacity-70" : "cursor-pointer hover:shadow-glow hover:-translate-y-0.5"
-      }`}
       onClick={onOrderClick}
+      className={`w-full glass-card rounded-2xl overflow-hidden transition-all duration-200 cursor-pointer
+        hover:-translate-y-0.5 hover:shadow-glow
+        ${cfg.border}
+        ${isCompleted && isFullyPaid ? "opacity-60" : ""}
+      `}
     >
-      <div className="flex items-start gap-4">
-        <div className="h-12 w-12 rounded-xl bg-gradient-warm flex items-center justify-center text-sm font-bold text-dhaba-bg flex-shrink-0">
-          {getAvatarName(order.customerDetails.name)}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between">
-            <div>
-              <h3 className="text-dhaba-text font-bold">{order.customerDetails.name}</h3>
-              <p className="text-dhaba-muted text-xs mt-0.5">
-                Table {order.table.tableNo} · Dine in
-              </p>
-            </div>
-            <div className="text-right">
-              <span className={`status-chip ${cfg.chip}`}>
-                {cfg.icon}{order.orderStatus}
+      {/* ── Header ── */}
+      <div className={`flex items-center justify-between px-4 py-3 ${cfg.headerBg} border-b border-dhaba-border/20`}>
+        <div className="flex items-center gap-3">
+          <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-sm font-bold text-dhaba-bg shrink-0
+            ${isInProgress ? "bg-gradient-warm" : isReady ? "bg-dhaba-success" : "bg-dhaba-muted/40"}
+          `}>
+            {getAvatarName(order.customerDetails.name)}
+          </div>
+          <div>
+            <p className="font-bold text-dhaba-text text-sm leading-tight">{order.customerDetails.name}</p>
+            <div className="flex items-center gap-2 text-[11px] text-dhaba-muted mt-0.5">
+              <span className="flex items-center gap-1">
+                <FaPhone className="text-[9px]" />{order.customerDetails.phone}
               </span>
-              <p className="text-dhaba-muted text-[10px] mt-1">{cfg.sub}</p>
+              <span className="opacity-40">·</span>
+              <span className="flex items-center gap-1">
+                <FaUser className="text-[9px]" />{order.customerDetails.guests} guests
+              </span>
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="flex justify-between items-center mt-4 text-dhaba-muted text-xs">
-        <p>{formatDateAndTime(order.orderDate)}</p>
-        <p className="font-semibold">{order.items.length} Items</p>
-      </div>
-
-      <div className="h-px bg-dhaba-border/30 my-3" />
-
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-dhaba-text font-bold text-lg">₹{order.bills.totalWithTax.toFixed(0)}</p>
-          <p className="text-dhaba-muted text-xs">Paid: ₹{(order.amountPaid || 0).toFixed(0)}</p>
+        <div className="text-right shrink-0">
+          <span className={`inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-lg ${cfg.badge}`}>
+            {cfg.icon}{order.orderStatus}
+          </span>
+          <p className="text-[10px] text-dhaba-muted mt-0.5">{cfg.subtext}</p>
         </div>
-        <p className="text-dhaba-accent font-bold text-lg">
-          Due: ₹{Math.max(0, order.bills.totalWithTax - (order.amountPaid || 0)).toFixed(0)}
-        </p>
+      </div>
+
+      {/* ── Body ── */}
+      <div className="px-4 py-3 space-y-3">
+        {/* Table + time */}
+        <div className="flex items-center justify-between text-xs text-dhaba-muted">
+          <span className="flex items-center gap-1.5 font-semibold">
+            <MdTableRestaurant className="text-sm" />Table {order.table.tableNo}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <IoTimeOutline className="text-sm" />{formatDateAndTime(order.orderDate)}
+          </span>
+        </div>
+
+        {/* Items preview */}
+        <div className="flex flex-wrap gap-1.5">
+          {previewItems.map((item, i) => (
+            <span
+              key={i}
+              className="flex items-center gap-1 text-[11px] bg-dhaba-surface/60 text-dhaba-text px-2.5 py-1 rounded-lg font-medium"
+            >
+              <FaUtensils className="text-[9px] text-dhaba-muted" />
+              {item.name}
+              <span className="text-dhaba-muted">×{item.quantity}</span>
+            </span>
+          ))}
+          {extraItems > 0 && (
+            <span className="text-[11px] text-dhaba-accent font-bold px-2 py-1 rounded-lg bg-dhaba-accent/10">
+              +{extraItems} more
+            </span>
+          )}
+        </div>
+
+        {/* ── Bill row ── */}
+        <div className="flex items-center justify-between pt-1 border-t border-dhaba-border/20">
+          <div className="flex items-center gap-3">
+            <div>
+              <p className="text-[10px] text-dhaba-muted uppercase tracking-wider">Total</p>
+              <p className="font-bold text-dhaba-text text-base">₹{order.bills.totalWithTax.toFixed(0)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-dhaba-muted uppercase tracking-wider">Paid</p>
+              <p className="font-semibold text-dhaba-success text-sm">₹{(order.amountPaid || 0).toFixed(0)}</p>
+            </div>
+          </div>
+
+          {balanceDue > 0.01 ? (
+            <div className="text-right">
+              <p className="text-[10px] text-dhaba-muted uppercase tracking-wider">Due</p>
+              <p className="font-bold text-dhaba-danger text-base">₹{balanceDue.toFixed(0)}</p>
+            </div>
+          ) : (
+            <span className="flex items-center gap-1.5 text-xs font-bold text-dhaba-success bg-dhaba-success/10 px-3 py-1.5 rounded-xl">
+              <IoCheckmarkDoneCircle className="text-sm" /> Paid
+            </span>
+          )}
+        </div>
+
+        {/* ── Status switcher ── */}
+        <div
+          className="flex items-center gap-1 pt-1 border-t border-dhaba-border/20"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span className="text-[10px] text-dhaba-muted font-bold uppercase tracking-wider mr-1 shrink-0">
+            Status:
+          </span>
+          <div className="flex flex-1 gap-1">
+            {STATUS_OPTIONS.map((s) => {
+              const btnCfg  = statusBtnCfg[s];
+              const isActive = order.orderStatus === s;
+              const isLoading = statusMutation.isPending && statusMutation.variables === s;
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  disabled={statusMutation.isPending}
+                  onClick={(e) => handleStatusChange(e, s)}
+                  className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-bold py-1.5 rounded-xl transition-all duration-150
+                    ${isActive ? btnCfg.active : btnCfg.idle}
+                    disabled:cursor-not-allowed
+                  `}
+                >
+                  {isLoading ? (
+                    <span className="h-3 w-3 border border-current border-t-transparent rounded-full animate-spin" />
+                  ) : isActive ? (
+                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                  ) : null}
+                  {btnCfg.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
+
+    {showPayModal && (
+      <div onClick={(e) => e.stopPropagation()}>
+        <PayRemainingModal
+          order={order}
+          balanceDue={balanceDue}
+          onClose={() => setShowPayModal(false)}
+          onSuccess={() => {
+            setShowPayModal(false);
+            queryClient.invalidateQueries({ queryKey: ["orders"] });
+          }}
+        />
+      </div>
+    )}
+    </>
   );
 };
 
