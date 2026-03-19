@@ -55,14 +55,16 @@ app.use(
 app.use(express.json());
   app.use(cookieParser());
 
-  // Health check endpoint
+  // Health check endpoint — `app` field is used by the Electron main process
+  // to fingerprint our backend when resolving port conflicts on startup.
   app.get("/health", (req, res) => {
-    res.json({ 
-      status: "ok", 
+    res.json({
+      app: "dhaba-pos",
+      status: "ok",
       timestamp: new Date().toISOString(),
       version: process.env.npm_package_version || "1.0.0",
       environment: config.nodeEnv,
-      port: config.port 
+      port: config.port,
     });
   });
 
