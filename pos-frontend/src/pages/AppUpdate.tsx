@@ -25,6 +25,51 @@ interface ReleaseNote {
 // preload.ts exposes window.appBridge (not window.electron)
 const bridge = typeof window !== "undefined" ? (window as any).appBridge : null;
 const isElectron = !!bridge?.checkForUpdates;
+// macOS unsigned builds can't auto-update (Gatekeeper signature check fails).
+// Offer manual download instead.
+const isMac = bridge?.platform === "darwin";
+const canAutoUpdate = isElectron && !isMac;
+
+const RELEASES_PAGE = "https://github.com/Psahu1296/Bill-App/releases/latest";
+
+/** Styled anchor that opens GitHub releases in the system browser. */
+function DownloadLink({ children, className }: { children: React.ReactNode; className: string }) {
+  return (
+    <a
+      href={RELEASES_PAGE}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => {
+        // Prefer the IPC bridge when available (packaged Electron app).
+        // Falls back to letting Electron's setWindowOpenHandler intercept the link.
+        if (bridge?.openExternal) {
+          e.preventDefault();
+          bridge.openExternal(RELEASES_PAGE);
+        }
+      }}
+      className={className}
+    >
+      {children}
+    </a>
+  );
+}
+
+/** Make the electron-updater error human-readable. */
+function friendlyError(msg: string): string {
+  if (msg.includes("404")) {
+    return "Update file not found on GitHub release (latest.yml missing). Download manually below.";
+  }
+  if (msg.includes("Please check update first")) {
+    return 'Please click "Check Now" before downloading.';
+  }
+  if (msg.includes("ENOTFOUND") || msg.includes("ECONNREFUSED")) {
+    return "No internet connection — could not reach update server.";
+  }
+  if (msg.includes("signature") || msg.includes("Code sign")) {
+    return "Code signature check failed — use manual download instead.";
+  }
+  return msg;
+}
 
 // ── App version ────────────────────────────────────────────────────────────────
 // In Electron the version comes from package.json (injected at build time).
@@ -231,6 +276,11 @@ const AppUpdate: React.FC = () => {
                 Version <span className="text-dhaba-accent font-bold">{availableVersion}</span> is ready to download
               </p>
               <p className="text-xs text-dhaba-muted mt-0.5">Current: v{CURRENT_VERSION}</p>
+              {isMac && (
+                <p className="text-xs text-dhaba-warning mt-2 bg-dhaba-warning/10 rounded-lg px-3 py-1.5 inline-block">
+                  macOS auto-update requires a signed build — use manual download
+                </p>
+              )}
             </div>
             <div className="flex gap-3 justify-center">
               <button
@@ -239,13 +289,18 @@ const AppUpdate: React.FC = () => {
               >
                 Later
               </button>
-              <button
-                onClick={startDownload}
-                disabled={!isElectron}
-                className="bg-gradient-warm text-dhaba-bg px-8 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:shadow-glow transition-all disabled:opacity-60"
-              >
-                <FaDownload /> Download &amp; Install
-              </button>
+              {canAutoUpdate ? (
+                <button
+                  onClick={startDownload}
+                  className="bg-gradient-warm text-dhaba-bg px-8 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:shadow-glow transition-all"
+                >
+                  <FaDownload /> Download &amp; Install
+                </button>
+              ) : (
+                <DownloadLink className="bg-gradient-warm text-dhaba-bg px-8 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:shadow-glow transition-all">
+                  <FaDownload /> Download from GitHub
+                </DownloadLink>
+              )}
             </div>
           </div>
         );
@@ -337,15 +392,20 @@ const AppUpdate: React.FC = () => {
             <div>
               <h2 className="font-display text-xl font-bold text-dhaba-text">Update Failed</h2>
               <p className="text-sm text-dhaba-muted mt-1">
-                {errorMsg || "Could not connect to update server"}
+                {friendlyError(errorMsg || "Could not connect to update server")}
               </p>
             </div>
-            <button
-              onClick={checkForUpdates}
-              className="bg-gradient-warm text-dhaba-bg px-8 py-3 rounded-xl font-bold text-sm hover:shadow-glow transition-all"
-            >
-              Retry
-            </button>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={checkForUpdates}
+                className="glass-input px-6 py-2.5 rounded-xl text-dhaba-muted font-semibold text-sm hover:text-dhaba-text transition-colors"
+              >
+                Retry
+              </button>
+              <DownloadLink className="bg-gradient-warm text-dhaba-bg px-6 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:shadow-glow transition-all">
+                <FaDownload /> Manual Download
+              </DownloadLink>
+            </div>
           </div>
         );
 

@@ -23,6 +23,9 @@ contextBridge.exposeInMainWorld("appBridge", {
   /** Quit and install the downloaded update immediately */
   installUpdate: () => ipcRenderer.send("updater:install"),
 
+  /** Open a URL in the system default browser */
+  openExternal: (url: string) => ipcRenderer.send("shell:open-external", url),
+
   /**
    * Subscribe to update lifecycle events from the main process.
    * Returns an unsubscribe function — call it in useEffect cleanup.

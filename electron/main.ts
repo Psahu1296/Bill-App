@@ -258,6 +258,8 @@ app.whenReady().then(async () => {
   createWindow();
 
   if (!isDev) {
+    autoUpdater.autoDownload    = false; // wait for user to click "Download"
+    autoUpdater.autoInstallOnAppQuit = false; // only install when user triggers it
     setTimeout(() => autoUpdater.checkForUpdates(), 3000);
   }
 });
@@ -272,9 +274,33 @@ app.on("activate", () => {
 
 // ── IPC: updater ──────────────────────────────────────────────────────────────
 
-ipcMain.on("updater:check",   () => autoUpdater.checkForUpdates());
-ipcMain.on("updater:download",() => autoUpdater.downloadUpdate());
-ipcMain.on("updater:install", () => autoUpdater.quitAndInstall());
+ipcMain.on("updater:check", async () => {
+  try {
+    await autoUpdater.checkForUpdates();
+  } catch (err: any) {
+    sendToRenderer("error", { message: err?.message ?? "Failed to check for updates" });
+  }
+});
+
+ipcMain.on("updater:download", async () => {
+  try {
+    await autoUpdater.downloadUpdate();
+  } catch (err: any) {
+    sendToRenderer("error", { message: err?.message ?? "Failed to download update" });
+  }
+});
+
+ipcMain.on("updater:install", () => {
+  try {
+    autoUpdater.quitAndInstall();
+  } catch (err: any) {
+    sendToRenderer("error", { message: err?.message ?? "Failed to install update" });
+  }
+});
+
+ipcMain.on("shell:open-external", (_event, url: string) => {
+  shell.openExternal(url).catch(console.error);
+});
 
 // ── Auto Updater Events ───────────────────────────────────────────────────────
 
@@ -305,21 +331,10 @@ autoUpdater.on("download-progress", (progress) => {
   });
 });
 
-autoUpdater.on("update-downloaded", async (info) => {
+autoUpdater.on("update-downloaded", (info) => {
   console.log(`Update downloaded: v${info.version}`);
+  // Notify the UI — the AppUpdate page "Restart & Install" button triggers install.
   sendToRenderer("downloaded", { version: info.version });
-
-  const result = await dialog.showMessageBox({
-    type: "info",
-    title: "Update Ready",
-    message: `Dhaba POS v${info.version} is ready to install.`,
-    detail: "Restart the app now to apply the update, or do it later from the App Update page.",
-    buttons: ["Restart Now", "Later"],
-    defaultId: 0,
-    cancelId: 1,
-  });
-
-  if (result.response === 0) autoUpdater.quitAndInstall();
 });
 
 autoUpdater.on("error", (err) => {
