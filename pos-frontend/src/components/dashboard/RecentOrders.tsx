@@ -65,10 +65,16 @@ const RecentOrders: React.FC = () => {
     onError: () => { enqueueSnackbar("Failed to update!", { variant: "error" }); },
   });
 
+  const todayStr = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+
   const { data: resData, isError } = useQuery({
-    queryKey: ["orders"],
-    queryFn: async () => getOrders(),
+    queryKey: ["orders", "dashboard", todayStr],
+    queryFn: () => getOrders({ startDate: todayStr, endDate: todayStr }),
     placeholderData: keepPreviousData,
+    refetchInterval: 30_000,
   });
 
   useEffect(() => {
