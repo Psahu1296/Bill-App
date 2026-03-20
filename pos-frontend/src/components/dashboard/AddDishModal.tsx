@@ -7,11 +7,9 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { addDish, updateDish } from "../../https";
 import type { Dish, AddDishPayload } from "../../types";
 
-const DISH_TYPES = [
-  "starter", "main_course", "dessert", "beverage", "bread", "soup", "salad", "tobacco",
-];
-const DISH_CATEGORIES = ["veg", "non_veg", "egg"];
-const DISH_VARIANT_SIZES = ["Half", "Full", "Regular", "Small", "Large"];
+const DISH_TYPES = ["veg", "non-veg"];
+const DISH_CATEGORIES = ["rice", "roti", "sabji", "drinks", "snacks", "other"];
+const DISH_VARIANT_SIZES = ["Single", "Half", "Full", "Regular", "Small", "Large"];
 
 interface DishFormData {
   image: string;
@@ -51,8 +49,8 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
     defaultValues: {
       image: "",
       name: "",
-      type: "main_course",
-      category: "veg",
+      type: "veg",
+      category: "sabji",
       variants: [{ size: "", price: "" }],
       description: "",
       isAvailable: true,
@@ -113,8 +111,8 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
         reset({
           image: dish.image || "",
           name: dish.name || "",
-          type: dish.type || "main_course",
-          category: dish.category || "veg",
+          type: dish.type || "veg",
+          category: dish.category || "sabji",
           variants:
             dish.variants?.length > 0
               ? dish.variants.map((v) => ({ size: v.size || "", price: v.price || 0 }))
@@ -203,14 +201,14 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
               {/* Type + Category row */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={labelClass}>Dish Type *</label>
+                  <label className={labelClass}>Veg / Non-Veg *</label>
                   <select
                     {...register("type", { required: true })}
                     className={selectClass}
                   >
                     {DISH_TYPES.map((t) => (
                       <option key={t} value={t} className="bg-dhaba-surface text-dhaba-text">
-                        {t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                        {t === "non-veg" ? "Non-Veg" : "Veg"}
                       </option>
                     ))}
                   </select>
@@ -223,7 +221,7 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
                   >
                     {DISH_CATEGORIES.map((c) => (
                       <option key={c} value={c} className="bg-dhaba-surface text-dhaba-text">
-                        {c === "non_veg" ? "Non-Veg" : c.charAt(0).toUpperCase() + c.slice(1)}
+                        {c.charAt(0).toUpperCase() + c.slice(1)}
                       </option>
                     ))}
                   </select>

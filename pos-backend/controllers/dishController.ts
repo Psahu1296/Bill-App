@@ -8,8 +8,8 @@ const addDish = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { image, name, type, category, variants, description, isAvailable, isFrequent } = req.body;
 
-    if (!image || !name || !type || !category || !variants || !Array.isArray(variants) || variants.length === 0) {
-      return next(createHttpError(400, "Missing required dish fields (image, name, type, category, variants) or variants is empty!"));
+    if (!name || !type || !category || !variants || !Array.isArray(variants) || variants.length === 0) {
+      return next(createHttpError(400, "Missing required dish fields (name, type, category, variants) or variants is empty!"));
     }
     for (const v of variants) {
       if (!v.size || v.price === undefined || v.price === null || v.price < 0) {
@@ -110,7 +110,7 @@ const bulkAddDishes = async (req: Request, res: Response, next: NextFunction) =>
     }
 
     for (const [index, d] of dishes.entries()) {
-      if (!d.image || !d.name || !d.type || !d.category || !Array.isArray(d.variants) || d.variants.length === 0) {
+      if (!d.name || !d.type || !d.category || !Array.isArray(d.variants) || d.variants.length === 0) {
         return next(createHttpError(400, `Dish at index ${index} is missing required fields.`));
       }
       for (const v of d.variants) {

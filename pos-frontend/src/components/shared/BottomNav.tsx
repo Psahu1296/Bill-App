@@ -6,6 +6,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import Modal from "./Modal";
 import { setCustomer } from "../../redux/slices/customerSlice";
 import { useAppDispatch } from "../../redux/hooks";
+import CustomerAutocomplete from "../menu/CustomerAutocomplete";
 
 const navItems = [
   { path: "/", icon: FaHome, label: "Home" },
@@ -77,15 +78,16 @@ const BottomNav: React.FC = () => {
             <label className="block text-dhaba-muted mb-2 text-xs font-bold tracking-wider uppercase">
               Customer Name
             </label>
-            <div className="glass-input rounded-xl px-4 py-3">
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                type="text"
-                placeholder="Enter customer name"
-                className="bg-transparent flex-1 w-full text-dhaba-text text-sm focus:outline-none placeholder:text-dhaba-muted/50"
-              />
-            </div>
+            <CustomerAutocomplete
+              value={name}
+              onChange={setName}
+              onSelect={({ customerName, customerPhone }) => {
+                setName(customerName);
+                setPhone(customerPhone);
+              }}
+              placeholder="Enter customer name"
+              inputClassName="glass-input rounded-xl px-4 py-3 w-full text-dhaba-text text-sm focus:outline-none placeholder:text-dhaba-muted/50"
+            />
           </div>
 
           <div>

@@ -12,8 +12,11 @@ import {
   FaCloudDownloadAlt,
   FaShieldAlt,
   FaBomb,
+  FaFolderOpen,
+  FaUpload,
+  FaSave,
 } from "react-icons/fa";
-import { MdStorage, MdDeleteSweep } from "react-icons/md";
+import { MdStorage, MdDeleteSweep, MdRestore } from "react-icons/md";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -37,7 +40,7 @@ const dataModules: DataModule[] = [
   { id: "ledger", label: "Customer Ledger", icon: <FaDatabase />, description: "Customer balances & transactions", color: "text-cyan-400" },
 ];
 
-type ActionTab = "download" | "sync" | "delete";
+type ActionTab = "download" | "backup" | "sync" | "delete";
 
 interface StorageStats {
   totalRecords: number;
@@ -58,6 +61,13 @@ const DataManagement: React.FC = () => {
   const [result, setResult] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [storageStats, setStorageStats] = useState<StorageStats>({ totalRecords: 0, dbSize: "—" });
+
+  // Backup state
+  const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
+  const [backupProcessing, setBackupProcessing] = useState(false);
+  const [restoreFile, setRestoreFile] = useState<File | null>(null);
+  const [restoreProcessing, setRestoreProcessing] = useState(false);
+  const [backupResult, setBackupResult] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   // Full DB reset state
   const [resetStep, setResetStep] = useState<0 | 1 | 2>(0); // 0=idle, 1=warn, 2=confirm-phrase+password
@@ -91,6 +101,64 @@ const DataManagement: React.FC = () => {
       setSelectedModules([]);
     } else {
       setSelectedModules(dataModules.map((m) => m.id));
+    }
+  };
+
+  const isFileSystemAPIAvailable = "showDirectoryPicker" in window;
+
+  const handleChooseFolder = async () => {
+    try {
+      const handle = await (window as unknown as { showDirectoryPicker: (opts?: object) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker({ mode: "readwrite" });
+      setDirHandle(handle);
+      setBackupResult(null);
+    } catch {
+      // User cancelled picker — do nothing
+    }
+  };
+
+  const handleBackup = async () => {
+    if (!dirHandle) {
+      setBackupResult({ type: "error", message: "Please choose a folder first." });
+      return;
+    }
+    const modules = selectedModules.length ? selectedModules : dataModules.map((m) => m.id);
+    setBackupProcessing(true);
+    setBackupResult(null);
+    try {
+      const params = new URLSearchParams({ modules: modules.join(","), startDate, endDate, format: "json" });
+      const res = await axios.get<Blob>(`/api/data/export?${params.toString()}`, { responseType: "blob" });
+      const date = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      const filename = `dhaba_backup_${date}.json`;
+      const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(res.data);
+      await writable.close();
+      setBackupResult({ type: "success", message: `Saved "${filename}" to "${dirHandle.name}"` });
+    } catch (err: unknown) {
+      const msg = axios.isAxiosError(err) ? err.response?.data?.message : null;
+      setBackupResult({ type: "error", message: msg ?? "Backup failed." });
+    } finally {
+      setBackupProcessing(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!restoreFile) return;
+    setRestoreProcessing(true);
+    setBackupResult(null);
+    try {
+      const text = await restoreFile.text();
+      const data = JSON.parse(text) as unknown;
+      await axios.post("/api/data/import", data);
+      setBackupResult({ type: "success", message: "Data restored successfully from backup." });
+      setRestoreFile(null);
+      axios.get<{ success: boolean; data: StorageStats }>("/api/data/stats")
+        .then((r) => setStorageStats(r.data.data))
+        .catch(() => {});
+    } catch {
+      setBackupResult({ type: "error", message: "Restore failed. Ensure the file is a valid backup." });
+    } finally {
+      setRestoreProcessing(false);
     }
   };
 
@@ -189,6 +257,7 @@ const DataManagement: React.FC = () => {
 
   const tabs: { id: ActionTab; label: string; icon: React.ReactNode }[] = [
     { id: "download", label: "Download", icon: <FaDownload /> },
+    { id: "backup", label: "Backup", icon: <FaSave /> },
     { id: "sync", label: "Sync", icon: <FaSync /> },
     { id: "delete", label: "Delete", icon: <FaTrashAlt /> },
   ];
@@ -225,7 +294,7 @@ const DataManagement: React.FC = () => {
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => { setActiveTab(tab.id); setResult(null); setConfirmDelete(false); }}
+              onClick={() => { setActiveTab(tab.id); setResult(null); setBackupResult(null); setConfirmDelete(false); }}
               className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${
                 activeTab === tab.id
                   ? tab.id === "delete"
@@ -342,7 +411,7 @@ const DataManagement: React.FC = () => {
           {/* Right: Action Panel */}
           <div className="space-y-4">
             <div className={`glass-card rounded-3xl p-6 border ${
-              activeTab === "delete" ? "border-dhaba-danger/30" : "border-dhaba-border/30"
+              activeTab === "delete" ? "border-dhaba-danger/30" : activeTab === "backup" ? "border-emerald-500/30" : "border-dhaba-border/30"
             }`}>
               <div className="text-center mb-6">
                 <div className={`h-16 w-16 rounded-2xl flex items-center justify-center mx-auto mb-3 ${
@@ -350,47 +419,144 @@ const DataManagement: React.FC = () => {
                     ? "bg-dhaba-danger/15"
                     : activeTab === "sync"
                     ? "bg-dhaba-info/15"
+                    : activeTab === "backup"
+                    ? "bg-emerald-500/15"
                     : "bg-dhaba-accent/15"
                 }`}>
                   {activeTab === "download" && <FaCloudDownloadAlt className="text-dhaba-accent text-2xl" />}
+                  {activeTab === "backup" && <FaSave className="text-emerald-400 text-2xl" />}
                   {activeTab === "sync" && <FaSync className="text-blue-400 text-2xl" />}
                   {activeTab === "delete" && <MdDeleteSweep className="text-red-400 text-3xl" />}
                 </div>
                 <h3 className="font-display text-lg font-bold text-dhaba-text">
                   {activeTab === "download" && "Download Data"}
+                  {activeTab === "backup" && "Device Backup"}
                   {activeTab === "sync" && "Sync to Cloud"}
                   {activeTab === "delete" && "Delete Data"}
                 </h3>
                 <p className="text-dhaba-muted text-xs mt-1">
                   {activeTab === "download" && "Export selected data as a file"}
+                  {activeTab === "backup" && "Save & restore backups on your device"}
                   {activeTab === "sync" && "Push local data to cloud backup"}
                   {activeTab === "delete" && "Permanently remove selected data"}
                 </p>
               </div>
 
-              {/* Summary */}
-              <div className="glass rounded-xl p-4 mb-5 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-dhaba-muted">Selected</span>
-                  <span className="text-dhaba-text font-semibold">
-                    {selectedModules.length} module{selectedModules.length !== 1 ? "s" : ""}
-                  </span>
-                </div>
-                {(activeTab === "download" || activeTab === "delete") && (
+              {/* Summary (hidden on backup tab) */}
+              {activeTab !== "backup" && (
+                <div className="glass rounded-xl p-4 mb-5 space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-dhaba-muted">Date Range</span>
-                    <span className="text-dhaba-text font-semibold text-xs">
-                      {startDate} → {endDate}
+                    <span className="text-dhaba-muted">Selected</span>
+                    <span className="text-dhaba-text font-semibold">
+                      {selectedModules.length} module{selectedModules.length !== 1 ? "s" : ""}
                     </span>
                   </div>
-                )}
-                {activeTab === "download" && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-dhaba-muted">Format</span>
-                    <span className="text-dhaba-text font-semibold">{format === "xlsx" ? "Excel (XLSX)" : format.toUpperCase()}</span>
+                  {(activeTab === "download" || activeTab === "delete") && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-dhaba-muted">Date Range</span>
+                      <span className="text-dhaba-text font-semibold text-xs">
+                        {startDate} → {endDate}
+                      </span>
+                    </div>
+                  )}
+                  {activeTab === "download" && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-dhaba-muted">Format</span>
+                      <span className="text-dhaba-text font-semibold">{format === "xlsx" ? "Excel (XLSX)" : format.toUpperCase()}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Backup: save to folder + restore from file */}
+              {activeTab === "backup" && (
+                <div className="space-y-4">
+                  {/* Save backup */}
+                  <div className="glass rounded-xl p-4 space-y-3">
+                    <p className="text-dhaba-text font-semibold text-xs uppercase tracking-wider">Save Backup</p>
+                    {!isFileSystemAPIAvailable ? (
+                      <p className="text-dhaba-muted text-xs">
+                        Your browser does not support folder picking. Use{" "}
+                        <span className="font-semibold">Download</span> tab instead.
+                      </p>
+                    ) : (
+                      <>
+                        <button
+                          onClick={handleChooseFolder}
+                          className="w-full flex items-center gap-2 py-2.5 px-4 rounded-xl glass-card text-dhaba-accent text-sm font-semibold hover:bg-dhaba-surface-hover transition-all"
+                        >
+                          <FaFolderOpen />
+                          {dirHandle ? dirHandle.name : "Choose Folder…"}
+                        </button>
+                        {dirHandle && (
+                          <p className="text-dhaba-muted text-[10px] text-center">
+                            Modules: {selectedModules.length ? selectedModules.join(", ") : "all"} · JSON
+                          </p>
+                        )}
+                        <button
+                          onClick={handleBackup}
+                          disabled={!dirHandle || backupProcessing}
+                          className="w-full py-2.5 rounded-xl font-bold text-sm transition-all bg-gradient-warm text-dhaba-bg hover:shadow-glow disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {backupProcessing ? (
+                            <span className="flex items-center justify-center gap-2">
+                              <span className="animate-spin h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full" />
+                              Creating backup…
+                            </span>
+                          ) : (
+                            <><FaSave className="inline mr-2" />Create Backup</>
+                          )}
+                        </button>
+                      </>
+                    )}
                   </div>
-                )}
-              </div>
+
+                  {/* Restore */}
+                  <div className="glass rounded-xl p-4 space-y-3">
+                    <p className="text-dhaba-text font-semibold text-xs uppercase tracking-wider">Restore from Backup</p>
+                    <label className="w-full flex items-center gap-2 py-2.5 px-4 rounded-xl glass-card text-dhaba-muted text-sm font-semibold hover:bg-dhaba-surface-hover transition-all cursor-pointer">
+                      <FaUpload className="text-dhaba-accent" />
+                      {restoreFile ? restoreFile.name : "Choose backup file…"}
+                      <input
+                        type="file"
+                        accept=".json"
+                        className="hidden"
+                        onChange={(e) => { setRestoreFile(e.target.files?.[0] ?? null); setBackupResult(null); }}
+                      />
+                    </label>
+                    <button
+                      onClick={handleRestore}
+                      disabled={!restoreFile || restoreProcessing}
+                      className="w-full py-2.5 rounded-xl font-bold text-sm bg-dhaba-info/15 text-blue-300 hover:bg-dhaba-info/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {restoreProcessing ? (
+                        <><span className="animate-spin h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full" />Restoring…</>
+                      ) : (
+                        <><MdRestore className="text-lg" />Restore Data</>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Backup result */}
+                  <AnimatePresence>
+                    {backupResult && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        className={`p-3 rounded-xl text-xs font-medium flex items-center gap-2 ${
+                          backupResult.type === "success"
+                            ? "bg-green-500/10 text-green-400 border border-green-500/20"
+                            : "bg-dhaba-danger/10 text-red-400 border border-dhaba-danger/20"
+                        }`}
+                      >
+                        {backupResult.type === "success" ? <FaCheckCircle /> : <FaExclamationTriangle />}
+                        {backupResult.message}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
 
               {/* Sync: not available */}
               {activeTab === "sync" && (

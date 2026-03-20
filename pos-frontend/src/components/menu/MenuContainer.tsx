@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getDishes, seedDefaultDishes } from "../../https";
 import MenuItem from "./MenuItem";
-import { FaSearch, FaLeaf, FaDrumstickBite, FaUtensils } from "react-icons/fa";
+import { FaSearch, FaLeaf, FaDrumstickBite, FaUtensils, FaFire } from "react-icons/fa";
 import { GiWheat, GiRiceCooker, GiCookingPot } from "react-icons/gi";
 import { MdFastfood, MdLocalDrink } from "react-icons/md";
 import type { Dish } from "../../types";
@@ -26,6 +26,7 @@ const MenuContainer: React.FC = () => {
   const [activeType, setActiveType] = useState("all");
   const [activeCategory, setActiveCategory] = useState("all");
   const [availableOnly, setAvailableOnly] = useState(false);
+  const [frequentOnly, setFrequentOnly] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -57,8 +58,9 @@ const MenuContainer: React.FC = () => {
   }, [allDishes]);
 
   const filteredDishes = useMemo(() => {
-    return allDishes.filter((dish) => {
+    let result = allDishes.filter((dish) => {
       if (availableOnly && !dish.isAvailable) return false;
+      if (frequentOnly && !dish.isFrequent) return false;
       if (searchTerm && !dish.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
       if (activeType !== "all") {
         const dishType = dish.type?.toLowerCase().replace(/[-_\s]/g, "");
@@ -70,7 +72,11 @@ const MenuContainer: React.FC = () => {
       }
       return true;
     });
-  }, [allDishes, searchTerm, activeType, activeCategory, availableOnly]);
+    if (frequentOnly) {
+      result = [...result].sort((a, b) => (b.numberOfOrders ?? 0) - (a.numberOfOrders ?? 0));
+    }
+    return result;
+  }, [allDishes, searchTerm, activeType, activeCategory, availableOnly, frequentOnly]);
 
   if (isLoading) {
     return (
@@ -168,6 +174,19 @@ const MenuContainer: React.FC = () => {
         >
           <span className={`w-1.5 h-1.5 rounded-full ${availableOnly ? "bg-dhaba-success" : "bg-dhaba-muted"}`} />
           Available only
+        </button>
+
+        {/* Frequently ordered toggle */}
+        <button
+          onClick={() => setFrequentOnly((v) => !v)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            frequentOnly
+              ? "bg-orange-500/20 text-orange-400 border border-orange-500/40"
+              : "glass-input text-dhaba-muted hover:text-dhaba-text"
+          }`}
+        >
+          <FaFire className={frequentOnly ? "text-orange-400" : "text-dhaba-muted"} />
+          Frequently Ordered
         </button>
       </div>
 

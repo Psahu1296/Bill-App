@@ -196,7 +196,7 @@ export interface AddOrderPayload {
 
 export interface AddDishPayload {
   name: string;
-  image: string;
+  image?: string;
   type: string;
   category: string;
   variants: DishVariant[];

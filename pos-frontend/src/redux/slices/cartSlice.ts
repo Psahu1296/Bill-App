@@ -52,10 +52,14 @@ const cartSlice = createSlice({
       action: PayloadAction<{ id: string; quantity: number }>
     ) => {
       const { id, quantity: quantityChange } = action.payload;
-      const existingItem = state.find((item) => item.id === id);
-      if (existingItem && existingItem.quantity + quantityChange > 0) {
-        existingItem.quantity += quantityChange;
-        existingItem.price = existingItem.quantity * existingItem.pricePerQuantity;
+      const index = state.findIndex((item) => item.id === id);
+      if (index === -1) return;
+      const newQty = state[index].quantity + quantityChange;
+      if (newQty <= 0) {
+        state.splice(index, 1);
+      } else {
+        state[index].quantity = newQty;
+        state[index].price = newQty * state[index].pricePerQuantity;
       }
     },
 
