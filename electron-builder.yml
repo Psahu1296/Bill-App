@@ -49,6 +49,9 @@ extraResources:
 # GitHub Secrets (or env). When absent the build still succeeds but shows the
 # SmartScreen "Unknown Publisher" warning. With an OV/EV cert it is suppressed.
 win:
+  # artifactName uses dots so the generated latest.yml and the GitHub download
+  # URL always match (GitHub converts spaces → dots in asset filenames).
+  artifactName: "Dhaba.POS.Setup.${version}.${ext}"
   target:
     - target: nsis
       arch:
@@ -74,6 +77,9 @@ nsis:
 
 # ── macOS installer ────────────────────────────────────────────────────────────
 mac:
+  # artifactName uses dots — matches the GitHub asset URL after space→dot conversion.
+  # ${arch} is always included so x64 and arm64 have distinct, predictable names.
+  artifactName: "Dhaba.POS-${version}-${arch}.${ext}"
   target:
     - target: dmg
       arch:
@@ -83,6 +89,7 @@ mac:
 
 # ── Linux installer ────────────────────────────────────────────────────────────
 linux:
+  artifactName: "Dhaba.POS-${version}-${arch}.${ext}"
   target:
     - target: AppImage
       arch:
