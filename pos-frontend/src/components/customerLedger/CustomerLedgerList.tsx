@@ -4,6 +4,7 @@ import { getAllCustomerLedgers, recordCustomerPayment } from "../../https";
 import { enqueueSnackbar } from "notistack";
 import { motion, AnimatePresence } from "framer-motion";
 import PaymentModal from "./PaymentModal";
+import SettleOrdersModal from "./SettleOrdersModal";
 import BottomNav from "../shared/BottomNav";
 import { FaSearch, FaChevronDown, FaChevronUp, FaWallet, FaUsers } from "react-icons/fa";
 import type { CustomerLedger, LedgerTransaction } from "../../types";
@@ -38,6 +39,8 @@ const CustomerLedgerList: React.FC = () => {
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [customerToPay, setCustomerToPay] = useState<CustomerLedger | null>(null);
+  const [settleModalOpen, setSettleModalOpen] = useState(false);
+  const [customerToSettle, setCustomerToSettle] = useState<CustomerLedger | null>(null);
 
   const { data: customersRes, isLoading, isError, error } = useQuery({
     queryKey: ["customerLedgers", showAll],
@@ -213,14 +216,22 @@ const CustomerLedgerList: React.FC = () => {
                     </p>
                   </div>
 
-                  {/* Pay button */}
+                  {/* Pay / Settle buttons */}
                   {customer.balanceDue > 0 && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleOpenPaymentModal(customer); }}
-                      className="shrink-0 px-4 py-1.5 rounded-xl bg-gradient-warm text-dhaba-bg text-xs font-bold hover:shadow-glow transition-all"
-                    >
-                      Pay
-                    </button>
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleOpenPaymentModal(customer); }}
+                        className="px-4 py-1.5 rounded-xl bg-gradient-warm text-dhaba-bg text-xs font-bold hover:shadow-glow transition-all"
+                      >
+                        Pay
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setCustomerToSettle(customer); setSettleModalOpen(true); }}
+                        className="px-3 py-1.5 rounded-xl bg-dhaba-accent/10 text-dhaba-accent border border-dhaba-accent/20 text-xs font-bold hover:bg-dhaba-accent/20 transition-all"
+                      >
+                        Settle Orders
+                      </button>
+                    </div>
                   )}
 
                   {/* Expand chevron */}
@@ -313,6 +324,11 @@ const CustomerLedgerList: React.FC = () => {
         onClose={() => { setPaymentModalOpen(false); setCustomerToPay(null); }}
         customer={customerToPay}
         recordPaymentMutation={recordPaymentMutation}
+      />
+      <SettleOrdersModal
+        isOpen={settleModalOpen}
+        onClose={() => { setSettleModalOpen(false); setCustomerToSettle(null); }}
+        customer={customerToSettle}
       />
       <BottomNav />
     </div>

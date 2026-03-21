@@ -159,3 +159,19 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--dhaba-muted));
 }
+
+/* ── Print styles ─────────────────────────────────────────────────────────── */
+@media print {
+  /* Hide the entire React app */
+  body > #root { display: none !important; }
+
+  /* Show only the bill */
+  #bill-print-root { display: block !important; }
+
+  @page {
+    margin: 8mm 10mm;
+    /* 80mm = standard thermal/receipt printer width.
+       Change to "A4 portrait" if printing on regular paper. */
+    size: 80mm auto;
+  }
+}

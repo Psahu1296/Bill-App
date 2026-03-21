@@ -65,7 +65,7 @@ export const dummyOrders: Order[] = [
       { id: "dish_1", name: "Paneer Butter Masala", variantSize: "Full", pricePerQuantity: 250, quantity: 1, price: 250 },
       { id: "dish_3", name: "Garlic Naan", variantSize: "Standard", pricePerQuantity: 40, quantity: 3, price: 120 }
     ],
-    bills: { total: 370, tax: 19.42, totalWithTax: 389.42 },
+    bills: { total: 370, totalWithTax: 370 },
     orderStatus: "In Progress",
     paymentStatus: "Pending",
     paymentMethod: "Cash",
@@ -80,7 +80,7 @@ export const dummyOrders: Order[] = [
     items: [
       { id: "dish_2", name: "Chicken Tikka Masala", variantSize: "Full", pricePerQuantity: 350, quantity: 2, price: 700 }
     ],
-    bills: { total: 700, tax: 36.75, totalWithTax: 736.75 },
+    bills: { total: 700, totalWithTax: 700 },
     orderStatus: "Completed",
     paymentStatus: "Paid",
     paymentMethod: "Online",

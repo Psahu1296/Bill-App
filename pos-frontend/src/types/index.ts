@@ -52,7 +52,7 @@ export interface OrderCustomerDetails {
 
 export interface OrderBills {
   total: number;
-  tax: number;
+  tax?: number;          // optional — tax removed from new orders; kept for legacy DB records
   discount?: number;
   roundOff?: number;
   totalWithTax: number;

@@ -1,7 +1,8 @@
-import React, { useRef } from "react";
+import React from "react";
 import { motion } from "framer-motion";
 import { FaCheck } from "react-icons/fa6";
 import type { Order } from "../../types";
+import { printBill } from "../../utils/printBill";
 
 interface InvoiceProps {
   orderInfo: Order;
@@ -9,41 +10,12 @@ interface InvoiceProps {
 }
 
 const Invoice: React.FC<InvoiceProps> = ({ orderInfo, setShowInvoice }) => {
-  const invoiceRef = useRef<HTMLDivElement>(null);
-
-  const handlePrint = () => {
-    if (!invoiceRef.current) return;
-    const printContent = invoiceRef.current.innerHTML;
-    const WinPrint = window.open("", "", "width=900,height=650");
-    if (!WinPrint) return;
-
-    WinPrint.document.write(`
-      <html>
-        <head>
-          <title>Order Receipt</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 20px; }
-            .receipt-container { width: 300px; border: 1px solid #ddd; padding: 10px; }
-            h2 { text-align: center; }
-          </style>
-        </head>
-        <body>
-          ${printContent}
-        </body>
-      </html>
-    `);
-    WinPrint.document.close();
-    WinPrint.focus();
-    setTimeout(() => {
-      WinPrint.print();
-      WinPrint.close();
-    }, 1000);
-  };
+  const handlePrint = () => printBill(orderInfo);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
       <div className="bg-white p-4 rounded-lg shadow-lg w-[400px]">
-        <div ref={invoiceRef} className="p-4">
+        <div className="p-4">
           <div className="flex justify-center mb-4">
             <motion.div
               initial={{ scale: 0, opacity: 0 }}
@@ -101,11 +73,6 @@ const Invoice: React.FC<InvoiceProps> = ({ orderInfo, setShowInvoice }) => {
             <p>
               <strong>Subtotal:</strong> ₹{orderInfo.bills.total.toFixed(2)}
             </p>
-            {orderInfo.bills.tax > 0 && (
-              <p>
-                <strong>Tax (5.25%):</strong> ₹{orderInfo.bills.tax.toFixed(2)}
-              </p>
-            )}
             {orderInfo.bills.discount ? (
               <p>
                 <strong>Discount:</strong> -₹{orderInfo.bills.discount.toFixed(2)}

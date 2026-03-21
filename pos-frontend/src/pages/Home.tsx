@@ -5,7 +5,7 @@ import RecentOrders from "../components/home/RecentOrders";
 import PopularDishes from "../components/home/PopularDishes";
 import NewOrderModal from "../components/home/NewOrderModal";
 import QuickConsumableModal from "../components/home/QuickConsumableModal";
-import { getDailyEarnings, getOrders } from "../https";
+import { getDailyEarnings, getOrders, getAllExpenses } from "../https";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { enqueueSnackbar } from "notistack";
@@ -58,9 +58,17 @@ const Home: React.FC = () => {
     if (isError) enqueueSnackbar("Failed to load earnings data", { variant: "error" });
   }, [isError]);
 
+  const { data: todayExpensesRes } = useQuery({
+    queryKey: ["expenses", "today"],
+    queryFn: () => getAllExpenses({ startDate: todayStr, endDate: todayStr }),
+    placeholderData: keepPreviousData,
+  });
+
   const earningsData = earningsRes?.data?.data as { todayEarning?: number; percentageChange?: number } | undefined;
   const earnings = Math.floor(Number(earningsData?.todayEarning ?? 0));
   const earningPct = earningsData?.percentageChange ?? 0;
+  const todayExpenses = Math.floor(Number((todayExpensesRes?.data as { total?: number })?.total ?? 0));
+  const netEarnings = earnings - todayExpenses;
 
   const todayOrders: Order[] = useMemo(() => (todayOrdersRes?.data?.data as Order[]) ?? [], [todayOrdersRes]);
   const yesterdayOrders: Order[] = useMemo(() => (yesterdayOrdersRes?.data?.data as Order[]) ?? [], [yesterdayOrdersRes]);
@@ -135,6 +143,17 @@ const Home: React.FC = () => {
                 </div>
               </div>
               <p className={`font-display text-3xl font-bold ${color}`}>{value}</p>
+              {label === "Today's Revenue" && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-dhaba-danger/15 text-dhaba-danger text-[10px] font-bold">
+                    <FaArrowDown className="text-[8px]" />
+                    ₹{todayExpenses.toLocaleString("en-IN")}
+                  </span>
+                  <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${netEarnings >= 0 ? "bg-yellow-400/15 text-yellow-400" : "bg-dhaba-danger/15 text-dhaba-danger"}`}>
+                    Net ₹{netEarnings.toLocaleString("en-IN")}
+                  </span>
+                </div>
+              )}
               {pct !== null && (
                 <div className="flex items-center gap-1.5">
                   <span className={`flex items-center gap-0.5 text-xs font-bold px-2 py-0.5 rounded-full

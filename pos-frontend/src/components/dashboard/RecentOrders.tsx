@@ -44,7 +44,6 @@ const RecentOrders: React.FC = () => {
     ${order.items.map(i => `<div class="row"><span>${i.name} x${i.quantity}</span><span>&#x20B9;${i.price.toFixed(2)}</span></div>`).join("")}
     <hr class="divider">
     <div class="row"><span>Subtotal</span><span>&#x20B9;${order.bills.total.toFixed(2)}</span></div>
-    <div class="row"><span>Tax (5.25%)</span><span>&#x20B9;${order.bills.tax.toFixed(2)}</span></div>
     <div class="row total"><span>Total</span><span>&#x20B9;${order.bills.totalWithTax.toFixed(2)}</span></div>
     <hr class="divider">
     <div class="row"><span>Paid (${order.paymentMethod})</span><span>&#x20B9;${(order.amountPaid || 0).toFixed(2)}</span></div>

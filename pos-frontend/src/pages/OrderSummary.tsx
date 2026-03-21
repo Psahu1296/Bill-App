@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { getOrderById } from "../https";
@@ -9,48 +9,15 @@ import type { Order } from "../types";
 import { getAvatarName } from "../utils";
 import PayRemainingModal from "../components/orders/PayRemainingModal";
 import { IoPrintOutline } from "react-icons/io5";
+import { printBill } from "../utils/printBill";
 
 const OrderSummary: React.FC = () => {
   const [searchParams] = useSearchParams();
   const orderId = searchParams.get("orderId");
   const navigate = useNavigate();
   const [isPayModalOpen, setIsPayModalOpen] = React.useState(false);
-  const invoiceRef = useRef<HTMLDivElement>(null);
 
-  const handlePrint = (order: Order) => {
-    const WinPrint = window.open("", "", "width=500,height=750");
-    if (!WinPrint) return;
-    WinPrint.document.write(`<!DOCTYPE html><html><head><title>Receipt #${order._id.slice(-6)}</title>
-    <style>
-      body { font-family: Arial, sans-serif; padding: 24px; max-width: 400px; margin: auto; color: #222; }
-      h2 { text-align:center; font-size: 1.3rem; margin-bottom: 4px; }
-      p { margin: 2px 0; font-size: 0.85rem; }
-      .row { display: flex; justify-content: space-between; }
-      .divider { border: none; border-top: 1px dashed #999; margin: 8px 0; }
-      .total { font-size: 1.1rem; font-weight: bold; }
-      .footer { text-align: center; margin-top: 16px; font-size: 0.8rem; color: #888; }
-    </style></head><body>
-    <h2>&#x1F372; Dhaba POS</h2><p style="text-align:center;color:#888;">Order Receipt</p>
-    <hr class="divider">
-    <p>Order #: <strong>${order._id.slice(-6)}</strong></p>
-    <p>Name: <strong>${order.customerDetails.name}</strong></p>
-    <p>Phone: ${order.customerDetails.phone}</p>
-    <p>Table: T-${order.table?.tableNo || "N/A"} &nbsp;|&nbsp; Guests: ${order.customerDetails.guests}</p>
-    <hr class="divider">
-    <p><strong>Items</strong></p>
-    ${order.items.map(i => `<div class="row"><span>${i.name} (${i.variantSize}) x${i.quantity}</span><span>&#x20B9;${i.price.toFixed(2)}</span></div>`).join("")}
-    <hr class="divider">
-    <div class="row"><span>Subtotal</span><span>&#x20B9;${order.bills.total.toFixed(2)}</span></div>
-    <div class="row"><span>Tax (5.25%)</span><span>&#x20B9;${order.bills.tax.toFixed(2)}</span></div>
-    <div class="row total"><span>Total</span><span>&#x20B9;${order.bills.totalWithTax.toFixed(2)}</span></div>
-    <hr class="divider">
-    <div class="row"><span>Paid (${order.paymentMethod})</span><span>&#x20B9;${(order.amountPaid || 0).toFixed(2)}</span></div>
-    <div class="footer">Thank you for dining with us! &#x2764;</div>
-    </body></html>`);
-    WinPrint.document.close();
-    WinPrint.focus();
-    setTimeout(() => { WinPrint.print(); WinPrint.close(); }, 600);
-  };
+  const handlePrint = (order: Order) => printBill(order);
 
   useEffect(() => {
     document.title = "POS | Order Summary";
@@ -137,10 +104,18 @@ const OrderSummary: React.FC = () => {
               <p>Subtotal</p>
               <p className="font-semibold text-dhaba-text">₹{order.bills.total.toFixed(2)}</p>
             </div>
-            <div className="flex justify-between text-dhaba-muted text-sm">
-              <p>Tax (5.25%)</p>
-              <p className="font-semibold text-dhaba-text">₹{order.bills.tax.toFixed(2)}</p>
-            </div>
+            {!!order.bills.discount && (
+              <div className="flex justify-between text-dhaba-muted text-sm">
+                <p>Discount</p>
+                <p className="font-semibold text-red-400">-₹{order.bills.discount.toFixed(2)}</p>
+              </div>
+            )}
+            {!!order.bills.roundOff && (
+              <div className="flex justify-between text-dhaba-muted text-sm">
+                <p>Round Off</p>
+                <p className="font-semibold text-dhaba-text">{order.bills.roundOff > 0 ? "+" : ""}₹{order.bills.roundOff.toFixed(2)}</p>
+              </div>
+            )}
             <div className="flex justify-between pt-4 border-t border-dhaba-border/20">
               <p className="text-dhaba-text font-bold uppercase tracking-wider text-sm">Total Bill</p>
               <p className="font-display text-2xl font-bold text-dhaba-text">₹{order.bills.totalWithTax.toFixed(2)}</p>
@@ -157,21 +132,22 @@ const OrderSummary: React.FC = () => {
             )}
           </div>
 
-          {balanceDue > 0 ? (
-            <button
-              onClick={() => setIsPayModalOpen(true)}
-              className="w-full mt-8 btn-accent rounded-xl py-4 font-bold text-base shadow-glow-lg focus:outline-none"
-            >
-              Pay Remaining Balance
-            </button>
-          ) : (
+          <div className="space-y-3 mt-8">
+            {balanceDue > 0 && (
+              <button
+                onClick={() => setIsPayModalOpen(true)}
+                className="w-full btn-accent rounded-xl py-4 font-bold text-base shadow-glow-lg focus:outline-none"
+              >
+                Pay Remaining Balance
+              </button>
+            )}
             <button
               onClick={() => handlePrint(order)}
-              className="w-full mt-8 flex items-center justify-center gap-2 py-4 rounded-xl bg-dhaba-success/10 text-dhaba-success font-bold text-base border border-dhaba-success/20 hover:bg-dhaba-success/20 transition-colors"
+              className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-dhaba-success/10 text-dhaba-success font-bold text-base border border-dhaba-success/20 hover:bg-dhaba-success/20 transition-colors"
             >
               <IoPrintOutline className="text-xl" /> Print Invoice
             </button>
-          )}
+          </div>
         </div>
       </div>
       <BottomNav />
