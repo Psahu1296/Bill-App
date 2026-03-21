@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaTimes, FaUtensils, FaPlus, FaTrash } from "react-icons/fa";
+import { FaTimes, FaUtensils, FaPlus, FaMinus, FaTrash } from "react-icons/fa";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { enqueueSnackbar } from "notistack";
 import { useForm, useFieldArray } from "react-hook-form";
@@ -44,6 +44,8 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
     reset,
     control,
     watch,
+    getValues,
+    setValue,
     formState: { errors, isSubmitting: isFormSubmitting },
   } = useForm<DishFormData>({
     defaultValues: {
@@ -264,17 +266,39 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
                           )}
                         </div>
                         <div>
-                          <input
-                            type="number"
-                            step="0.01"
-                            {...register(`variants.${index}.price`, {
-                              required: "Required",
-                              min: { value: 0, message: "≥ 0" },
-                              valueAsNumber: true,
-                            })}
-                            className="w-full glass-input rounded-lg px-3 py-2 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50"
-                            placeholder="0.00"
-                          />
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              step="1"
+                              {...register(`variants.${index}.price`, {
+                                required: "Required",
+                                min: { value: 0, message: "≥ 0" },
+                                valueAsNumber: true,
+                              })}
+                              className="w-full glass-input rounded-lg px-3 py-2 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50"
+                              placeholder="0"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const cur = Number(getValues(`variants.${index}.price`)) || 0;
+                                setValue(`variants.${index}.price`, Math.max(0, cur - 10), { shouldValidate: true });
+                              }}
+                              className="shrink-0 px-2 py-2 rounded-lg bg-dhaba-surface border border-dhaba-border/30 text-dhaba-muted text-xs font-bold hover:text-dhaba-danger hover:border-dhaba-danger/30 transition-colors flex items-center gap-0.5"
+                            >
+                              <FaMinus size={8} />10
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const cur = Number(getValues(`variants.${index}.price`)) || 0;
+                                setValue(`variants.${index}.price`, cur + 10, { shouldValidate: true });
+                              }}
+                              className="shrink-0 px-2 py-2 rounded-lg bg-dhaba-accent/10 text-dhaba-accent text-xs font-bold hover:bg-dhaba-accent/20 transition-colors flex items-center gap-0.5"
+                            >
+                              <FaPlus size={8} />10
+                            </button>
+                          </div>
                           {errors.variants?.[index]?.price && (
                             <p className="text-dhaba-danger text-[10px] mt-0.5">{errors.variants[index]?.price?.message}</p>
                           )}

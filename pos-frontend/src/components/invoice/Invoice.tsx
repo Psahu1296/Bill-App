@@ -101,9 +101,21 @@ const Invoice: React.FC<InvoiceProps> = ({ orderInfo, setShowInvoice }) => {
             <p>
               <strong>Subtotal:</strong> ₹{orderInfo.bills.total.toFixed(2)}
             </p>
-            <p>
-              <strong>Tax:</strong> ₹{orderInfo.bills.tax.toFixed(2)}
-            </p>
+            {orderInfo.bills.tax > 0 && (
+              <p>
+                <strong>Tax (5.25%):</strong> ₹{orderInfo.bills.tax.toFixed(2)}
+              </p>
+            )}
+            {orderInfo.bills.discount ? (
+              <p>
+                <strong>Discount:</strong> -₹{orderInfo.bills.discount.toFixed(2)}
+              </p>
+            ) : null}
+            {orderInfo.bills.roundOff ? (
+              <p>
+                <strong>Round Off:</strong> {orderInfo.bills.roundOff > 0 ? "+" : ""}₹{orderInfo.bills.roundOff.toFixed(2)}
+              </p>
+            ) : null}
             <p className="text-md font-semibold">
               <strong>Grand Total:</strong> ₹
               {orderInfo.bills.totalWithTax.toFixed(2)}

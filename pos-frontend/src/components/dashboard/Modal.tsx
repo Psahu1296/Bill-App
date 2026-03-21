@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaTimes } from "react-icons/fa";
 import { MdTableRestaurant } from "react-icons/md";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { addTable, getTables } from "../../https";
 import { enqueueSnackbar } from "notistack";
 import type { Table } from "../../types";
@@ -12,6 +12,7 @@ interface ModalProps {
 }
 
 const Modal: React.FC<ModalProps> = ({ setIsTableModalOpen }) => {
+  const queryClient = useQueryClient();
   const [tableData, setTableData] = useState({ tableNo: "", seats: "4" });
 
   const { data: tablesRes } = useQuery({
@@ -44,6 +45,7 @@ const Modal: React.FC<ModalProps> = ({ setIsTableModalOpen }) => {
     mutationFn: (reqData: { tableNo: string; seats: string }) => addTable(reqData),
     onSuccess: (res) => {
       enqueueSnackbar((res.data as { message: string }).message, { variant: "success" });
+      queryClient.invalidateQueries({ queryKey: ["tables"] });
       setIsTableModalOpen();
     },
     onError: (error: { response?: { data?: { message?: string } } }) => {

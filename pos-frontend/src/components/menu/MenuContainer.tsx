@@ -1,11 +1,13 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getDishes, seedDefaultDishes } from "../../https";
 import MenuItem from "./MenuItem";
-import { FaSearch, FaLeaf, FaDrumstickBite, FaUtensils, FaFire } from "react-icons/fa";
+import { FaSearch, FaLeaf, FaDrumstickBite, FaUtensils, FaFire, FaCoffee, FaPlus } from "react-icons/fa";
 import { GiWheat, GiRiceCooker, GiCookingPot } from "react-icons/gi";
 import { MdFastfood, MdLocalDrink } from "react-icons/md";
 import type { Dish } from "../../types";
+import { useAppDispatch } from "../../redux/hooks";
+import { addItems } from "../../redux/slices/cartSlice";
 
 const typeFilters = [
   { key: "all", label: "All", icon: <MdFastfood /> },
@@ -19,14 +21,47 @@ const categoryFilters = [
   { key: "roti", label: "Roti", icon: <GiWheat /> },
   { key: "sabji", label: "Sabji", icon: <GiCookingPot /> },
   { key: "drinks", label: "Drinks", icon: <MdLocalDrink /> },
+  { key: "consumable", label: "Consumable", icon: <FaCoffee /> },
 ];
 
 const MenuContainer: React.FC = () => {
+  const dispatch = useAppDispatch();
   const [searchTerm, setSearchTerm] = useState("");
   const [activeType, setActiveType] = useState("all");
   const [activeCategory, setActiveCategory] = useState("all");
   const [availableOnly, setAvailableOnly] = useState(false);
   const [frequentOnly, setFrequentOnly] = useState(false);
+
+  // Custom item popover
+  const [showCustom, setShowCustom] = useState(false);
+  const [customName, setCustomName] = useState("");
+  const [customPrice, setCustomPrice] = useState("");
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showCustom) return;
+    const handleClick = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setShowCustom(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showCustom]);
+
+  const handleAddCustom = () => {
+    const price = parseFloat(customPrice);
+    if (!customName.trim() || isNaN(price) || price <= 0) return;
+    dispatch(addItems({
+      id: `custom-${Date.now()}`,
+      name: customName.trim(),
+      pricePerQuantity: price,
+      quantity: 1,
+    }));
+    setCustomName("");
+    setCustomPrice("");
+    setShowCustom(false);
+  };
 
   const queryClient = useQueryClient();
 
@@ -44,7 +79,6 @@ const MenuContainer: React.FC = () => {
 
   const allDishes: Dish[] = dishes?.data?.data ?? [];
 
-  // Merge predefined category chips with any extra categories found in BE data
   const dynamicCategories = useMemo(() => {
     const cats = new Set(
       allDishes.map((d) => d.category?.toLowerCase()).filter(Boolean)
@@ -87,7 +121,6 @@ const MenuContainer: React.FC = () => {
     );
   }
 
-  // Empty DB — prompt to load the default menu
   if (allDishes.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
@@ -188,6 +221,48 @@ const MenuContainer: React.FC = () => {
           <FaFire className={frequentOnly ? "text-orange-400" : "text-dhaba-muted"} />
           Frequently Ordered
         </button>
+
+        {/* Custom item */}
+        <div className="relative ml-auto" ref={popoverRef}>
+          <button
+            onClick={() => setShowCustom((v) => !v)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-warm text-dhaba-bg hover:shadow-glow transition-all"
+          >
+            <FaPlus size={10} />
+            Custom Item
+          </button>
+
+          {showCustom && (
+            <div className="absolute right-0 top-full mt-2 z-30 glass-card rounded-2xl p-4 w-64 space-y-3 shadow-lg border border-dhaba-border/30">
+              <p className="text-xs font-bold text-dhaba-muted uppercase tracking-wider">Add Custom Item</p>
+              <input
+                autoFocus
+                type="text"
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddCustom()}
+                placeholder="Item name (e.g. Extra Roti)"
+                className="w-full glass-input rounded-xl px-3 py-2 text-dhaba-text text-sm outline-none placeholder:text-dhaba-muted/50 focus:ring-1 ring-dhaba-accent/50"
+              />
+              <input
+                type="number"
+                value={customPrice}
+                onChange={(e) => setCustomPrice(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddCustom()}
+                placeholder="Price (₹)"
+                min={1}
+                className="w-full glass-input rounded-xl px-3 py-2 text-dhaba-text text-sm outline-none placeholder:text-dhaba-muted/50 focus:ring-1 ring-dhaba-accent/50"
+              />
+              <button
+                onClick={handleAddCustom}
+                disabled={!customName.trim() || !customPrice || parseFloat(customPrice) <= 0}
+                className="w-full py-2 rounded-xl bg-gradient-warm text-dhaba-bg font-bold text-sm hover:shadow-glow transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Add to Cart
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Category filters */}

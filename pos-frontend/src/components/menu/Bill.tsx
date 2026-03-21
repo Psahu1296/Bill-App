@@ -39,8 +39,17 @@ const Bill: React.FC = () => {
   const cartData = useSelector((state: RootState) => state.cart);
   const total = useSelector(getTotalPrice);
   const taxRate = 5.25;
-  const tax = (total * taxRate) / 100;
-  const totalPriceWithTax = total + tax;
+
+  const [taxEnabled, setTaxEnabled] = useState(true);
+  const [discount, setDiscount] = useState(0);
+  const [roundOffEnabled, setRoundOffEnabled] = useState(false);
+
+  const tax = taxEnabled ? (total * taxRate) / 100 : 0;
+  const afterTax = total + tax;
+  const afterDiscount = Math.max(0, afterTax - discount);
+  const roundedTotal = roundOffEnabled ? Math.round(afterDiscount / 10) * 10 : afterDiscount;
+  const roundOff = roundedTotal - afterDiscount;
+  const finalTotal = roundedTotal;
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Cash");
   const [showInvoice, setShowInvoice] = useState(false);
@@ -49,7 +58,13 @@ const Bill: React.FC = () => {
   const buildOrderData = () => ({
     customerDetails: { name: customerData.customerName, phone: customerData.customerPhone, guests: customerData.guests },
     orderStatus: "In Progress" as OrderStatus,
-    bills: { total: Math.floor(total), tax, totalWithTax: Math.floor(totalPriceWithTax) },
+    bills: {
+      total: Math.floor(total),
+      tax,
+      ...(discount > 0 && { discount }),
+      ...(roundOffEnabled && roundOff !== 0 && { roundOff }),
+      totalWithTax: Math.round(finalTotal),
+    },
     items: cartData,
     table: customerData.table?.tableId,
     paymentMethod,
@@ -61,7 +76,7 @@ const Bill: React.FC = () => {
       try {
         const res = await loadScript("https://checkout.razorpay.com/v1/checkout.js");
         if (!res) { enqueueSnackbar("Razorpay SDK failed to load.", { variant: "warning" }); return; }
-        const { data } = await createOrderRazorpay({ amount: totalPriceWithTax });
+        const { data } = await createOrderRazorpay({ amount: finalTotal });
         const options = {
           key: `${import.meta.env.VITE_RAZORPAY_KEY_ID}`,
           amount: (data as { order: { amount: number; currency: string; id: string } }).order.amount,
@@ -122,18 +137,72 @@ const Bill: React.FC = () => {
   return (
     <div className="px-4 py-3 space-y-3">
       <div className="space-y-2">
+        {/* Subtotal */}
         <div className="flex justify-between text-xs">
           <span className="text-dhaba-muted">Items ({cartData.length})</span>
           <span className="text-dhaba-text font-semibold">₹{total.toFixed(2)}</span>
         </div>
-        <div className="flex justify-between text-xs">
-          <span className="text-dhaba-muted">Tax (5.25%)</span>
-          <span className="text-dhaba-text font-semibold">₹{tax.toFixed(2)}</span>
+
+        {/* Tax row with checkbox */}
+        <div className="flex justify-between items-center text-xs">
+          <label className="flex items-center gap-1.5 cursor-pointer select-none text-dhaba-muted">
+            <input
+              type="checkbox"
+              checked={taxEnabled}
+              onChange={(e) => setTaxEnabled(e.target.checked)}
+              className="w-3 h-3 accent-dhaba-accent cursor-pointer"
+            />
+            Tax (5.25%)
+          </label>
+          <span className={`font-semibold ${taxEnabled ? "text-dhaba-text" : "text-dhaba-muted/40 line-through"}`}>
+            ₹{tax.toFixed(2)}
+          </span>
         </div>
+
+        {/* Discount row */}
+        <div className="flex justify-between items-center text-xs">
+          <label className="text-dhaba-muted">Discount (₹)</label>
+          <div className="flex items-center gap-2">
+            {discount > 0 && (
+              <span className="text-red-400 font-semibold">-₹{discount.toFixed(2)}</span>
+            )}
+            <input
+              type="number"
+              min={0}
+              max={afterTax}
+              value={discount === 0 ? "" : discount}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value) || 0;
+                setDiscount(Math.min(val, afterTax));
+              }}
+              placeholder="0"
+              className="w-16 text-right bg-dhaba-surface border border-dhaba-border/30 rounded-lg px-2 py-1 text-dhaba-text text-xs focus:outline-none focus:border-dhaba-accent/50"
+            />
+          </div>
+        </div>
+
+        {/* Round Off row */}
+        <div className="flex justify-between items-center text-xs">
+          <label className="flex items-center gap-1.5 cursor-pointer select-none text-dhaba-muted">
+            <input
+              type="checkbox"
+              checked={roundOffEnabled}
+              onChange={(e) => setRoundOffEnabled(e.target.checked)}
+              className="w-3 h-3 accent-dhaba-accent cursor-pointer"
+            />
+            Round Off
+          </label>
+          {roundOffEnabled && roundOff !== 0 && (
+            <span className={`font-semibold ${roundOff > 0 ? "text-dhaba-success" : "text-red-400"}`}>
+              {roundOff > 0 ? "+" : ""}₹{roundOff.toFixed(2)}
+            </span>
+          )}
+        </div>
+
         <div className="h-px bg-dhaba-border/20" />
         <div className="flex justify-between">
           <span className="text-dhaba-accent text-xs font-bold uppercase tracking-wider">Total</span>
-          <span className="font-display text-lg font-bold text-dhaba-accent">₹{totalPriceWithTax.toFixed(0)}</span>
+          <span className="font-display text-lg font-bold text-dhaba-accent">₹{finalTotal.toFixed(0)}</span>
         </div>
       </div>
 

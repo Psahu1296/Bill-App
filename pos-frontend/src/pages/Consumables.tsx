@@ -8,8 +8,9 @@ import {
   getAllConsumables,
   deleteConsumable,
   getAllStaff,
+  getDishes,
 } from "../https";
-import type { ConsumableEntry, ConsumableType, ConsumerType, StaffMember } from "../types";
+import type { ConsumableEntry, ConsumableType, ConsumerType, StaffMember, Dish } from "../types";
 import type { StaffRole } from "./Staff";
 
 interface DailySummary {
@@ -20,40 +21,55 @@ interface DailySummary {
   wastedValue: number;
 }
 
-// ── Config & Constants ──
-const CONSUMABLE_CONFIG: Record<
-  ConsumableType,
-  { label: string; icon: React.ReactNode; unitPrice: number; unit: string }
-> = {
-  tea: { label: "Tea / Chai", icon: <FaCoffee />, unitPrice: 15, unit: "cup" },
-  gutka: { label: "Gutka / Pouch", icon: <FaBox />, unitPrice: 25, unit: "pouch" },
-  cigarette: { label: "Cigarette", icon: <GiCigarette />, unitPrice: 20, unit: "stick" },
+interface SizeVariant { label: string; price: number; }
+
+interface ConsumableConfig {
+  label: string;
+  icon: React.ReactNode;
+  unit: string;
+  variants: SizeVariant[];
+}
+
+// ── Default config (fallback if no matching dish found) ──
+const DEFAULT_CONSUMABLE_CONFIG: Record<ConsumableType, ConsumableConfig> = {
+  tea: {
+    label: "Tea / Chai", icon: <FaCoffee />, unit: "cup",
+    variants: [{ label: "Regular", price: 10 }, { label: "Large", price: 20 }],
+  },
+  gutka: {
+    label: "Gutka / Pouch", icon: <FaBox />, unit: "pouch",
+    variants: [{ label: "Regular", price: 5 }, { label: "Large", price: 10 }],
+  },
+  cigarette: {
+    label: "Cigarette", icon: <GiCigarette />, unit: "stick",
+    variants: [{ label: "Stick", price: 20 }],
+  },
+};
+
+// Map a dish name → consumable type
+const dishToConsumableType = (dish: Dish): ConsumableType | null => {
+  const n = dish.name.toLowerCase();
+  if (n.includes("tea") || n.includes("chai")) return "tea";
+  if (n.includes("gutka")) return "gutka";
+  if (n.includes("cigarette") || n.includes("cig")) return "cigarette";
+  return null;
 };
 
 const ROLE_EMOJI: Record<StaffRole, string> = {
   cook: "👨‍🍳", supplier: "🚚", owner: "👑", manager: "📋", delivery: "🏍️", other: "👤",
 };
 
-const getSummaryFromEntries = (
-  entries: ConsumableEntry[],
-  type: ConsumableType
-): DailySummary => {
+const getSummaryFromEntries = (entries: ConsumableEntry[], type: ConsumableType): DailySummary => {
   const items = entries.filter((e) => e.type === type);
   const customerItems = items.filter((e) => e.consumerType === "customer");
   const staffItems = items.filter((e) => e.consumerType === "staff");
   const ownerItems = items.filter((e) => e.consumerType === "owner");
-  const staffQty = staffItems.reduce((s, e) => s + e.quantity, 0);
-  const ownerQty = ownerItems.reduce((s, e) => s + e.quantity, 0);
-  const unitPrice = CONSUMABLE_CONFIG[type].unitPrice;
   return {
     totalSold: customerItems.reduce((s, e) => s + e.quantity, 0),
-    totalRevenue: customerItems.reduce(
-      (s, e) => s + e.quantity * e.pricePerUnit,
-      0
-    ),
-    staffConsumed: staffQty,
-    ownerConsumed: ownerQty,
-    wastedValue: (staffQty + ownerQty) * unitPrice,
+    totalRevenue: customerItems.reduce((s, e) => s + e.quantity * e.pricePerUnit, 0),
+    staffConsumed: staffItems.reduce((s, e) => s + e.quantity, 0),
+    ownerConsumed: ownerItems.reduce((s, e) => s + e.quantity, 0),
+    wastedValue: [...staffItems, ...ownerItems].reduce((s, e) => s + e.quantity * e.pricePerUnit, 0),
   };
 };
 
@@ -62,6 +78,7 @@ const Consumables: React.FC = () => {
     document.title = "Dhaba POS | Consumables";
   }, []);
 
+  const [consumableConfig, setConsumableConfig] = useState(DEFAULT_CONSUMABLE_CONFIG);
   const [entries, setEntries] = useState<ConsumableEntry[]>([]);
   const [availableStaff, setAvailableStaff] = useState<StaffMember[]>([]);
   const [activeTab, setActiveTab] = useState<ConsumableType>("tea");
@@ -72,6 +89,7 @@ const Consumables: React.FC = () => {
 
   // ── Form state ──
   const [formQty, setFormQty] = useState(1);
+  const [formVariantIdx, setFormVariantIdx] = useState(0);
   const [formConsumerType, setFormConsumerType] = useState<ConsumerType>("customer");
   const [formName, setFormName] = useState("");
   const [formSelectedStaff, setFormSelectedStaff] = useState<string[]>([]);
@@ -85,8 +103,9 @@ const Consumables: React.FC = () => {
       const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       const res = await getAllConsumables({ date: today });
       setEntries(res.data?.data ?? []);
-    } catch (err: any) {
-      setError(err.response?.data?.message || err.message || "Failed to load consumables.");
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } }; message?: string };
+      setError(e.response?.data?.message || e.message || "Failed to load consumables.");
     } finally {
       setIsLoading(false);
     }
@@ -96,48 +115,81 @@ const Consumables: React.FC = () => {
     fetchEntries();
     getAllStaff({ isActive: "true" })
       .then((res) => setAvailableStaff(res.data?.data ?? []))
-      .catch(() => {});
+      .catch(() => { });
+    // Fetch dishes to update consumable variants/prices
+    getDishes()
+      .then((res) => {
+        const dishes: Dish[] = res.data?.data ?? [];
+        const updated = { ...DEFAULT_CONSUMABLE_CONFIG };
+        for (const dish of dishes) {
+          const type = dishToConsumableType(dish);
+          if (type && dish.variants.length > 0) {
+            updated[type] = {
+              ...updated[type],
+              variants: dish.variants.map((v) => ({ label: v.size, price: v.price })),
+            };
+          }
+        }
+        setConsumableConfig(updated);
+      })
+      .catch(() => { });
   }, [fetchEntries]);
 
-  const config = CONSUMABLE_CONFIG[activeTab];
+  const config = consumableConfig[activeTab];
   const filtered = entries.filter((e) => e.type === activeTab);
   const summary = getSummaryFromEntries(entries, activeTab);
+  const activeVariant = config.variants[formVariantIdx] ?? config.variants[0];
+
+  const handleConsumerTypeSwitch = (ct: ConsumerType) => {
+    setFormConsumerType(ct);
+    setFormName("");
+    setFormSelectedStaff([]);
+  };
 
   const toggleStaffSelection = (staffId: string) => {
-    setFormSelectedStaff(prev =>
-      prev.includes(staffId) ? prev.filter(id => id !== staffId) : [...prev, staffId]
+    setFormSelectedStaff((prev) =>
+      prev.includes(staffId) ? prev.filter((id) => id !== staffId) : [...prev, staffId]
     );
   };
 
+  const resetForm = () => {
+    setFormQty(1);
+    setFormVariantIdx(0);
+    setFormName("");
+    setFormConsumerType("customer");
+    setFormSelectedStaff([]);
+  };
+
+  const canSubmit = formConsumerType === "staff" ? formSelectedStaff.length > 0 : true;
+
   // ── Add Entry ──
   const handleAdd = async () => {
-    if (formQty < 1) return;
-    if (formConsumerType === "staff" && formSelectedStaff.length === 0) return;
-    if (formConsumerType !== "staff" && !formName.trim()) return;
-
+    if (formQty < 1 || !canSubmit) return;
     setIsSubmitting(true);
     try {
-      const consumerName = formConsumerType === "staff"
-        ? formSelectedStaff.map(id => availableStaff.find(s => s._id === id)?.name || "").filter(Boolean).join(", ")
-        : formName.trim();
+      const consumerName =
+        formConsumerType === "staff"
+          ? formSelectedStaff
+            .map((id) => availableStaff.find((s) => s._id === id)?.name || "")
+            .filter(Boolean)
+            .join(", ")
+          : formName.trim() || (formConsumerType === "customer" ? "Walk-in" : "Owner");
 
       await addConsumable({
         type: activeTab,
         quantity: formQty,
-        pricePerUnit: config.unitPrice,
+        pricePerUnit: activeVariant.price,
         consumerType: formConsumerType,
         consumerName,
         staffIds: formConsumerType === "staff" ? formSelectedStaff : undefined,
       });
 
       setShowAddModal(false);
-      setFormQty(1);
-      setFormName("");
-      setFormConsumerType("customer");
-      setFormSelectedStaff([]);
+      resetForm();
       await fetchEntries();
-    } catch (err: any) {
-      setError(err.response?.data?.message || err.message || "Failed to add entry.");
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } }; message?: string };
+      setError(e.response?.data?.message || e.message || "Failed to add entry.");
     } finally {
       setIsSubmitting(false);
     }
@@ -163,9 +215,7 @@ const Consumables: React.FC = () => {
           <div className="flex items-center gap-3">
             <BackButton />
             <div>
-              <h1 className="font-display text-2xl font-bold text-dhaba-text">
-                Consumables Tracker
-              </h1>
+              <h1 className="font-display text-2xl font-bold text-dhaba-text">Consumables Tracker</h1>
               <p className="text-sm text-dhaba-muted">Tea, Gutka & Cigarette — Sales & Consumption</p>
             </div>
           </div>
@@ -179,7 +229,7 @@ const Consumables: React.FC = () => {
               <FiRefreshCw size={15} className={isLoading ? "animate-spin" : ""} />
             </button>
             <button
-              onClick={() => setShowAddModal(true)}
+              onClick={() => { resetForm(); setShowAddModal(true); }}
               className="bg-gradient-warm text-dhaba-bg px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:shadow-glow transition-all"
             >
               <FaPlus /> Add Entry
@@ -198,16 +248,15 @@ const Consumables: React.FC = () => {
         {/* ── Tab Switcher ── */}
         <div className="glass-card rounded-2xl p-1 flex gap-1 mb-6 w-fit">
           {tabs.map((tab) => {
-            const c = CONSUMABLE_CONFIG[tab];
+            const c = consumableConfig[tab];
             return (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center gap-2 ${
-                  activeTab === tab
+                className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center gap-2 ${activeTab === tab
                     ? "bg-dhaba-accent/15 text-dhaba-accent shadow-glow"
                     : "text-dhaba-muted hover:text-dhaba-text hover:bg-dhaba-surface-hover"
-                }`}
+                  }`}
               >
                 {c.icon} {c.label}
               </button>
@@ -227,12 +276,8 @@ const Consumables: React.FC = () => {
         {/* ── Entries Table ── */}
         <div className="glass-card rounded-2xl overflow-hidden">
           <div className="px-6 py-4 border-b border-dhaba-border/20 flex items-center justify-between">
-            <h2 className="font-display text-lg font-bold text-dhaba-text">
-              Today's {config.label} Log
-            </h2>
-            <span className="text-xs text-dhaba-muted">
-              {filtered.length} {filtered.length === 1 ? "entry" : "entries"}
-            </span>
+            <h2 className="font-display text-lg font-bold text-dhaba-text">Today's {config.label} Log</h2>
+            <span className="text-xs text-dhaba-muted">{filtered.length} {filtered.length === 1 ? "entry" : "entries"}</span>
           </div>
           <div className="divide-y divide-dhaba-border/10">
             {isLoading ? (
@@ -245,13 +290,10 @@ const Consumables: React.FC = () => {
               filtered.map((entry) => (
                 <div key={entry._id} className="px-6 py-3.5 flex items-center justify-between hover:bg-dhaba-surface-hover/50 transition-colors">
                   <div className="flex items-center gap-4">
-                    <div className={`h-9 w-9 rounded-xl flex items-center justify-center text-sm font-bold ${
-                      entry.consumerType === "customer"
-                        ? "bg-dhaba-success/15 text-dhaba-success"
-                        : entry.consumerType === "staff"
-                        ? "bg-dhaba-warning/15 text-dhaba-warning"
-                        : "bg-dhaba-accent/15 text-dhaba-accent"
-                    }`}>
+                    <div className={`h-9 w-9 rounded-xl flex items-center justify-center text-sm font-bold ${entry.consumerType === "customer" ? "bg-dhaba-success/15 text-dhaba-success"
+                        : entry.consumerType === "staff" ? "bg-dhaba-warning/15 text-dhaba-warning"
+                          : "bg-dhaba-accent/15 text-dhaba-accent"
+                      }`}>
                       {entry.quantity}
                     </div>
                     <div>
@@ -268,9 +310,7 @@ const Consumables: React.FC = () => {
                       <p className={`text-sm font-bold ${entry.consumerType === "customer" ? "text-dhaba-success" : "text-dhaba-danger"}`}>
                         {entry.consumerType === "customer" ? "+" : "-"}₹{entry.quantity * entry.pricePerUnit}
                       </p>
-                      <p className="text-[10px] text-dhaba-muted uppercase tracking-wider">
-                        {entry.quantity} × ₹{entry.pricePerUnit}
-                      </p>
+                      <p className="text-[10px] text-dhaba-muted uppercase tracking-wider">{entry.quantity} × ₹{entry.pricePerUnit}</p>
                     </div>
                     <button onClick={() => handleDelete(entry._id)} className="p-2 rounded-lg hover:bg-dhaba-danger/10 text-dhaba-muted hover:text-dhaba-danger transition-colors">
                       <FaTrash size={12} />
@@ -298,12 +338,9 @@ const Consumables: React.FC = () => {
                 {(["customer", "staff", "owner"] as ConsumerType[]).map((ct) => (
                   <button
                     key={ct}
-                    onClick={() => { setFormConsumerType(ct); setFormName(""); }}
-                    className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all ${
-                      formConsumerType === ct
-                        ? "bg-dhaba-accent/15 text-dhaba-accent"
-                        : "glass-input text-dhaba-muted hover:text-dhaba-text"
-                    }`}
+                    onClick={() => handleConsumerTypeSwitch(ct)}
+                    className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all ${formConsumerType === ct ? "bg-dhaba-accent/15 text-dhaba-accent" : "glass-input text-dhaba-muted hover:text-dhaba-text"
+                      }`}
                   >
                     {ct === "customer" ? "🛒 Customer" : ct === "staff" ? "👷 Staff" : "👑 Owner"}
                   </button>
@@ -311,31 +348,30 @@ const Consumables: React.FC = () => {
               </div>
             </div>
 
-            {/* Name */}
+            {/* Name / Staff selector */}
             <div>
               <label className="text-xs text-dhaba-muted font-bold tracking-wider uppercase mb-2 block">
-                {formConsumerType === "staff" ? "Select Staff" : "Name"}
+                {formConsumerType === "staff" ? "Select Staff" : formConsumerType === "owner" ? "Owner" : "Name (optional)"}
               </label>
               {formConsumerType === "customer" ? (
                 <input
                   type="text"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  placeholder="Customer name or Order ID"
+                  placeholder="Walk-in"
                   className="glass-input w-full rounded-xl px-4 py-2.5 text-dhaba-text text-sm outline-none placeholder:text-dhaba-muted/50"
                 />
               ) : formConsumerType === "staff" ? (
                 <div className="space-y-2">
                   <div className="flex flex-wrap gap-2">
-                    {availableStaff.filter(s => s.role !== "owner").map((s) => (
+                    {availableStaff.filter((s) => s.role !== "owner").map((s) => (
                       <button
                         key={s._id}
                         onClick={() => toggleStaffSelection(s._id)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                          formSelectedStaff.includes(s._id)
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${formSelectedStaff.includes(s._id)
                             ? "bg-dhaba-accent/20 text-dhaba-accent ring-1 ring-dhaba-accent/40"
                             : "glass-input text-dhaba-muted hover:text-dhaba-text"
-                        }`}
+                          }`}
                       >
                         {ROLE_EMOJI[s.role]} {s.name}
                         {formSelectedStaff.includes(s._id) && <FaTimes size={8} className="ml-1" />}
@@ -343,9 +379,7 @@ const Consumables: React.FC = () => {
                     ))}
                   </div>
                   {formSelectedStaff.length > 0 && (
-                    <p className="text-[10px] text-dhaba-accent font-semibold">
-                      {formSelectedStaff.length} staff selected
-                    </p>
+                    <p className="text-[10px] text-dhaba-accent font-semibold">{formSelectedStaff.length} staff selected</p>
                   )}
                 </div>
               ) : (
@@ -355,11 +389,27 @@ const Consumables: React.FC = () => {
                   className="glass-input w-full rounded-xl px-4 py-2.5 text-dhaba-text text-sm outline-none appearance-none"
                 >
                   <option value="">Select owner</option>
-                  {availableStaff.filter(s => s.role === "owner").map((s) => (
+                  {availableStaff.filter((s) => s.role === "owner").map((s) => (
                     <option key={s._id} value={s.name}>{s.name}</option>
                   ))}
                 </select>
               )}
+            </div>
+
+            {/* Size variant dropdown */}
+            <div>
+              <label className="text-xs text-dhaba-muted font-bold tracking-wider uppercase mb-2 block">Size</label>
+              <select
+                value={formVariantIdx}
+                onChange={(e) => setFormVariantIdx(Number(e.target.value))}
+                className="glass-input w-full rounded-xl px-4 py-2.5 text-dhaba-text text-sm outline-none appearance-none focus:ring-1 ring-dhaba-accent/50"
+              >
+                {config.variants.map((v, i) => (
+                  <option key={v.label} value={i} className="bg-dhaba-surface text-dhaba-text">
+                    {v.label} — ₹{v.price}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Quantity */}
@@ -376,9 +426,11 @@ const Consumables: React.FC = () => {
 
             {/* Price Preview */}
             <div className="glass-card rounded-xl p-4 flex justify-between items-center">
-              <span className="text-dhaba-muted text-sm font-medium">Total Value</span>
+              <span className="text-dhaba-muted text-sm font-medium">
+                {activeVariant.label} × {formQty} @ ₹{activeVariant.price}
+              </span>
               <span className={`font-display text-xl font-bold ${formConsumerType === "customer" ? "text-dhaba-success" : "text-dhaba-danger"}`}>
-                {formConsumerType === "customer" ? "+" : "-"}₹{formQty * config.unitPrice}
+                {formConsumerType === "customer" ? "+" : "-"}₹{formQty * activeVariant.price}
               </span>
             </div>
 
@@ -392,7 +444,7 @@ const Consumables: React.FC = () => {
               </button>
               <button
                 onClick={handleAdd}
-                disabled={isSubmitting || (formConsumerType === 'staff' ? formSelectedStaff.length === 0 : !formName.trim()) || formQty < 1}
+                disabled={isSubmitting || !canSubmit || formQty < 1}
                 className="flex-1 bg-gradient-warm text-dhaba-bg rounded-xl py-2.5 font-bold text-sm hover:shadow-glow transition-all disabled:opacity-60 flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (
@@ -400,9 +452,7 @@ const Consumables: React.FC = () => {
                     <div className="w-4 h-4 border-2 border-dhaba-bg border-t-transparent rounded-full animate-spin" />
                     Saving…
                   </>
-                ) : (
-                  "Add Entry"
-                )}
+                ) : "Add Entry"}
               </button>
             </div>
           </div>

@@ -3,9 +3,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { FaTimes, FaCoffee, FaBox, FaMinus, FaPlus } from "react-icons/fa";
 import { GiCigarette } from "react-icons/gi";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { addConsumable, getAllStaff } from "../../https";
+import { addConsumable, getAllStaff, getDishes } from "../../https";
 import { enqueueSnackbar } from "notistack";
-import type { ConsumableType, ConsumerType, StaffMember } from "../../types";
+import type { ConsumableType, ConsumerType, StaffMember, Dish } from "../../types";
 
 interface QuickConsumableModalProps {
   onClose: () => void;
@@ -24,15 +24,14 @@ interface TypeConfig {
   variants: SizeVariant[];
 }
 
-const TYPES: TypeConfig[] = [
+const DEFAULT_TYPES: TypeConfig[] = [
   {
     key: "tea",
     label: "Tea / Chai",
     icon: <FaCoffee />,
     unit: "cup",
     variants: [
-      { label: "Cutting", price: 10 },
-      { label: "Regular", price: 15 },
+      { label: "Regular", price: 10 },
       { label: "Large",   price: 20 },
     ],
   },
@@ -49,12 +48,19 @@ const TYPES: TypeConfig[] = [
     icon: <FaBox />,
     unit: "pouch",
     variants: [
-      { label: "Small",   price: 20 },
-      { label: "Regular", price: 25 },
-      { label: "Large",   price: 30 },
+      { label: "Regular", price: 5 },
+      { label: "Large",   price: 10 },
     ],
   },
 ];
+
+const dishToType = (dish: Dish): ConsumableType | null => {
+  const n = dish.name.toLowerCase();
+  if (n.includes("tea") || n.includes("chai")) return "tea";
+  if (n.includes("gutka")) return "gutka";
+  if (n.includes("cigarette") || n.includes("cig")) return "cigarette";
+  return null;
+};
 
 const CONSUMERS: { key: ConsumerType; label: string }[] = [
   { key: "customer", label: "Customer" },
@@ -69,6 +75,7 @@ const CHIP_OFF  = "bg-dhaba-surface border-dhaba-border/20 text-dhaba-muted hove
 const QuickConsumableModal: React.FC<QuickConsumableModalProps> = ({ onClose }) => {
   const queryClient = useQueryClient();
 
+  const [types,         setTypes]         = useState<TypeConfig[]>(DEFAULT_TYPES);
   const [type,          setType]          = useState<ConsumableType>("tea");
   const [consumerType,  setConsumerType]  = useState<ConsumerType>("customer");
   const [qty,           setQty]           = useState(1);
@@ -87,9 +94,23 @@ const QuickConsumableModal: React.FC<QuickConsumableModalProps> = ({ onClose }) 
     getAllStaff({ isActive: "true" })
       .then((res) => setAllStaff(res.data?.data ?? []))
       .catch(() => {});
+    getDishes()
+      .then((res) => {
+        const dishes: Dish[] = res.data?.data ?? [];
+        setTypes((prev) =>
+          prev.map((cfg) => {
+            const match = dishes.find((d) => dishToType(d) === cfg.key);
+            if (match && match.variants.length > 0) {
+              return { ...cfg, variants: match.variants.map((v) => ({ label: v.size, price: v.price })) };
+            }
+            return cfg;
+          })
+        );
+      })
+      .catch(() => {});
   }, []);
 
-  const selected      = TYPES.find((t) => t.key === type)!;
+  const selected      = types.find((t) => t.key === type)!;
   const activeVariant = selected.variants[variantIdx] ?? selected.variants[0];
 
   const staffList = allStaff.filter((s) => s.role !== "owner");
@@ -173,7 +194,7 @@ const QuickConsumableModal: React.FC<QuickConsumableModalProps> = ({ onClose }) 
           <div className="px-5 py-4 space-y-4">
             {/* Type picker */}
             <div className="grid grid-cols-3 gap-2">
-              {TYPES.map(({ key, label, icon }) => (
+              {types.map(({ key, label, icon }) => (
                 <button
                   key={key}
                   onClick={() => handleTypeSwitch(key)}
@@ -186,21 +207,21 @@ const QuickConsumableModal: React.FC<QuickConsumableModalProps> = ({ onClose }) 
               ))}
             </div>
 
-            {/* Size variants */}
-            {selected.variants.length > 1 && (
-              <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${selected.variants.length}, 1fr)` }}>
+            {/* Size variant dropdown */}
+            <div>
+              <p className="text-[10px] text-dhaba-muted uppercase tracking-wider font-bold mb-1.5">Size</p>
+              <select
+                value={variantIdx}
+                onChange={(e) => setVariantIdx(Number(e.target.value))}
+                className="w-full bg-dhaba-surface border border-dhaba-border/20 rounded-xl px-4 py-2.5 text-dhaba-text text-sm outline-none appearance-none focus:border-dhaba-accent/40 transition-colors"
+              >
                 {selected.variants.map((v, i) => (
-                  <button
-                    key={v.label}
-                    onClick={() => setVariantIdx(i)}
-                    className={`${CHIP_BASE} ${variantIdx === i ? CHIP_ON : CHIP_OFF}`}
-                  >
-                    <span className="font-bold">{v.label}</span>
-                    <span className="text-[10px] opacity-70">₹{v.price}</span>
-                  </button>
+                  <option key={v.label} value={i} className="bg-dhaba-surface text-dhaba-text">
+                    {v.label} — ₹{v.price}
+                  </option>
                 ))}
-              </div>
-            )}
+              </select>
+            </div>
 
             {/* Consumer type */}
             <div className="grid grid-cols-3 gap-2">

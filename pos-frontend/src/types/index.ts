@@ -53,6 +53,8 @@ export interface OrderCustomerDetails {
 export interface OrderBills {
   total: number;
   tax: number;
+  discount?: number;
+  roundOff?: number;
   totalWithTax: number;
 }
 

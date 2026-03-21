@@ -43,7 +43,7 @@ const MenuItem: React.FC<MenuItemProps> = ({ item }) => {
   return (
     <div
       onClick={handleAddToCart}
-      className={`glass-card rounded-2xl p-4 min-w-[260px] h-[180px] flex flex-col justify-between transition-all duration-200 hover:shadow-glow hover:-translate-y-0.5 cursor-pointer active:scale-[0.98] ${!item.isAvailable ? "opacity-40 pointer-events-none" : ""}`}
+      className={`glass-card rounded-2xl p-4 min-w-[260px] h-[180px] flex flex-col justify-between transition-all duration-200 hover:shadow-glow hover:-translate-y-0.5 cursor-pointer active:scale-[0.98] ${!item.isAvailable ? "opacity-40 pointer-events-none" : ""} ${item.type === "non-veg" ? "bg-red-500/10 border border-red-500/30" : ""}`}
     >
       <div className="flex items-start justify-between">
         <h3 className="text-dhaba-text font-semibold text-sm">{item.name}</h3>
