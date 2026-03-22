@@ -2,6 +2,7 @@ import React from "react";
 import { FaEdit, FaTrash, FaFire } from "react-icons/fa";
 import { Img } from "react-image";
 import type { Dish } from "../../types";
+import { getDishImage } from "../../utils";
 
 const CATEGORY_BADGE: Record<string, { bg: string; dot: string; label: string }> = {
   veg: { bg: "bg-dhaba-success/15 text-dhaba-success", dot: "bg-dhaba-success", label: "VEG" },
@@ -23,7 +24,10 @@ const DishCard: React.FC<DishCardProps> = ({ dish, onEdit, onDelete }) => {
       {/* Image */}
       <div className="relative h-40 overflow-hidden">
         <Img
-          src={[dish.image, "https://via.placeholder.com/300x200?text=No+Image"]}
+          src={[
+            getDishImage(dish.name, dish.image),
+            "https://via.placeholder.com/300x200?text=No+Image"
+          ].filter(Boolean) as string[]}
           alt={dish.name}
           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
           loader={<div className="w-full h-full bg-dhaba-surface animate-pulse" />}

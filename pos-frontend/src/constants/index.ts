@@ -76,3 +76,25 @@ export const orders: StaticOrder[] = [
   { id: "103", customer: "Emma Smith", status: "Ready", dateTime: "January 18, 2025 09:00 PM", items: 3, tableNo: 5, total: 120.0 },
   { id: "104", customer: "Chris Brown", status: "In Progress", dateTime: "January 18, 2025 09:15 PM", items: 6, tableNo: 6, total: 220.0 },
 ];
+
+/**
+ * @deprecated Use getDishImage() from utils instead.
+ * Kept for backwards compatibility with callers that haven't migrated yet.
+ * Entries with local assets are intentionally left empty so getDishImage()
+ * takes priority via its LOCAL_DISH_IMAGES map.
+ */
+export const DISH_FALLBACK_IMAGES: Record<string, string> = {
+  // No local asset — keep external URL as last-resort fallback
+  "Plain Paratha":  "https://upload.wikimedia.org/wikipedia/commons/thumb/5/54/Aloo_Paratha_also_known_as_Batatay_Jo_Phulko.jpg/600px-Aloo_Paratha_also_known_as_Batatay_Jo_Phulko.jpg",
+  "Butter Paratha": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/54/Aloo_Paratha_also_known_as_Batatay_Jo_Phulko.jpg/600px-Aloo_Paratha_also_known_as_Batatay_Jo_Phulko.jpg",
+  "Puri":           "https://upload.wikimedia.org/wikipedia/commons/thumb/7/75/Puri-an_indian_food.jpg/600px-Puri-an_indian_food.jpg",
+  "Naan":           "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/Naan_baked_in_Tandoor.png/600px-Naan_baked_in_Tandoor.png",
+  "Butter Naan":    "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/Naan_baked_in_Tandoor.png/600px-Naan_baked_in_Tandoor.png",
+  "Dal Makhani":    "https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Dal_Makhni%2C_an_Indian_delicacy.jpg/600px-Dal_Makhni%2C_an_Indian_delicacy.jpg",
+  "Chicken Curry":  "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Chicken_makhani_with_rice.jpg/600px-Chicken_makhani_with_rice.jpg",
+  "Butter Chicken": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Chicken_makhani_with_rice.jpg/600px-Chicken_makhani_with_rice.jpg",
+  "Mutton Curry":   "https://upload.wikimedia.org/wikipedia/commons/thumb/1/10/Mutton_curry_with_rice.jpg/600px-Mutton_curry_with_rice.jpg",
+  "Nimbu Pani":     "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Lemonade_in_pitcher.jpg/600px-Lemonade_in_pitcher.jpg",
+  "Cold Drink":     "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Lemonade_in_pitcher.jpg/600px-Lemonade_in_pitcher.jpg",
+  "Water Bottle":   "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Water_Bottle_-_Clear.jpg/600px-Water_Bottle_-_Clear.jpg",
+};

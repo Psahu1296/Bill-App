@@ -57,23 +57,32 @@ const SettleOrdersModal: React.FC<SettleOrdersModalProps> = ({ isOpen, onClose, 
     }
   }, [isOpen]);
 
-  const paying = parseFloat(amountInput) || 0;
-  const remaining = Math.max(0, totalOutstanding - paying);
-  const isFullSettle = paying >= totalOutstanding - 0.01;
+  const payingRaw    = parseFloat(amountInput);
+  const paying       = isNaN(payingRaw) ? 0 : payingRaw;
+  const hasInput     = amountInput.trim() !== "";
+  const credit       = Math.max(0, paying - totalOutstanding);
+  const remaining    = Math.max(0, totalOutstanding - paying);
+  const isOverpay    = hasInput && paying > totalOutstanding + 0.01;
+  const isFullSettle = hasInput && paying >= totalOutstanding - 0.01;
 
   const handleSettle = async () => {
-    if (paying <= 0) { enqueueSnackbar("Enter a valid amount.", { variant: "warning" }); return; }
-    if (paying > totalOutstanding + 0.01) { enqueueSnackbar("Amount cannot exceed total outstanding.", { variant: "warning" }); return; }
+    if (!hasInput || isNaN(payingRaw) || paying <= 0) {
+      enqueueSnackbar("Enter a valid amount.", { variant: "warning" });
+      return;
+    }
     if (pendingOrders.length === 0) return;
 
     setIsSubmitting(true);
     try {
       let leftover = paying;
 
-      for (const order of pendingOrders) {
-        if (leftover <= 0) break;
+      for (let i = 0; i < pendingOrders.length; i++) {
+        if (leftover <= 0.01) break;
+        const order = pendingOrders[i];
         const orderBalance = order.bills.totalWithTax - (order.amountPaid || 0);
-        const applyAmount = Math.min(leftover, orderBalance);
+        // For the last order allow overpayment so excess credit is stored on it
+        const isLast = i === pendingOrders.length - 1;
+        const applyAmount = isLast ? leftover : Math.min(leftover, orderBalance);
         const newAmountPaid = (order.amountPaid || 0) + applyAmount;
         const fullyPaid = newAmountPaid >= order.bills.totalWithTax - 0.01;
 
@@ -92,9 +101,11 @@ const SettleOrdersModal: React.FC<SettleOrdersModalProps> = ({ isOpen, onClose, 
       queryClient.invalidateQueries({ queryKey: ["earnings"] });
       queryClient.invalidateQueries({ queryKey: ["customerLedgers"] });
       enqueueSnackbar(
-        isFullSettle
-          ? `Tab fully settled for ${customer?.customerName}!`
-          : `₹${paying.toFixed(0)} applied across orders.`,
+        isOverpay
+          ? `Tab settled · ₹${credit.toFixed(0)} credit stored for ${customer?.customerName}`
+          : isFullSettle
+            ? `Tab fully settled for ${customer?.customerName}!`
+            : `₹${paying.toFixed(0)} applied across orders.`,
         { variant: "success" }
       );
       onClose();
@@ -175,9 +186,11 @@ const SettleOrdersModal: React.FC<SettleOrdersModalProps> = ({ isOpen, onClose, 
                     <p className="font-display text-xl font-bold text-dhaba-danger mt-0.5">₹{totalOutstanding.toFixed(2)}</p>
                   </div>
                   <div className="px-4 py-3 text-center">
-                    <p className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">Remaining After</p>
-                    <p className={`font-display text-xl font-bold mt-0.5 ${remaining === 0 ? "text-dhaba-success" : "text-yellow-400"}`}>
-                      ₹{remaining.toFixed(2)}
+                    <p className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">
+                      {isOverpay ? "Credit After" : "Remaining After"}
+                    </p>
+                    <p className={`font-display text-xl font-bold mt-0.5 ${isOverpay ? "text-dhaba-success" : remaining === 0 ? "text-dhaba-success" : "text-yellow-400"}`}>
+                      ₹{isOverpay ? credit.toFixed(2) : remaining.toFixed(2)}
                     </p>
                   </div>
                 </div>
@@ -202,14 +215,15 @@ const SettleOrdersModal: React.FC<SettleOrdersModalProps> = ({ isOpen, onClose, 
                       className={inputClass}
                       step="0.01"
                       min="0.01"
-                      max={totalOutstanding}
                       placeholder={totalOutstanding.toFixed(2)}
                     />
-                    {paying > 0 && (
-                      <p className={`text-[10px] font-semibold mt-1 ${isFullSettle ? "text-dhaba-success" : "text-yellow-400"}`}>
-                        {isFullSettle
-                          ? `✓ Full tab settled — payment applied across ${pendingOrders.length} order(s)`
-                          : `₹${remaining.toFixed(2)} will remain outstanding (applied oldest-first)`}
+                    {hasInput && paying > 0 && (
+                      <p className={`text-[10px] font-semibold mt-1 ${isOverpay || isFullSettle ? "text-dhaba-success" : "text-yellow-400"}`}>
+                        {isOverpay
+                          ? `✓ Tab cleared · ₹${credit.toFixed(2)} credit stored on most recent order`
+                          : isFullSettle
+                            ? `✓ Full tab settled — payment applied across ${pendingOrders.length} order(s)`
+                            : `₹${remaining.toFixed(2)} will remain outstanding (applied oldest-first)`}
                       </p>
                     )}
                   </div>
@@ -251,7 +265,7 @@ const SettleOrdersModal: React.FC<SettleOrdersModalProps> = ({ isOpen, onClose, 
                 <button
                   type="button"
                   onClick={handleSettle}
-                  disabled={isSubmitting || paying <= 0 || paying > totalOutstanding + 0.01}
+                  disabled={isSubmitting || !hasInput || paying <= 0}
                   className="bg-gradient-warm text-dhaba-bg px-8 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:shadow-glow transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {isSubmitting && (

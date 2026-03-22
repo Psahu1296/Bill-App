@@ -4,6 +4,7 @@ import { getDishes, getFrequentDishes, seedDefaultDishes } from "../../https";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FaUtensils } from "react-icons/fa";
 import type { Dish } from "../../types";
+import { getDishImage } from "../../utils";
 
 const PopularDishes: React.FC = () => {
   const navigate = useNavigate();
@@ -95,7 +96,7 @@ const PopularDishes: React.FC = () => {
               </span>
               <div className="relative">
                 <img
-                  src={dish.image}
+                  src={getDishImage(dish.name, dish.image) || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100"}
                   alt={dish.name}
                   className="w-12 h-12 rounded-xl object-cover border-2 border-dhaba-border/30 group-hover:border-dhaba-accent/40 transition-colors"
                   onError={(e) => {

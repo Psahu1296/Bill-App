@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useAppDispatch } from "../../redux/hooks";
 import { addItems } from "../../redux/slices/cartSlice";
-import { FaShoppingCart } from "react-icons/fa";
 import type { Dish, DishVariant } from "../../types";
+import { getDishImage } from "../../utils";
 
 interface MenuItemProps { item: Dish; }
 
@@ -13,7 +13,11 @@ const MenuItem: React.FC<MenuItemProps> = ({ item }) => {
 
   useEffect(() => {
     if (item?.variants?.length > 0) {
-      setSelectedVariant(item.variants.find((v) => v.size === "Full") || item.variants.find((v) => v.size === "Regular") || item.variants[0]);
+      setSelectedVariant(
+        item.variants.find((v) => v.size === "Full") ||
+        item.variants.find((v) => v.size === "Regular") ||
+        item.variants[0]
+      );
     } else {
       setSelectedVariant(null);
     }
@@ -26,58 +30,122 @@ const MenuItem: React.FC<MenuItemProps> = ({ item }) => {
     if (!selectedVariant) return;
     dispatch(addItems({
       id: item._id, name: item.name, variantSize: selectedVariant.size,
-      pricePerQuantity: selectedVariant.price, quantity: itemCount, price: selectedVariant.price * itemCount,
+      pricePerQuantity: selectedVariant.price, quantity: itemCount,
+      price: selectedVariant.price * itemCount,
     }));
     setItemCount(1);
   };
 
   if (!item?.variants?.length || !selectedVariant) {
     return (
-      <div className="glass-card rounded-2xl p-4 min-w-[260px] h-[160px] opacity-50 flex flex-col justify-between">
-        <h3 className="text-dhaba-text font-semibold">{item.name}</h3>
-        <p className="text-dhaba-muted text-sm">No variants available</p>
+      <div className="glass-card rounded-2xl p-4 min-w-[220px] h-[148px] opacity-50 flex flex-col justify-between">
+        <h3 className="text-dhaba-text font-semibold text-sm">{item.name}</h3>
+        <p className="text-dhaba-muted text-xs">No variants available</p>
       </div>
     );
   }
 
+  const dishImage = getDishImage(item.name, item.image);
+  const isNonVeg  = item.type === "non-veg";
+  const hasMultiVariants = item.variants.length > 1;
+
   return (
     <div
       onClick={handleAddToCart}
-      className={`glass-card rounded-2xl p-4 min-w-[260px] h-[180px] flex flex-col justify-between transition-all duration-200 hover:shadow-glow hover:-translate-y-0.5 cursor-pointer active:scale-[0.98] ${!item.isAvailable ? "opacity-40 pointer-events-none" : ""} ${item.type === "non-veg" ? "bg-red-500/10 border border-red-500/30" : ""}`}
+      className={`relative overflow-hidden rounded-2xl min-w-[220px] h-[148px] flex flex-col justify-between cursor-pointer
+        transition-all duration-200 hover:shadow-glow hover:-translate-y-0.5 active:scale-[0.98]
+        glass-card
+        ${!item.isAvailable ? "opacity-40 pointer-events-none" : ""}
+        ${isNonVeg ? "border border-red-500/20" : "border border-green-500/10"}
+      `}
     >
-      <div className="flex items-start justify-between">
-        <h3 className="text-dhaba-text font-semibold text-sm">{item.name}</h3>
-        <button
-          onClick={(e) => { e.stopPropagation(); handleAddToCart(); }}
-          className="bg-dhaba-success/15 text-dhaba-success p-2 rounded-xl hover:bg-dhaba-success/25 transition-colors"
-        >
-          <FaShoppingCart size={14} />
-        </button>
-      </div>
+      {/* Right-side image panel */}
+      {dishImage && (
+        <>
+          <img
+            src={dishImage}
+            alt=""
+            aria-hidden
+            className="absolute right-0 top-0 h-full w-[48%] object-cover pointer-events-none select-none"
+          />
+          {/* gradient fade — left edge of image blends into card */}
+          <div
+            className="absolute right-[38%] top-0 h-full w-[16%] pointer-events-none"
+            style={{ background: "linear-gradient(to right, hsl(var(--dhaba-card)), transparent)" }}
+          />
+          {/* dark scrim over image so it doesn't overpower */}
+          <div className="absolute right-0 top-0 h-full w-[48%] bg-dhaba-bg/40 pointer-events-none" />
+        </>
+      )}
 
-      <div className="flex justify-between items-center">
-        <p className="text-dhaba-accent text-xs font-bold tracking-wider uppercase">Price</p>
-        <p className="font-display text-xl font-bold text-dhaba-text">₹{selectedVariant.price}</p>
-      </div>
+      {/* Content */}
+      <div className="relative flex flex-col justify-between h-full p-3.5">
 
-      <div className="flex items-center justify-between gap-2">
-        <select
-          value={selectedVariant.size}
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => {
-            e.stopPropagation();
-            const v = item.variants.find((v) => v.size === e.target.value);
-            if (v) { setSelectedVariant(v); setItemCount(1); }
-          }}
-          className="glass-input rounded-lg py-1.5 px-2 text-dhaba-accent text-xs font-semibold focus:outline-none appearance-none"
-        >
-          {item.variants.map((v) => <option key={v.size} value={v.size}>{v.size}</option>)}
-        </select>
+        {/* Top: veg indicator + name — constrained so image shows */}
+        <div className={`space-y-1 ${dishImage ? "pr-[44%]" : ""}`}>
+          <div className="flex items-center gap-1.5">
+            {/* Indian food type indicator */}
+            <span className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm border ${isNonVeg ? "border-red-500" : "border-green-500"}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${isNonVeg ? "bg-red-500" : "bg-green-500"}`} />
+            </span>
+            <span className={`text-[9px] font-bold uppercase tracking-wider ${isNonVeg ? "text-red-400" : "text-green-400"}`}>
+              {isNonVeg ? "Non-veg" : "Veg"}
+            </span>
+          </div>
+          <h3 className="text-dhaba-text font-bold text-sm leading-tight line-clamp-2">{item.name}</h3>
+        </div>
 
-        <div onClick={(e) => e.stopPropagation()} className="glass-input rounded-xl flex items-center gap-4 px-3 py-1.5">
-          <button onClick={decrement} className="text-dhaba-accent font-bold text-lg w-6">−</button>
-          <span className="text-dhaba-text font-bold text-sm w-4 text-center">{itemCount}</span>
-          <button onClick={increment} className="text-dhaba-accent font-bold text-lg w-6">+</button>
+        {/* Bottom: price + controls */}
+        <div className="space-y-2">
+          {/* Price */}
+          <p className={`font-display text-xl font-bold text-dhaba-text leading-none ${dishImage ? "pr-[44%]" : ""}`}>
+            ₹{selectedVariant.price}
+            <span className="text-dhaba-muted text-[10px] font-normal ml-1">{selectedVariant.size}</span>
+          </p>
+
+          {/* Variant pills + counter */}
+          <div className="flex items-center justify-between gap-1.5">
+            {/* Variant selector - pill buttons */}
+            {hasMultiVariants ? (
+              <div onClick={(e) => e.stopPropagation()} className="flex gap-1">
+                {item.variants.map((v) => (
+                  <button
+                    key={v.size}
+                    onClick={(e) => { e.stopPropagation(); setSelectedVariant(v); setItemCount(1); }}
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all ${
+                      selectedVariant.size === v.size
+                        ? "bg-dhaba-accent text-dhaba-bg"
+                        : "glass-input text-dhaba-muted hover:text-dhaba-text"
+                    }`}
+                  >
+                    {v.size}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <span className="text-[10px] text-dhaba-muted font-medium">{selectedVariant.size}</span>
+            )}
+
+            {/* Counter */}
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center glass-input rounded-lg overflow-hidden"
+            >
+              <button
+                onClick={decrement}
+                className="px-2 py-1 text-dhaba-accent font-bold text-sm hover:bg-dhaba-surface transition-colors"
+              >
+                −
+              </button>
+              <span className="px-2 text-dhaba-text font-bold text-xs min-w-[20px] text-center">{itemCount}</span>
+              <button
+                onClick={increment}
+                className="px-2 py-1 text-dhaba-accent font-bold text-sm hover:bg-dhaba-surface transition-colors"
+              >
+                +
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

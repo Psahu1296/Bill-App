@@ -25,9 +25,13 @@ const PayRemainingModal: React.FC<PayRemainingModalProps> = ({
   const [payMethod, setPayMethod] = useState<PaymentMethod>("Cash");
   const [amount, setAmount] = useState<string>(balanceDue.toFixed(2));
 
-  const paying    = parseFloat(amount) || 0;
+  const payingRaw = parseFloat(amount);
+  const paying    = isNaN(payingRaw) ? 0 : payingRaw;
+  const hasInput  = amount.trim() !== "";
+  const credit    = Math.max(0, paying - balanceDue);
   const remaining = Math.max(0, balanceDue - paying);
-  const isFullPay = paying >= balanceDue - 0.01;
+  const isOverpay = hasInput && paying > balanceDue + 0.01;
+  const isFullPay = hasInput && paying >= balanceDue - 0.01;
 
   const paymentMutation = useMutation({
     mutationFn: (updates: Partial<Order> & { id: string }) =>
@@ -45,13 +49,21 @@ const PayRemainingModal: React.FC<PayRemainingModalProps> = ({
     },
   });
 
+  const handlePayLater = () => {
+    paymentMutation.mutate({
+      id: order._id,
+      paymentStatus: "Pending" as typeof order.paymentStatus,
+      orderStatus: "Completed" as OrderStatus,
+    });
+  };
+
   const handlePay = () => {
-    if (paying <= 0) {
+    if (!hasInput || isNaN(payingRaw) || paying < 0) {
       enqueueSnackbar("Enter a valid amount.", { variant: "warning" });
       return;
     }
-    if (paying > balanceDue + 0.01) {
-      enqueueSnackbar("Payment cannot exceed the balance due.", { variant: "warning" });
+    if (paying === 0) {
+      handlePayLater();
       return;
     }
 
@@ -118,13 +130,22 @@ const PayRemainingModal: React.FC<PayRemainingModalProps> = ({
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className={labelClass} style={{ marginBottom: 0 }}>Amount to Pay *</label>
-                <button
-                  type="button"
-                  onClick={() => setAmount(balanceDue.toFixed(2))}
-                  className="text-[10px] font-bold text-dhaba-accent hover:underline"
-                >
-                  Pay Full
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setAmount("0")}
+                    className="text-[10px] font-bold text-dhaba-warning hover:underline"
+                  >
+                    Pay Later
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAmount(balanceDue.toFixed(2))}
+                    className="text-[10px] font-bold text-dhaba-accent hover:underline"
+                  >
+                    Pay Full
+                  </button>
+                </div>
               </div>
               <input
                 type="number"
@@ -132,15 +153,20 @@ const PayRemainingModal: React.FC<PayRemainingModalProps> = ({
                 onChange={(e) => setAmount(e.target.value)}
                 className="w-full glass-input rounded-xl px-4 py-2.5 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50 placeholder:text-dhaba-muted/50"
                 step="0.01"
-                min="0.01"
-                max={balanceDue}
+                min="0"
                 placeholder={balanceDue.toFixed(2)}
               />
-              {paying > 0 && (
-                <p className={`text-[10px] font-semibold mt-1 ${isFullPay ? "text-dhaba-success" : "text-dhaba-warning"}`}>
-                  {isFullPay
-                    ? "✓ Full balance will be cleared"
-                    : `₹${remaining.toFixed(2)} will remain outstanding`}
+              {hasInput && (
+                <p className={`text-[10px] font-semibold mt-1 ${
+                  isOverpay ? "text-dhaba-success"
+                  : isFullPay ? "text-dhaba-success"
+                  : "text-dhaba-warning"
+                }`}>
+                  {isOverpay
+                    ? `✓ Bill paid · ₹${credit.toFixed(2)} credit for next visit`
+                    : isFullPay
+                      ? "✓ Full balance will be cleared"
+                      : `₹${remaining.toFixed(2)} will remain outstanding`}
                 </p>
               )}
             </div>
@@ -180,7 +206,7 @@ const PayRemainingModal: React.FC<PayRemainingModalProps> = ({
             <button
               type="button"
               onClick={handlePay}
-              disabled={paymentMutation.isPending || paying <= 0 || paying > balanceDue + 0.01}
+              disabled={paymentMutation.isPending || !hasInput || paying < 0}
               className="bg-gradient-warm text-dhaba-bg px-8 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:shadow-glow transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {paymentMutation.isPending && (

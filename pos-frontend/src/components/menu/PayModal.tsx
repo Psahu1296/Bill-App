@@ -22,9 +22,18 @@ const PayModal: React.FC<PayModalProps> = ({ isOpen, onClose, order, onSubmitPay
   const amountAlreadyPaid = order?.amountPaid ?? 0;
   const outstanding       = totalBill - amountAlreadyPaid;
 
-  const paying    = parseFloat(amountPaying) || 0;
-  const remaining = Math.max(0, outstanding - paying);
-  const toledger  = remaining > 0.01 && paying > 0;
+  const payingRaw = parseFloat(amountPaying);
+  const payingNum = isNaN(payingRaw) ? 0 : payingRaw;
+  const hasInput  = amountPaying.trim() !== "";
+
+  const credit    = Math.max(0, payingNum - outstanding);
+  const remaining = Math.max(0, outstanding - payingNum);
+  const isOverpay  = hasInput && payingNum > outstanding + 0.01;
+  const isPayLater = hasInput && payingNum === 0;
+  const toledger   = remaining > 0.01 && hasInput && payingNum > 0;
+
+  const isFullyPaid = hasInput && payingNum >= outstanding - 0.01;
+  const canSubmit   = hasInput && payingNum >= 0;
 
   useEffect(() => {
     if (isOpen) {
@@ -33,20 +42,13 @@ const PayModal: React.FC<PayModalProps> = ({ isOpen, onClose, order, onSubmitPay
     }
   }, [isOpen, order]);
 
-  const handleSubmit = async () => {
-    if (isNaN(paying) || paying <= 0) {
+  const handleSubmit = () => {
+    if (!hasInput || isNaN(payingRaw) || payingNum < 0) {
       enqueueSnackbar("Please enter a valid amount.", { variant: "warning" });
       return;
     }
-    if (paying > outstanding + 0.01) {
-      enqueueSnackbar("Amount cannot exceed outstanding balance.", { variant: "warning" });
-      return;
-    }
-
-    onSubmitPayment(paying, selectedPaymentMethod, true);
+    onSubmitPayment(payingNum, selectedPaymentMethod, isFullyPaid);
   };
-
-  const canSubmit = paying > 0 && paying <= outstanding + 0.01;
 
   const labelClass = "block text-xs font-bold text-dhaba-muted uppercase tracking-wider mb-1.5";
 
@@ -102,13 +104,22 @@ const PayModal: React.FC<PayModalProps> = ({ isOpen, onClose, order, onSubmitPay
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className={labelClass} style={{ marginBottom: 0 }}>Amount to Pay *</label>
-                  <button
-                    type="button"
-                    onClick={() => setAmountPaying(outstanding.toFixed(2))}
-                    className="text-[10px] font-bold text-dhaba-accent hover:underline"
-                  >
-                    Pay Full
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setAmountPaying("0")}
+                      className="text-[10px] font-bold text-dhaba-warning hover:underline"
+                    >
+                      Pay Later
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAmountPaying(outstanding.toFixed(2))}
+                      className="text-[10px] font-bold text-dhaba-accent hover:underline"
+                    >
+                      Pay Full
+                    </button>
+                  </div>
                 </div>
                 <input
                   type="number"
@@ -116,16 +127,24 @@ const PayModal: React.FC<PayModalProps> = ({ isOpen, onClose, order, onSubmitPay
                   onChange={(e) => setAmountPaying(e.target.value)}
                   className="w-full glass-input rounded-xl px-4 py-2.5 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50 placeholder:text-dhaba-muted/50"
                   step="0.01"
-                  min="0.01"
-                  max={outstanding}
+                  min="0"
                   placeholder={outstanding.toFixed(2)}
                 />
                 {/* Live feedback */}
-                {paying > 0 && (
-                  <p className={`text-[10px] font-semibold mt-1 ${toledger ? "text-dhaba-warning" : "text-dhaba-success"}`}>
-                    {toledger
-                      ? `₹${remaining.toFixed(2)} will be added to customer's ledger`
-                      : "✓ Full balance will be cleared"}
+                {hasInput && (
+                  <p className={`text-[10px] font-semibold mt-1 ${
+                    isPayLater ? "text-dhaba-warning"
+                    : isOverpay ? "text-dhaba-success"
+                    : toledger  ? "text-dhaba-warning"
+                    : "text-dhaba-success"
+                  }`}>
+                    {isPayLater
+                      ? "Full amount will be added to customer's tab"
+                      : isOverpay
+                        ? `✓ Bill paid · ₹${credit.toFixed(2)} credit for next visit`
+                        : toledger
+                          ? `₹${remaining.toFixed(2)} will be added to customer's tab`
+                          : "✓ Full balance will be cleared"}
                   </p>
                 )}
               </div>
@@ -167,7 +186,7 @@ const PayModal: React.FC<PayModalProps> = ({ isOpen, onClose, order, onSubmitPay
                 disabled={!canSubmit}
                 className="bg-gradient-warm text-dhaba-bg px-8 py-2.5 rounded-xl font-bold text-sm hover:shadow-glow transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Record Payment
+                {isPayLater ? "Add to Tab" : "Record Payment"}
               </button>
             </div>
           </motion.div>
