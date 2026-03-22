@@ -142,18 +142,20 @@ const Home: React.FC = () => {
                   {icon}
                 </div>
               </div>
-              <p className={`font-display text-3xl font-bold ${color}`}>{value}</p>
-              {label === "Today's Revenue" && (
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-dhaba-danger/15 text-dhaba-danger text-[10px] font-bold">
-                    <FaArrowDown className="text-[8px]" />
-                    ₹{todayExpenses.toLocaleString("en-IN")}
-                  </span>
-                  <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${netEarnings >= 0 ? "bg-yellow-400/15 text-yellow-400" : "bg-dhaba-danger/15 text-dhaba-danger"}`}>
-                    Net ₹{netEarnings.toLocaleString("en-IN")}
-                  </span>
-                </div>
-              )}
+              <div className="flex justify-between">
+                <p className={`font-display text-3xl font-bold ${color}`}>{value}</p>
+                {label === "Today's Revenue" && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-dhaba-danger/15 text-dhaba-danger text-[18px] font-bold">
+                      <FaArrowDown className="text-[16px]" />
+                      ₹{todayExpenses.toLocaleString("en-IN")}
+                    </span>
+                    <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${netEarnings >= 0 ? "bg-yellow-400/15 text-yellow-400" : "bg-dhaba-danger/15 text-dhaba-danger"}`}>
+                      Net ₹{netEarnings.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                )}
+              </div>
               {pct !== null && (
                 <div className="flex items-center gap-1.5">
                   <span className={`flex items-center gap-0.5 text-xs font-bold px-2 py-0.5 rounded-full

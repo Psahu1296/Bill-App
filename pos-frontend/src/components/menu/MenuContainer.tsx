@@ -184,11 +184,10 @@ const MenuContainer: React.FC = () => {
             <button
               key={f.key}
               onClick={() => setActiveType(f.key)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                activeType === f.key
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${activeType === f.key
                   ? "bg-dhaba-accent text-dhaba-bg shadow-glow"
                   : "glass-input text-dhaba-muted hover:text-dhaba-text"
-              }`}
+                }`}
             >
               {f.icon}
               {f.label}
@@ -197,7 +196,7 @@ const MenuContainer: React.FC = () => {
         </div>
 
         {/* Available only toggle */}
-        <button
+        {/* <button
           onClick={() => setAvailableOnly((v) => !v)}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
             availableOnly
@@ -207,10 +206,10 @@ const MenuContainer: React.FC = () => {
         >
           <span className={`w-1.5 h-1.5 rounded-full ${availableOnly ? "bg-dhaba-success" : "bg-dhaba-muted"}`} />
           Available only
-        </button>
+        </button> */}
 
         {/* Frequently ordered toggle */}
-        <button
+        {/* <button
           onClick={() => setFrequentOnly((v) => !v)}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
             frequentOnly
@@ -220,7 +219,7 @@ const MenuContainer: React.FC = () => {
         >
           <FaFire className={frequentOnly ? "text-orange-400" : "text-dhaba-muted"} />
           Frequently Ordered
-        </button>
+        </button> */}
 
         {/* Custom item */}
         <div className="relative ml-auto" ref={popoverRef}>
@@ -271,11 +270,10 @@ const MenuContainer: React.FC = () => {
           <button
             key={f.key}
             onClick={() => setActiveCategory(f.key)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeCategory === f.key
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${activeCategory === f.key
                 ? "bg-dhaba-accent/20 text-dhaba-accent border border-dhaba-accent/40"
                 : "glass-input text-dhaba-muted hover:text-dhaba-text"
-            }`}
+              }`}
           >
             {"icon" in f && (f as { icon?: React.ReactNode }).icon}
             {f.label}
