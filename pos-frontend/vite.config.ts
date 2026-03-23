@@ -16,6 +16,18 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      // SSE endpoint — needs its own entry to avoid response buffering
+      '/api/admin/notify/stream': {
+        target: 'http://localhost:5002',
+        changeOrigin: true,
+        secure: false,
+        // Disable compression so chunked SSE events are flushed immediately
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.setHeader('Accept-Encoding', 'identity');
+          });
+        },
+      },
       '/api': {
         target: 'http://localhost:5002',
         changeOrigin: true,

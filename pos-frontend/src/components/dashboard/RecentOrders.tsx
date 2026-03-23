@@ -38,7 +38,7 @@ const RecentOrders: React.FC = () => {
     <p>Order #: <strong>${order._id.slice(-6)}</strong></p>
     <p>Name: <strong>${order.customerDetails.name}</strong></p>
     <p>Phone: ${order.customerDetails.phone}</p>
-    <p>Table: T-${order.table.tableNo} &nbsp;|&nbsp; Guests: ${order.customerDetails.guests}</p>
+    <p>Table: ${order.table ? `T-${order.table.tableNo}` : (order.orderType ?? "Online")} &nbsp;|&nbsp; Guests: ${order.customerDetails.guests}</p>
     <hr class="divider">
     <p><strong>Items</strong></p>
     ${order.items.map(i => `<div class="row"><span>${i.name} x${i.quantity}</span><span>&#x20B9;${i.price.toFixed(2)}</span></div>`).join("")}
@@ -121,7 +121,7 @@ const RecentOrders: React.FC = () => {
                 </td>
                 <td className="p-4 text-dhaba-muted text-xs">{formatDateAndTime(order.orderDate)}</td>
                 <td className="p-4 text-dhaba-text">{order.items.length}</td>
-                <td className="p-4"><span className="text-dhaba-accent font-bold">T-{order.table.tableNo}</span></td>
+                <td className="p-4"><span className="text-dhaba-accent font-bold">{order.table ? `T-${order.table.tableNo}` : (order.orderType ?? "Online")}</span></td>
                 <td className="p-4 text-dhaba-text font-bold">₹{order.bills.totalWithTax}</td>
                 <td className="p-4 text-dhaba-muted">{order.paymentMethod}</td>
                 <td className="p-4" onClick={(e) => e.stopPropagation()}>

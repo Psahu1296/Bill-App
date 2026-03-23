@@ -13,6 +13,8 @@ import useLoadData from "./hooks/useLoadData";
 import FullScreenLoader from "./components/shared/FullScreenLoader";
 import CustomerLedgerList from "./components/customerLedger/CustomerLedgerList";
 import type { RootState } from "./redux/store";
+import { NotificationProvider } from "./context/NotificationContext";
+import { useAdminNotify } from "./hooks/useAdminNotify";
 
 function Layout() {
   const isLoading = useLoadData();
@@ -140,11 +142,21 @@ function ProtectedRoutes({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** Mounts the SSE admin notification listener — only when authenticated */
+function AdminNotifyMount() {
+  const { isAuth } = useSelector((state: RootState) => state.user);
+  useAdminNotify(isAuth);
+  return null;
+}
+
 function App() {
   return (
-    <Router>
-      <Layout />
-    </Router>
+    <NotificationProvider>
+      <Router>
+        <AdminNotifyMount />
+        <Layout />
+      </Router>
+    </NotificationProvider>
   );
 }
 

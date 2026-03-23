@@ -13,6 +13,21 @@ contextBridge.exposeInMainWorld("appBridge", {
   // ── Platform info ──────────────────────────────────────────────────────────
   platform: process.platform,
 
+  // ── Cloudflare Tunnel ──────────────────────────────────────────────────────
+  /** Returns the current public tunnel URL, or null if the tunnel isn't running. */
+  getTunnelUrl: (): Promise<string | null> =>
+    ipcRenderer.invoke("tunnel:get-url"),
+
+  /**
+   * Called when the tunnel URL becomes available (fires once after startup).
+   * Returns an unsubscribe function.
+   */
+  onTunnelUrl: (callback: (url: string | null) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, url: string | null) => callback(url);
+    ipcRenderer.on("tunnel:url", handler);
+    return () => ipcRenderer.removeListener("tunnel:url", handler);
+  },
+
   // ── Auto-updater controls ──────────────────────────────────────────────────
   /** Ask the main process to start checking for a new release */
   checkForUpdates: () => ipcRenderer.send("updater:check"),

@@ -20,6 +20,11 @@ const config = Object.freeze({
     razorpaySecretKey: process.env.RAZORPAY_KEY_SECRET,
     razorpyWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET,
     frontendUrl: process.env.FRONTEND_URL || "http://localhost:5173",
+    customerAppUrl: process.env.CUSTOMER_APP_URL || "http://localhost:8080",
+    phonePeMerchantId: process.env.PHONEPE_MERCHANT_ID || "",
+    phonePeSaltKey: process.env.PHONEPE_SALT_KEY || "",
+    phonePeSaltIndex: Number(process.env.PHONEPE_SALT_INDEX ?? 1),
+    phonePeEnv: (process.env.PHONEPE_ENV || "UAT") as "UAT" | "PRODUCTION",
 });
 
 export default config;

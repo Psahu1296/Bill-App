@@ -172,3 +172,10 @@ export const addStaffPayment = (id: string, data: AddPaymentPayload) =>
 
 export const deleteStaffPayment = (staffId: string, paymentId: string) =>
   axiosWrapper.delete(`/api/staff/${staffId}/payments/${paymentId}`);
+
+// Settings
+export const getOnlineOrdersStatus = () =>
+  axiosWrapper.get("/api/settings/online-orders");
+
+export const setOnlineOrdersStatus = (isOnline: boolean) =>
+  axiosWrapper.put("/api/settings/online-orders", { isOnline });

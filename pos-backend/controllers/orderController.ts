@@ -88,6 +88,29 @@ const addOrder = async (req: Request, res: Response, next: NextFunction) => {
     // If _id provided — update existing order
     if (_id) {
       if (isNaN(Number(_id))) return next(createHttpError(400, "Invalid Order ID format in body for update!"));
+
+      // Preserve / assign batch numbers so items added by staff go to the next round
+      if (Array.isArray(orderData.items) && orderData.items.length > 0) {
+        const existing = orderRepo.findById(_id, false) as Record<string, unknown> | null;
+        if (existing) {
+          const existingItems = (existing.items as Array<Record<string, unknown>>) ?? [];
+          // map: "id_variantSize" → batch number from DB
+          const batchMap = new Map<string, number>();
+          let maxBatch = 1;
+          for (const item of existingItems) {
+            const key = `${item.id}_${item.variantSize ?? ''}`;
+            const b = Number(item.batch) || 1;
+            batchMap.set(key, b);
+            if (b > maxBatch) maxBatch = b;
+          }
+          const nextBatch = maxBatch + 1;
+          orderData.items = orderData.items.map((item: Record<string, unknown>) => {
+            const key = `${item.id}_${item.variantSize ?? ''}`;
+            return { ...item, batch: batchMap.has(key) ? batchMap.get(key) : nextBatch };
+          });
+        }
+      }
+
       const updatedOrder = orderRepo.update(_id, {
         ...orderData,
         tableId: Number(tableId),

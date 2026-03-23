@@ -5,7 +5,7 @@
   "author": "Dhaba POS",
   "main": "electron/dist/main.js",
   "scripts": {
-    "electron:dev": "NODE_ENV=development electron .",
+    "electron:dev": "tsc -p electron/tsconfig.json && NODE_ENV=development electron .",
     "build:frontend": "cd pos-frontend && npm run build",
     "build:backend": "cd pos-backend && npm run build",
     "build:electron": "tsc -p electron/tsconfig.json",

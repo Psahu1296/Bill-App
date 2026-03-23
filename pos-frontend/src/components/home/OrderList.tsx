@@ -26,7 +26,9 @@ const OrderList: React.FC<OrderListProps> = ({ order }) => {
     }
     const { customerDetails, table, items } = order;
     dispatch(setCustomer({ ...customerDetails } as { name: string; phone: string; guests: number }));
-    dispatch(tableStateUpdate({ table: { tableId: table._id, tableNo: table.tableNo } }));
+    if (table) {
+      dispatch(tableStateUpdate({ table: { tableId: table._id, tableNo: table.tableNo } }));
+    }
     dispatch(updateList([...items]));
     navigate(`/menu?orderId=${order._id}`);
   };
@@ -52,7 +54,7 @@ const OrderList: React.FC<OrderListProps> = ({ order }) => {
         </p>
         <div className="flex items-center gap-1.5 text-[11px] text-dhaba-muted mt-0.5">
           <MdTableRestaurant className="text-xs" />
-          <span>T-{order.table.tableNo}</span>
+          <span>{order.table ? `T-${order.table.tableNo}` : (order.orderType ?? "Online")}</span>
           <span className="opacity-40">·</span>
           <FaUtensils className="text-[9px]" />
           <span>{order.items.length} items</span>

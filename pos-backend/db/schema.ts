@@ -52,6 +52,8 @@ export function initSchema(db: Database.Database): void {
       payment_status        TEXT    NOT NULL DEFAULT 'Pending',
       amount_paid           REAL    NOT NULL DEFAULT 0,
       balance_due_on_order  REAL    NOT NULL DEFAULT 0,
+      order_type            TEXT    NOT NULL DEFAULT 'dine-in',  -- 'dine-in' | 'takeaway' | 'delivery'
+      delivery_address      TEXT    NOT NULL DEFAULT '',
       created_at            TEXT    NOT NULL DEFAULT (datetime('now')),
       updated_at            TEXT    NOT NULL DEFAULT (datetime('now'))
     );
@@ -148,5 +150,15 @@ export function initSchema(db: Database.Database): void {
       date      TEXT    NOT NULL DEFAULT (datetime('now')),
       note      TEXT    NOT NULL DEFAULT ''
     );
+
+    -- Generic key-value store for app settings
+    CREATE TABLE IF NOT EXISTS store_settings (
+      key        TEXT PRIMARY KEY,
+      value      TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Seed default settings (idempotent)
+    INSERT OR IGNORE INTO store_settings (key, value) VALUES ('online_orders', 'true');
   `);
 }

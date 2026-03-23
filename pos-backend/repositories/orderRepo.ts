@@ -7,6 +7,7 @@ function rowToApi(row: any, populateTable = false) {
     id, customer_details, order_date, bills, items, table_id,
     payment_data, amount_paid, balance_due_on_order,
     order_status, payment_method, payment_status,
+    order_type, delivery_address,
     created_at, updated_at,
     // populated join fields:
     table_no, table_status, table_seats, table_current_order_id,
@@ -18,13 +19,20 @@ function rowToApi(row: any, populateTable = false) {
     customerDetails: customer_details ? JSON.parse(customer_details) : {},
     orderStatus: order_status,
     orderDate: order_date,
-    bills: bills ? JSON.parse(bills) : {},
+    bills: (() => {
+      const b = bills ? JSON.parse(bills) : {};
+      // Backfill totalWithTax for orders saved by older customer app builds
+      if (b && b.totalWithTax == null && b.total != null) b.totalWithTax = b.total;
+      return b;
+    })(),
     items: items ? JSON.parse(items) : [],
     paymentMethod: payment_method,
     paymentData: payment_data ? JSON.parse(payment_data) : {},
     paymentStatus: payment_status,
     amountPaid: amount_paid,
     balanceDueOnOrder: balance_due_on_order,
+    orderType: order_type ?? 'dine-in',
+    deliveryAddress: delivery_address ?? '',
     createdAt: created_at,
     updatedAt: updated_at,
     ...rest,
@@ -118,17 +126,19 @@ export function create(data: {
   paymentStatus?: string;
   amountPaid?: number;
   balanceDueOnOrder?: number;
+  orderType?: string;
+  deliveryAddress?: string;
 }) {
   const db = getDb();
   const result = db.prepare(
     `INSERT INTO orders (
       customer_details, order_status, order_date, bills, items,
       table_id, payment_method, payment_data, payment_status,
-      amount_paid, balance_due_on_order
+      amount_paid, balance_due_on_order, order_type, delivery_address
     ) VALUES (
       @customerDetails, @orderStatus, @orderDate, @bills, @items,
       @tableId, @paymentMethod, @paymentData, @paymentStatus,
-      @amountPaid, @balanceDueOnOrder
+      @amountPaid, @balanceDueOnOrder, @orderType, @deliveryAddress
     )`
   ).run({
     customerDetails: JSON.stringify(data.customerDetails),
@@ -142,8 +152,28 @@ export function create(data: {
     paymentStatus: data.paymentStatus ?? 'Pending',
     amountPaid: data.amountPaid ?? 0,
     balanceDueOnOrder: data.balanceDueOnOrder ?? 0,
+    orderType: data.orderType ?? 'dine-in',
+    deliveryAddress: data.deliveryAddress ?? '',
   });
   return findById(result.lastInsertRowid as number, true)!;
+}
+
+/**
+ * Appends new items to an existing order as the next batch (round).
+ * Existing items without a batch field are normalised to batch 1.
+ */
+export function appendItems(id: string | number, newItems: object[], updatedBills: object) {
+  const order = findById(id, false);
+  if (!order) return null;
+
+  const existing = (order.items as Array<Record<string, unknown>>);
+  const maxBatch = existing.reduce((max, item) => Math.max(max, Number(item.batch) || 1), 1);
+  const nextBatch = maxBatch + 1;
+
+  const normalised = existing.map((item) => ({ ...item, batch: item.batch ?? 1 }));
+  const withBatch  = newItems.map((item) => ({ ...(item as object), batch: nextBatch }));
+
+  return update(id, { items: [...normalised, ...withBatch], bills: updatedBills });
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -161,6 +191,8 @@ export function update(id: string | number, updates: Record<string, any>) {
     paymentStatus: "payment_status",
     amountPaid: "amount_paid",
     balanceDueOnOrder: "balance_due_on_order",
+    orderType: "order_type",
+    deliveryAddress: "delivery_address",
   };
   const jsonCols = new Set(["customer_details", "bills", "items", "payment_data"]);
 

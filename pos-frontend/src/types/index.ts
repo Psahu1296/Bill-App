@@ -42,6 +42,7 @@ export interface CartItem {
   pricePerQuantity: number;
   quantity: number;
   price: number;
+  batch?: number;
 }
 
 export interface OrderCustomerDetails {
@@ -52,7 +53,6 @@ export interface OrderCustomerDetails {
 
 export interface OrderBills {
   total: number;
-  tax?: number;          // optional — tax removed from new orders; kept for legacy DB records
   discount?: number;
   roundOff?: number;
   totalWithTax: number;
@@ -74,7 +74,10 @@ export interface Order {
   _id: string;
   customerDetails: OrderCustomerDetails;
   // getOrders populates table; getOrderById returns raw ObjectId string
-  table: PopulatedOrderTable;
+  // table is null for online orders (takeaway/delivery)
+  table: PopulatedOrderTable | null;
+  orderType?: 'dine-in' | 'takeaway' | 'delivery';
+  deliveryAddress?: string;
   items: CartItem[];
   bills: OrderBills;
   orderStatus: OrderStatus;

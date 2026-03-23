@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import net from "net";
 import http from "http";
-import { execSync } from "child_process";
+import { execSync, spawn, ChildProcess } from "child_process";
 import crypto from "crypto";
 import { autoUpdater } from "electron-updater";
 
@@ -103,9 +103,123 @@ async function resolvePort(preferred: number): Promise<number> {
 
 const isDev = !app.isPackaged;
 
+// ── Env loader ────────────────────────────────────────────────────────────────
+
+/**
+ * Minimal .env parser — loads key=value pairs without overriding already-set
+ * process.env vars (same behaviour as dotenv). Used to read CLOUDFLARE_* vars
+ * in both dev (pos-backend/.env) and production (resources/backend/.env).
+ */
+function loadEnvFile(): void {
+  const envPath = isDev
+    ? path.resolve(__dirname, "../../pos-backend/.env")
+    : path.join(process.resourcesPath, "backend/.env");
+
+  if (!fs.existsSync(envPath)) return;
+
+  try {
+    const lines = fs.readFileSync(envPath, "utf-8").split("\n");
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) continue;
+      const eq = line.indexOf("=");
+      if (eq < 1) continue;
+      const key = line.slice(0, eq).trim();
+      const val = line.slice(eq + 1).trim();
+      if (key && !(key in process.env)) {
+        process.env[key] = val;
+      }
+    }
+  } catch (e) {
+    console.warn("[env] Failed to load .env:", e);
+  }
+}
+
+loadEnvFile();
+
 let win: BrowserWindow | null = null;
 let splash: BrowserWindow | null = null;
 let backendStarted = false;
+let tunnelProcess: ChildProcess | null = null;
+let tunnelUrl = "";
+
+// ── Cloudflare Tunnel ─────────────────────────────────────────────────────────
+
+/** Resolve the cloudflared binary: packaged resources first, then system PATH. */
+function cloudflaredBin(): string {
+  if (!isDev) {
+    const ext  = process.platform === "win32" ? ".exe" : "";
+    const candidate = path.join(process.resourcesPath, "cloudflared", `cloudflared${ext}`);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  // Fall back to system-installed binary (Homebrew / winget / apt)
+  return "cloudflared";
+}
+
+/**
+ * Starts the named Cloudflare tunnel using the token from env.
+ * URL is fixed (configured in Cloudflare dashboard) — no need to parse stdout.
+ * Resolves once cloudflared reports a registered connection, or after 20 s
+ * if the process is still alive (assumes tunnel is up but log format changed).
+ */
+function startCloudflaredTunnel(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const token = process.env.CLOUDFLARE_TUNNEL_TOKEN || "";
+    const fixedUrl = process.env.CLOUDFLARE_TUNNEL_URL || "";
+
+    if (!token || !fixedUrl) {
+      reject(new Error("CLOUDFLARE_TUNNEL_TOKEN or CLOUDFLARE_TUNNEL_URL not set in .env"));
+      return;
+    }
+
+    const bin = cloudflaredBin();
+    sendToSplash("tunnel", "Starting Cloudflare tunnel…", 85);
+
+    tunnelProcess = spawn(bin, ["tunnel", "run", "--token", token], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let resolved = false;
+
+    const tryResolve = (data: Buffer) => {
+      if (resolved) return;
+      const text = data.toString();
+      console.log("[cloudflared]", text.trimEnd());
+      // Named tunnel prints this once the connection is live
+      if (
+        text.includes("Registered tunnel connection") ||
+        text.includes("Connection established") ||
+        text.includes("connIndex=0")
+      ) {
+        resolved = true;
+        tunnelUrl = fixedUrl;
+        resolve(fixedUrl);
+      }
+    };
+
+    tunnelProcess.stdout?.on("data", tryResolve);
+    tunnelProcess.stderr?.on("data", tryResolve);
+
+    tunnelProcess.on("error", (err) => {
+      if (!resolved) reject(new Error(`cloudflared not found: ${err.message}`));
+    });
+
+    tunnelProcess.on("exit", (code) => {
+      if (!resolved) reject(new Error(`cloudflared exited with code ${code}`));
+    });
+
+    // Fallback: if process is still running after 20 s, assume tunnel is up
+    setTimeout(() => {
+      if (!resolved && tunnelProcess && !tunnelProcess.killed) {
+        resolved = true;
+        tunnelUrl = fixedUrl;
+        resolve(fixedUrl);
+      } else if (!resolved) {
+        reject(new Error("Cloudflare tunnel timed out after 20 s"));
+      }
+    }, 20_000);
+  });
+}
 
 // ── Updater helper ────────────────────────────────────────────────────────────
 
@@ -196,6 +310,23 @@ async function setupBackend(): Promise<void> {
   sendToSplash("server-ready", "Server started", 80);
 }
 
+async function setupTunnel(): Promise<void> {
+  try {
+    const url = await startCloudflaredTunnel();
+    // Persist URL so the renderer can read it via IPC
+    const urlFile = path.join(app.getPath("userData"), "tunnel-url.txt");
+    fs.writeFileSync(urlFile, url, "utf-8");
+    // Let the renderer know the URL is ready
+    win?.webContents.send("tunnel:url", url);
+    sendToSplash("tunnel-ready", `Tunnel ready: ${url}`, 95);
+    console.log("[tunnel] URL:", url);
+  } catch (err) {
+    // Tunnel failure is non-fatal — POS still works locally
+    console.warn("[tunnel] Could not start:", (err as Error).message);
+    win?.webContents.send("tunnel:url", null);
+  }
+}
+
 // ── Window creation ───────────────────────────────────────────────────────────
 
 function createWindow(): void {
@@ -209,18 +340,20 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
     },
-    show: false,
+    show: isDev,      // show immediately in dev; production waits for ready-to-show
     autoHideMenuBar: true,
   });
 
   const url = isDev ? "http://localhost:5173" : `http://localhost:${resolvedPort}`;
   win.loadURL(url);
 
+  if (isDev) win.webContents.openDevTools();
+
   win.once("ready-to-show", () => {
     sendToSplash("done", "Ready!", 100);
     setTimeout(() => {
       if (splash && !splash.isDestroyed()) { splash.close(); splash = null; }
-      win?.show();
+      if (!isDev) win?.show();
     }, 600);
   });
 
@@ -257,6 +390,10 @@ app.whenReady().then(async () => {
 
   createWindow();
 
+  // Start tunnel after window is created so we can send IPC events to it.
+  // Non-blocking — POS works regardless of tunnel status.
+  if (!isDev) setupTunnel();
+
   if (!isDev) {
     autoUpdater.autoDownload    = false; // wait for user to click "Download"
     autoUpdater.autoInstallOnAppQuit = false; // only install when user triggers it
@@ -265,6 +402,11 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
+  // Kill the cloudflared tunnel process so it doesn't linger after the app closes
+  if (tunnelProcess && !tunnelProcess.killed) {
+    tunnelProcess.kill();
+    tunnelProcess = null;
+  }
   if (process.platform !== "darwin") app.quit();
 });
 
@@ -301,6 +443,9 @@ ipcMain.on("updater:install", () => {
 ipcMain.on("shell:open-external", (_event, url: string) => {
   shell.openExternal(url).catch(console.error);
 });
+
+// Renderer can request current tunnel URL at any time (e.g. on page load)
+ipcMain.handle("tunnel:get-url", () => tunnelUrl || null);
 
 // ── Auto Updater Events ───────────────────────────────────────────────────────
 

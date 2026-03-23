@@ -21,8 +21,16 @@ import consumableRoutes from "./routes/consumableRoutes";
 import staffRoutes from "./routes/staffRoutes";
 import dataRoutes from "./routes/dataRoutes";
 import updateRoutes from "./routes/updateRoutes";
+import customerRoute from "./routes/customerRoute";
+import phonePeRoute from "./routes/phonePeRoute";
+import settingsRoute from "./routes/settingsRoute";
+import adminNotifyRoute from "./routes/adminNotifyRoute";
 
 const app = express();
+
+// Trust the Cloudflare tunnel / reverse proxy so express-rate-limit
+// can correctly identify client IPs from X-Forwarded-For.
+app.set("trust proxy", 1);
 
 cron.schedule(
   "5 0 * * *",
@@ -41,15 +49,30 @@ cron.schedule(
 );
 
 // CORS — must be before routes
+const allowedOrigins = [config.frontendUrl, config.customerAppUrl].filter(Boolean);
 app.use(cors({
-  origin: config.frontendUrl,
+  origin: (origin, cb) => {
+    // Allow requests with no origin (server-to-server, curl, Electron)
+    if (!origin) return cb(null, true);
+    // Explicitly configured origins (POS frontend, customer app)
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    // Any Cloudflare quick-tunnel subdomain (URL changes on every restart)
+    if (origin.endsWith(".trycloudflare.com")) return cb(null, true);
+    // Named tunnel domain (root + any subdomain)
+    if (origin === "https://sahu-dhaba-pos.co.in" || origin.endsWith(".sahu-dhaba-pos.co.in")) return cb(null, true);
+    cb(new Error(`CORS: origin ${origin} not allowed`));
+  },
   credentials: true,
 }));
 
-// Webhook route needs raw body for Razorpay signature verification.
+// Webhook routes need raw body for signature verification.
 // Register BEFORE express.json() so the body isn't pre-parsed.
 app.use(
   "/api/payment/webhook-verification",
+  express.raw({ type: "application/json" })
+);
+app.use(
+  "/api/payment/phonepe/callback",
   express.raw({ type: "application/json" })
 );
 
@@ -102,6 +125,10 @@ app.use("/api/consumables", consumableRoutes);
 app.use("/api/staff", staffRoutes);
 app.use("/api/data", dataRoutes);
 app.use("/api/updates", updateRoutes);
+app.use("/api/customer", customerRoute);
+app.use("/api/payment/phonepe", phonePeRoute);
+app.use("/api/settings", settingsRoute);
+app.use("/api/admin/notify", adminNotifyRoute);
 
 // Serve frontend static files
 // In production FRONTEND_DIST_PATH points to resources/frontend/dist (extraResources).

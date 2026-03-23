@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNotifications } from "../../context/NotificationContext";
 import { FaCheckDouble, FaPhone, FaUser, FaUtensils } from "react-icons/fa";
 import { IoCheckmarkDoneCircle, IoTimeOutline } from "react-icons/io5";
 import { MdTableRestaurant } from "react-icons/md";
@@ -46,8 +47,12 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
   const dispatch      = useAppDispatch();
   const navigate      = useNavigate();
   const queryClient   = useQueryClient();
+  const { notifications, clearNotification } = useNotifications();
 
   const [showPayModal, setShowPayModal] = useState(false);
+
+  const notification = notifications.get(order._id);
+  const isHighlighted = !!notification;
 
   const isCompleted   = order.orderStatus === "Completed";
   const isReady       = order.orderStatus === "Ready";
@@ -89,7 +94,9 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
     }
     const { customerDetails, table, items } = order;
     dispatch(setCustomer({ ...customerDetails } as { name: string; phone: string; guests: number }));
-    dispatch(tableStateUpdate({ table: { tableId: table._id, tableNo: table.tableNo } }));
+    if (table) {
+      dispatch(tableStateUpdate({ table: { tableId: table._id, tableNo: table.tableNo } }));
+    }
     dispatch(updateList([...items]));
     navigate(`/menu?orderId=${order._id}`);
   };
@@ -128,17 +135,29 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
 
   const cfg = cardCfg[order.orderStatus as keyof typeof cardCfg] ?? cardCfg["In Progress"];
 
-  // ── Items preview (first 3) ───────────────────────────────────
+  // ── Batch grouping ───────────────────────────────────────────
+  const batchGroups = (() => {
+    const map = new Map<number, typeof order.items>();
+    order.items.forEach(i => {
+      const b = i.batch ?? 1;
+      if (!map.has(b)) map.set(b, []);
+      map.get(b)!.push(i);
+    });
+    return Array.from(map.entries()).sort(([a], [b]) => a - b);
+  })();
+  const hasMultipleBatches = batchGroups.length > 1;
+
+  // ── Items preview (first 3, single-batch only) ────────────────
   const previewItems = order.items.slice(0, 3);
   const extraItems   = order.items.length - 3;
 
   return (
     <>
     <div
-      onClick={onOrderClick}
+      onClick={() => { clearNotification(order._id); onOrderClick(); }}
       className={`w-full glass-card rounded-2xl overflow-hidden transition-all duration-200 cursor-pointer
         hover:-translate-y-0.5 hover:shadow-glow
-        ${cfg.border}
+        ${isHighlighted ? "ring-2 ring-dhaba-accent animate-pulse shadow-glow" : cfg.border}
         ${isCompleted && isFullyPaid ? "opacity-60" : ""}
       `}
     >
@@ -164,7 +183,17 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
           </div>
         </div>
 
-        <div className="text-right shrink-0">
+        <div className="text-right shrink-0 flex flex-col items-end gap-1">
+          {isHighlighted && (
+            <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-lg bg-dhaba-accent text-dhaba-bg animate-bounce">
+              {notification?.type === "new_order" ? "🔔 New Order!" : "➕ Items Added!"}
+            </span>
+          )}
+          {!isHighlighted && hasMultipleBatches && (
+            <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-lg bg-dhaba-accent/15 text-dhaba-accent">
+              Multi-round
+            </span>
+          )}
           <span className={`inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-lg ${cfg.badge}`}>
             {cfg.icon}{order.orderStatus}
           </span>
@@ -177,31 +206,67 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
         {/* Table + time */}
         <div className="flex items-center justify-between text-xs text-dhaba-muted">
           <span className="flex items-center gap-1.5 font-semibold">
-            <MdTableRestaurant className="text-sm" />Table {order.table.tableNo}
+            <MdTableRestaurant className="text-sm" />{order.table ? `Table ${order.table.tableNo}` : (order.orderType ?? "Online")}
           </span>
           <span className="flex items-center gap-1.5">
             <IoTimeOutline className="text-sm" />{formatDateAndTime(order.orderDate)}
           </span>
         </div>
 
-        {/* Items preview */}
-        <div className="flex flex-wrap gap-1.5">
-          {previewItems.map((item, i) => (
-            <span
-              key={i}
-              className="flex items-center gap-1 text-[11px] bg-dhaba-surface/60 text-dhaba-text px-2.5 py-1 rounded-lg font-medium"
-            >
-              <FaUtensils className="text-[9px] text-dhaba-muted" />
-              {item.name}
-              <span className="text-dhaba-muted">×{item.quantity}</span>
-            </span>
-          ))}
-          {extraItems > 0 && (
-            <span className="text-[11px] text-dhaba-accent font-bold px-2 py-1 rounded-lg bg-dhaba-accent/10">
-              +{extraItems} more
-            </span>
-          )}
-        </div>
+        {/* Items — grouped by batch when multi-round, flat preview otherwise */}
+        {hasMultipleBatches ? (
+          <div className="space-y-2">
+            {batchGroups.map(([batch, batchItems]) => (
+              <div key={batch}>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md
+                    ${batch === 1
+                      ? "bg-dhaba-surface text-dhaba-muted"
+                      : "bg-dhaba-accent/15 text-dhaba-accent"
+                    }`}
+                  >
+                    {batch === 1 ? "Round 1" : `Round ${batch}`}
+                  </span>
+                  <div className="flex-1 h-px bg-dhaba-border/30" />
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {batchItems.map((item, i) => (
+                    <span
+                      key={i}
+                      className={`flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg font-medium
+                        ${batch === 1
+                          ? "bg-dhaba-surface/60 text-dhaba-text"
+                          : "bg-dhaba-accent/10 text-dhaba-accent"
+                        }`}
+                    >
+                      <FaUtensils className="text-[9px] opacity-60" />
+                      {item.name}
+                      <span className="opacity-60">×{item.quantity}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {previewItems.map((item, i) => (
+              <span
+                key={i}
+                className="flex items-center gap-1 text-[11px] bg-dhaba-surface/60 text-dhaba-text px-2.5 py-1 rounded-lg font-medium"
+              >
+                <FaUtensils className="text-[9px] text-dhaba-muted" />
+                {item.name}
+                <span className="text-dhaba-muted">×{item.quantity}</span>
+              </span>
+            ))}
+            {extraItems > 0 && (
+              <span className="text-[11px] text-dhaba-accent font-bold px-2 py-1 rounded-lg bg-dhaba-accent/10">
+                +{extraItems} more
+              </span>
+            )}
+          </div>
+        )}
 
         {/* ── Bill row ── */}
         <div className="flex items-center justify-between pt-1 border-t border-dhaba-border/20">

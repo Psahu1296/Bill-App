@@ -43,6 +43,8 @@ extraResources:
     to: frontend/dist
     filter:
       - "**/*"
+  - from: pos-backend/.env
+    to: backend/.env
 
 # ── Windows installer ──────────────────────────────────────────────────────────
 # Code signing — set WIN_CSC_LINK (base64 .pfx) and WIN_CSC_KEY_PASSWORD in
