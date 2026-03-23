@@ -79,6 +79,30 @@ jobs:
           cd pos-backend && npm install
           cd ../pos-frontend && npm install
 
+      # Write .env files from GitHub Secrets so the build has all required variables.
+      # Add each variable under repo Settings → Secrets and variables → Actions.
+      - name: Write environment files
+        shell: bash
+        run: |
+          cat > pos-backend/.env << 'EOF'
+          PORT=5002
+          NODE_ENV=production
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          FRONTEND_URL=${{ secrets.FRONTEND_URL }}
+          CUSTOMER_APP_URL=${{ secrets.CUSTOMER_APP_URL }}
+          SERVER_URL=${{ secrets.SERVER_URL }}
+          PHONEPE_MERCHANT_ID=${{ secrets.PHONEPE_MERCHANT_ID }}
+          PHONEPE_SALT_KEY=${{ secrets.PHONEPE_SALT_KEY }}
+          PHONEPE_SALT_INDEX=${{ secrets.PHONEPE_SALT_INDEX }}
+          PHONEPE_ENV=${{ secrets.PHONEPE_ENV }}
+          CLOUDFLARE_TUNNEL_TOKEN=${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+          CLOUDFLARE_TUNNEL_URL=${{ secrets.CLOUDFLARE_TUNNEL_URL }}
+          EOF
+
+          cat > pos-frontend/.env << 'EOF'
+          VITE_CUSTOMER_APP_URL=${{ secrets.VITE_CUSTOMER_APP_URL }}
+          EOF
+
       - name: Rebuild native modules for Electron
         shell: bash
         run: |
