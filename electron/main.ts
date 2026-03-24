@@ -347,7 +347,10 @@ function createWindow(): void {
   const url = isDev ? "http://localhost:5173" : `http://localhost:${resolvedPort}`;
   win.loadURL(url);
 
-  if (isDev) win.webContents.openDevTools();
+  // Open DevTools once on first load in dev — not on every HMR reload
+  if (isDev) {
+    win.webContents.once("did-finish-load", () => win?.webContents.openDevTools());
+  }
 
   win.once("ready-to-show", () => {
     sendToSplash("done", "Ready!", 100);
