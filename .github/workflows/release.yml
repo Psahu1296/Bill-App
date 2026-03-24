@@ -36,6 +36,7 @@ jobs:
     name: Build & Release on ${{ matrix.os }}
     needs: create-release
     runs-on: ${{ matrix.os }}
+    environment: prod
     permissions:
       contents: write
     env:
@@ -102,6 +103,23 @@ jobs:
           cat > pos-frontend/.env << 'EOF'
           VITE_CUSTOMER_APP_URL=${{ secrets.VITE_CUSTOMER_APP_URL }}
           EOF
+
+      - name: Download cloudflared binary
+        shell: bash
+        run: |
+          mkdir -p build-resources/bin
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            curl -fsSL -o build-resources/bin/cloudflared-win32-x64.exe \
+              https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            curl -fsSL -o build-resources/bin/cloudflared-darwin-universal \
+              https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-universal
+            chmod +x build-resources/bin/cloudflared-darwin-universal
+          else
+            curl -fsSL -o build-resources/bin/cloudflared-linux-x64 \
+              https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+            chmod +x build-resources/bin/cloudflared-linux-x64
+          fi
 
       - name: Rebuild native modules for Electron
         shell: bash

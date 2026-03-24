@@ -47,10 +47,15 @@ extraResources:
     to: backend/.env
 
 # ── Windows installer ──────────────────────────────────────────────────────────
+# cloudflared is downloaded by CI into build-resources/bin/ and bundled here so
+# the tunnel can start without requiring a system-wide cloudflared install.
 # Code signing — set WIN_CSC_LINK (base64 .pfx) and WIN_CSC_KEY_PASSWORD in
 # GitHub Secrets (or env). When absent the build still succeeds but shows the
 # SmartScreen "Unknown Publisher" warning. With an OV/EV cert it is suppressed.
 win:
+  extraResources:
+    - from: build-resources/bin/cloudflared-win32-x64.exe
+      to: cloudflared/cloudflared.exe
   # artifactName uses dots so the generated latest.yml and the GitHub download
   # URL always match (GitHub converts spaces → dots in asset filenames).
   artifactName: "Dhaba.POS.Setup.${version}.${ext}"
@@ -79,6 +84,9 @@ nsis:
 
 # ── macOS installer ────────────────────────────────────────────────────────────
 mac:
+  extraResources:
+    - from: build-resources/bin/cloudflared-darwin-universal
+      to: cloudflared/cloudflared
   # artifactName uses dots — matches the GitHub asset URL after space→dot conversion.
   # ${arch} is always included so x64 and arm64 have distinct, predictable names.
   artifactName: "Dhaba.POS-${version}-${arch}.${ext}"
@@ -91,6 +99,9 @@ mac:
 
 # ── Linux installer ────────────────────────────────────────────────────────────
 linux:
+  extraResources:
+    - from: build-resources/bin/cloudflared-linux-x64
+      to: cloudflared/cloudflared
   artifactName: "Dhaba.POS-${version}-${arch}.${ext}"
   target:
     - target: AppImage

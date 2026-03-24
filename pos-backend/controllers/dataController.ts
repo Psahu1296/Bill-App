@@ -490,7 +490,7 @@ export const importData = (req: Request, res: Response, next: NextFunction) => {
 
           for (const p of payments) {
             // Ensure staff_id is present (not included in the export JSON object)
-            const payment = { staff_id: staffRow["id"], ...p };
+            const payment: Record<string, unknown> = { staff_id: staffRow["id"], ...p };
             const pcols = Object.keys(payment);
             db.prepare(`INSERT OR REPLACE INTO staff_payments (${pcols.join(", ")}) VALUES (${pcols.map(() => "?").join(", ")})`)
               .run(...pcols.map((c) => payment[c]));
@@ -565,7 +565,7 @@ export const importData = (req: Request, res: Response, next: NextFunction) => {
 
           for (const t of transactions) {
             // Ensure ledger_id is present (not included in the export JSON object)
-            const tx = { ledger_id: ledgerRow["id"], ...t };
+            const tx: Record<string, unknown> = { ledger_id: ledgerRow["id"], ...t };
             const tcols = Object.keys(tx);
             db.prepare(`INSERT OR REPLACE INTO customer_ledger_transactions (${tcols.join(", ")}) VALUES (${tcols.map(() => "?").join(", ")})`)
               .run(...tcols.map((c) => tx[c]));
