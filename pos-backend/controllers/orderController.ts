@@ -321,7 +321,7 @@ const deleteOrderById = async (req: Request, res: Response, next: NextFunction) 
     // Require the requesting user's password before allowing a destructive delete
     const { password } = req.body as { password?: string };
     if (!password) return next(createHttpError(400, "Password is required to delete an order."));
-    const currentUser = userRepo.findById(req.user!._id) as Record<string, unknown> | null;
+    const currentUser = userRepo.findById((req.user as Record<string, unknown>)._id as string) as Record<string, unknown> | null;
     if (!currentUser) return next(createHttpError(401, "User not found."));
     const isMatch = await bcrypt.compare(password, currentUser.password as string);
     if (!isMatch) return next(createHttpError(401, "Incorrect password."));
