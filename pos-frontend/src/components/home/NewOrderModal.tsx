@@ -1,6 +1,6 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaTimes, FaBolt } from "react-icons/fa";
+import { FaTimes, FaBolt, FaShoppingBag } from "react-icons/fa";
 import { MdTableRestaurant, MdChair } from "react-icons/md";
 import { useQuery } from "@tanstack/react-query";
 import { getTables } from "../../https";
@@ -24,7 +24,8 @@ const NewOrderModal: React.FC<NewOrderModalProps> = ({ onClose }) => {
   });
 
   const allTables: Table[]  = tablesRes?.data?.data ?? [];
-  const available           = allTables.filter((t) => t.status === "Available");
+  const virtualTable        = allTables.find((t) => t.isVirtual);
+  const available           = allTables.filter((t) => !t.isVirtual && t.status === "Available");
 
   const handlePick = (table: Table) => {
     dispatch(removeAllItems());
@@ -64,6 +65,30 @@ const NewOrderModal: React.FC<NewOrderModalProps> = ({ onClose }) => {
               <FaTimes className="text-dhaba-muted group-hover:text-dhaba-danger" />
             </button>
           </div>
+
+          {/* Takeaway / Parcel shortcut */}
+          {virtualTable && (
+            <div className="px-5 pt-4 pb-0">
+              <button
+                onClick={() => handlePick(virtualTable)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/20
+                  hover:bg-amber-500/20 transition-all duration-150 group"
+              >
+                <div className="h-9 w-9 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                  <FaShoppingBag className="text-amber-400 group-hover:scale-110 transition-transform" />
+                </div>
+                <div className="text-left">
+                  <p className="font-bold text-dhaba-text text-sm">Takeaway / Parcel</p>
+                  <p className="text-[11px] text-dhaba-muted">No table — counter order</p>
+                </div>
+              </button>
+              <div className="flex items-center gap-2 mt-4 mb-1">
+                <div className="flex-1 h-px bg-dhaba-border/20" />
+                <span className="text-[10px] text-dhaba-muted uppercase tracking-wider">or pick a table</span>
+                <div className="flex-1 h-px bg-dhaba-border/20" />
+              </div>
+            </div>
+          )}
 
           {/* Table grid */}
           <div className="p-5">

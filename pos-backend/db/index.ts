@@ -66,6 +66,14 @@ function runMigrations(db: Database.Database) {
     )
   `).run();
   db.prepare("INSERT OR IGNORE INTO store_settings (key, value) VALUES ('online_orders', 'true')").run();
+
+  // is_virtual column — added to support the Takeaway virtual table
+  try {
+    db.prepare("ALTER TABLE tables_tb ADD COLUMN is_virtual INTEGER NOT NULL DEFAULT 0").run();
+  } catch { /* column already exists — safe to ignore */ }
+
+  // Ensure the virtual takeaway table always exists (safe after restore or delete)
+  db.prepare("INSERT OR IGNORE INTO tables_tb (table_no, seats, is_virtual) VALUES (0, 0, 1)").run();
 }
 
 let _db: Database.Database | null = null;

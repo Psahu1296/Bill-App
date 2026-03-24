@@ -22,7 +22,9 @@ const Tables: React.FC = () => {
     if (isError) enqueueSnackbar("Something went wrong!", { variant: "error" });
   }, [isError]);
 
-  const tables: Table[] = resData?.data?.data ?? [];
+  const allTables: Table[] = resData?.data?.data ?? [];
+  const virtualTables = allTables.filter((t) => t.isVirtual);
+  const regularTables = allTables.filter((t) => !t.isVirtual && (status === "all" || t.status === "Booked"));
 
   return (
     <section className="bg-dhaba-bg min-h-[calc(100vh-4rem)] pb-24">
@@ -48,8 +50,24 @@ const Tables: React.FC = () => {
         </div>
       </div>
 
+      {/* Virtual takeaway table — always visible, outside Booked/All filter */}
+      {virtualTables.length > 0 && (
+        <div className="px-6 pb-2">
+          {virtualTables.map((table) => (
+            <TableCard
+              key={table._id}
+              id={table._id}
+              name={table.tableNo}
+              status={table.status}
+              seats={table.seats}
+              isVirtual
+            />
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 px-6 py-2">
-        {tables.map((table) => (
+        {regularTables.map((table) => (
           <TableCard
             key={table._id}
             id={table._id}

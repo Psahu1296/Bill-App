@@ -126,6 +126,8 @@ const addOrder = async (req: Request, res: Response, next: NextFunction) => {
     }
 
     // Create new order (wrapped in a SQLite transaction for atomicity)
+    const isVirtualTable = Boolean((table as Record<string, unknown>).isVirtual);
+
     const db = require("../db").getDb();
     const createOrderTx = db.transaction(() => {
       const newOrder = orderRepo.create({
@@ -142,8 +144,10 @@ const addOrder = async (req: Request, res: Response, next: NextFunction) => {
         balanceDueOnOrder,
       });
 
-      // Mark table as Booked
-      tableRepo.update(tableId, { status: "Booked", currentOrderId: Number(newOrder!._id) });
+      // Only mark physical tables as Booked — virtual tables support multiple concurrent orders
+      if (!isVirtualTable) {
+        tableRepo.update(tableId, { status: "Booked", currentOrderId: Number(newOrder!._id) });
+      }
 
       return newOrder!;
     });

@@ -19,10 +19,15 @@ export function initSchema(db: Database.Database): void {
       table_no          INTEGER NOT NULL UNIQUE,
       status            TEXT    NOT NULL DEFAULT 'Available',
       seats             INTEGER NOT NULL,
+      is_virtual        INTEGER NOT NULL DEFAULT 0,
       current_order_id  INTEGER REFERENCES orders(id) ON DELETE SET NULL,
       created_at        TEXT    NOT NULL DEFAULT (datetime('now')),
       updated_at        TEXT    NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- Seed the permanent virtual "Takeaway / Parcel" counter (table_no = 0)
+    -- is_virtual = 1 means multiple concurrent orders are allowed; status never changes
+    INSERT OR IGNORE INTO tables_tb (table_no, seats, is_virtual) VALUES (0, 0, 1);
 
     CREATE TABLE IF NOT EXISTS dishes (
       id               INTEGER PRIMARY KEY AUTOINCREMENT,

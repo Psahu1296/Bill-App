@@ -416,6 +416,11 @@ export const deleteData = (req: Request, res: Response, next: NextFunction) => {
         }
 
         counts[mod] = result.changes;
+
+        // Re-seed virtual takeaway table after tables are deleted
+        if (mod === "tables") {
+          db.prepare("INSERT OR IGNORE INTO tables_tb (table_no, seats, is_virtual) VALUES (0, 0, 1)").run();
+        }
       }
     });
 
@@ -455,7 +460,37 @@ export const importData = (req: Request, res: Response, next: NextFunction) => {
       // ── orders ──────────────────────────────────────────────────────────────
       if (Array.isArray(moduleData["orders"])) {
         let cnt = 0;
-        for (const row of moduleData["orders"] as Record<string, unknown>[]) {
+        for (const raw of moduleData["orders"] as Record<string, unknown>[]) {
+          const row = { ...raw };
+
+          // ── Normalize old bills format { total, roundOff, totalWithTax } ──────
+          // New format: { subtotal, tax, roundoff, total }
+          if (typeof row["bills"] === "string") {
+            try {
+              const b = JSON.parse(row["bills"] as string) as Record<string, number>;
+              if ("totalWithTax" in b && !("subtotal" in b)) {
+                const normalized = {
+                  subtotal: b["total"] ?? b["totalWithTax"] ?? 0,
+                  tax:      b["tax"]   ?? 0,
+                  roundoff: b["roundOff"] ?? 0,
+                  total:    b["totalWithTax"] ?? b["total"] ?? 0,
+                };
+                row["bills"] = JSON.stringify(normalized);
+              }
+            } catch { /* leave as-is if unparseable */ }
+          }
+
+          // ── Normalize old items: add missing variantSize ─────────────────────
+          if (typeof row["items"] === "string") {
+            try {
+              const items = JSON.parse(row["items"] as string) as Record<string, unknown>[];
+              const fixed = items.map((it) =>
+                "variantSize" in it ? it : { ...it, variantSize: "Regular" }
+              );
+              row["items"] = JSON.stringify(fixed);
+            } catch { /* leave as-is */ }
+          }
+
           const cols = Object.keys(row);
           db.prepare(`INSERT OR REPLACE INTO orders (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`)
             .run(...cols.map((c) => row[c]));
@@ -533,6 +568,8 @@ export const importData = (req: Request, res: Response, next: NextFunction) => {
           cnt++;
         }
         counts["tables"] = cnt;
+        // Re-seed virtual takeaway table — old backups won't have it
+        db.prepare("INSERT OR IGNORE INTO tables_tb (table_no, seats, is_virtual) VALUES (0, 0, 1)").run();
       }
 
       // ── dishes ────────────────────────────────────────────────────────────────
@@ -552,6 +589,10 @@ export const importData = (req: Request, res: Response, next: NextFunction) => {
         let cnt = 0;
         for (const raw of moduleData["ledger"] as Record<string, unknown>[]) {
           const { transactions: txRaw, ...ledgerRow } = raw;
+          // Old backups can have negative balance_due (overpaid) — clamp to 0
+          if (typeof ledgerRow["balance_due"] === "number" && ledgerRow["balance_due"] < 0) {
+            ledgerRow["balance_due"] = 0;
+          }
           const cols = Object.keys(ledgerRow);
           db.prepare(`INSERT OR REPLACE INTO customer_ledger (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`)
             .run(...cols.map((c) => ledgerRow[c]));

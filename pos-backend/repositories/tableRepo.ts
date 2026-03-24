@@ -3,10 +3,11 @@ import { getDb } from "../db";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToApi(row: any) {
   if (!row) return null;
-  const { id, table_no, current_order_id, created_at, updated_at, ...rest } = row;
+  const { id, table_no, is_virtual, current_order_id, created_at, updated_at, ...rest } = row;
   return {
     _id: String(id),
     tableNo: table_no,
+    isVirtual: Boolean(is_virtual),
     currentOrder: current_order_id != null ? String(current_order_id) : null,
     createdAt: created_at,
     updatedAt: updated_at,

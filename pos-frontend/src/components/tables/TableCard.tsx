@@ -18,13 +18,14 @@ interface TableCardProps {
   initials?: string;
   seats: number;
   orderId?: string;
+  isVirtual?: boolean;
 }
 
-const TableCard: React.FC<TableCardProps> = ({ id, name, status, initials, seats, orderId }) => {
+const TableCard: React.FC<TableCardProps> = ({ id, name, status, initials, seats, orderId, isVirtual }) => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const isBooked = status === "Booked";
+  const isBooked = !isVirtual && status === "Booked";
 
   const [showQr, setShowQr] = useState(false);
   const [tunnelUrl, setTunnelUrl] = useState<string | null>(null);
@@ -86,44 +87,52 @@ const TableCard: React.FC<TableCardProps> = ({ id, name, status, initials, seats
     >
       <div className="flex items-center justify-between mb-5">
         <h3 className="font-display text-lg font-bold text-dhaba-text">
-          Table {name}
+          {isVirtual ? "Takeaway / Parcel" : `Table ${name}`}
         </h3>
         <span className={`status-chip ${
           isBooked ? "bg-dhaba-success/15 text-dhaba-success" : "bg-dhaba-accent/15 text-dhaba-accent"
         }`}>
-          {status}
+          {isVirtual ? "Available" : status}
         </span>
       </div>
 
       <div className="flex items-center justify-center py-4">
-        <div
-          className="h-16 w-16 rounded-2xl flex items-center justify-center text-lg font-bold text-white transition-transform hover:scale-105"
-          style={{ backgroundColor: initials ? getBgColor() : "hsl(var(--dhaba-surface))" }}
-        >
-          {getAvatarName(initials) || "—"}
-        </div>
+        {isVirtual ? (
+          <div className="h-16 w-16 rounded-2xl flex items-center justify-center bg-amber-500/15">
+            <MdQrCode2 className="text-3xl text-amber-400" />
+          </div>
+        ) : (
+          <div
+            className="h-16 w-16 rounded-2xl flex items-center justify-center text-lg font-bold text-white transition-transform hover:scale-105"
+            style={{ backgroundColor: initials ? getBgColor() : "hsl(var(--dhaba-surface))" }}
+          >
+            {getAvatarName(initials) || "—"}
+          </div>
+        )}
       </div>
 
       <div className="flex justify-between items-center mt-4 pt-3 border-t border-dhaba-border/20">
         <div className="flex items-center gap-2 text-dhaba-muted text-sm">
           <MdChair className="text-dhaba-accent" />
-          <span>{seats} seats</span>
+          <span>{isVirtual ? "No table" : `${seats} seats`}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            className="text-xs font-bold p-1.5 rounded-xl bg-dhaba-surface text-dhaba-muted hover:text-dhaba-accent hover:bg-dhaba-accent/10 transition-colors"
-            title="Show QR code"
-            onClick={(e) => { e.stopPropagation(); setShowQr(true); }}
-          >
-            <MdQrCode2 className="text-base" />
-          </button>
-          <button
-            className="text-xs font-bold px-3 py-1.5 rounded-xl bg-dhaba-accent/10 text-dhaba-accent hover:bg-dhaba-accent/20 transition-colors"
-            onClick={onChangeStatus}
-          >
-            {isBooked ? "Free Up" : "Reserve"}
-          </button>
-        </div>
+        {!isVirtual && (
+          <div className="flex items-center gap-2">
+            <button
+              className="text-xs font-bold p-1.5 rounded-xl bg-dhaba-surface text-dhaba-muted hover:text-dhaba-accent hover:bg-dhaba-accent/10 transition-colors"
+              title="Show QR code"
+              onClick={(e) => { e.stopPropagation(); setShowQr(true); }}
+            >
+              <MdQrCode2 className="text-base" />
+            </button>
+            <button
+              className="text-xs font-bold px-3 py-1.5 rounded-xl bg-dhaba-accent/10 text-dhaba-accent hover:bg-dhaba-accent/20 transition-colors"
+              onClick={onChangeStatus}
+            >
+              {isBooked ? "Free Up" : "Reserve"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
 

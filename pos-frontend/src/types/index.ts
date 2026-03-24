@@ -29,6 +29,7 @@ export interface Table {
   tableNo: number | string;
   seats: number;
   status: 'Available' | 'Booked';
+  isVirtual?: boolean;
   currentOrder?: {
     _id: string;
     customerDetails: { name: string };
