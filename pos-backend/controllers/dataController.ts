@@ -205,6 +205,83 @@ export const exportData = (req: Request, res: Response, next: NextFunction) => {
   }
 };
 
+// ─── Delete Preview ───────────────────────────────────────────────────────────
+
+export const deletePreview = (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { modules, startDate, endDate } = req.query as Record<string, string>;
+
+    if (!modules) {
+      res.status(400).json({ success: false, message: "modules query param is required" });
+      return;
+    }
+
+    const db = getDb();
+    const moduleList = modules.split(",").filter((m) => TABLE_MAP[m]);
+    // counts: directly selected records
+    // cascaded: auto-deleted due to order cascade (not explicitly selected)
+    const counts: Record<string, number> = {};
+    const cascaded: Record<string, number> = {};
+
+    for (const mod of moduleList) {
+      const table = TABLE_MAP[mod];
+      const dateCol = DATE_COL[mod];
+
+      let row: { cnt: number };
+      if (dateCol && startDate && endDate) {
+        const endDt = new Date(endDate);
+        endDt.setUTCHours(23, 59, 59, 999);
+        row = db.prepare(
+          `SELECT COUNT(*) as cnt FROM ${table} WHERE ${dateCol} >= ? AND ${dateCol} <= ?`
+        ).get(new Date(startDate).toISOString(), endDt.toISOString()) as { cnt: number };
+      } else {
+        row = db.prepare(`SELECT COUNT(*) as cnt FROM ${table}`).get() as { cnt: number };
+      }
+      counts[mod] = row.cnt;
+    }
+
+    // When orders are selected, count cascaded linked records (mirrors deleteData logic)
+    if (moduleList.includes("orders")) {
+      let orderIds: number[];
+      if (startDate && endDate) {
+        const endDt = new Date(endDate);
+        endDt.setUTCHours(23, 59, 59, 999);
+        orderIds = (db.prepare(
+          `SELECT id FROM orders WHERE order_date >= ? AND order_date <= ?`
+        ).all(new Date(startDate).toISOString(), endDt.toISOString()) as { id: number }[]).map(r => r.id);
+      } else {
+        orderIds = (db.prepare(`SELECT id FROM orders`).all() as { id: number }[]).map(r => r.id);
+      }
+
+      if (orderIds.length > 0) {
+        const ph = orderIds.map(() => "?").join(",");
+
+        // Consumables linked to these orders (not already in selected modules)
+        if (!moduleList.includes("consumables")) {
+          const { cnt } = db.prepare(
+            `SELECT COUNT(*) as cnt FROM consumables WHERE order_id IN (${ph})`
+          ).get(...orderIds) as { cnt: number };
+          if (cnt > 0) cascaded["consumables (linked to orders)"] = cnt;
+        }
+
+        // Ledger transactions linked to these orders
+        const { cnt: ltCnt } = db.prepare(
+          `SELECT COUNT(*) as cnt FROM customer_ledger_transactions WHERE order_id IN (${ph})`
+        ).get(...orderIds) as { cnt: number };
+        if (ltCnt > 0) cascaded["ledger transactions (linked to orders)"] = ltCnt;
+      }
+    }
+
+    const total =
+      Object.values(counts).reduce((a, b) => a + b, 0) +
+      Object.values(cascaded).reduce((a, b) => a + b, 0);
+
+    res.json({ success: true, data: { counts, cascaded, total } });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // ─── Delete ───────────────────────────────────────────────────────────────────
 
 export const deleteData = (req: Request, res: Response, next: NextFunction) => {
@@ -349,6 +426,220 @@ export const deleteData = (req: Request, res: Response, next: NextFunction) => {
       success: true,
       message: `Deleted ${total} record(s).`,
       data: counts,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── Import (Restore) ─────────────────────────────────────────────────────────
+
+export const importData = (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const body = req.body as { exportedAt?: string; data?: Record<string, unknown[]> } | Record<string, unknown[]>;
+
+    // Accept both { exportedAt, data: {...} } and a flat { orders, staff, ... }
+    const moduleData: Record<string, unknown[]> =
+      (body as { data?: Record<string, unknown[]> }).data ??
+      (body as Record<string, unknown[]>);
+
+    if (!moduleData || typeof moduleData !== "object" || Array.isArray(moduleData)) {
+      res.status(400).json({ success: false, message: "Invalid backup format." });
+      return;
+    }
+
+    const db = getDb();
+    const counts: Record<string, number> = {};
+
+    const importTx = db.transaction(() => {
+      // ── orders ──────────────────────────────────────────────────────────────
+      if (Array.isArray(moduleData["orders"])) {
+        let cnt = 0;
+        for (const row of moduleData["orders"] as Record<string, unknown>[]) {
+          const cols = Object.keys(row);
+          db.prepare(`INSERT OR REPLACE INTO orders (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`)
+            .run(...cols.map((c) => row[c]));
+          // Re-credit daily_earnings for the order's amount_paid (mirrors deleteData reversal)
+          const amountPaid = Number(row["amount_paid"]);
+          if (amountPaid > 0) {
+            try {
+              const dateIso = getZonedStartOfDayUtc(new Date(row["order_date"] as string)).toISOString();
+              earningRepo.incrementEarnings(dateIso, amountPaid);
+            } catch { /* ignore earnings errors */ }
+          }
+          cnt++;
+        }
+        counts["orders"] = cnt;
+      }
+
+      // ── staff (+ nested payments) ────────────────────────────────────────────
+      if (Array.isArray(moduleData["staff"])) {
+        let cnt = 0;
+        for (const raw of moduleData["staff"] as Record<string, unknown>[]) {
+          const { payments: paymentsRaw, ...staffRow } = raw;
+          const cols = Object.keys(staffRow);
+          db.prepare(`INSERT OR REPLACE INTO staff (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`)
+            .run(...cols.map((c) => staffRow[c]));
+
+          const payments: Record<string, unknown>[] =
+            typeof paymentsRaw === "string"
+              ? (JSON.parse(paymentsRaw) as Record<string, unknown>[])
+              : Array.isArray(paymentsRaw)
+              ? (paymentsRaw as Record<string, unknown>[])
+              : [];
+
+          for (const p of payments) {
+            // Ensure staff_id is present (not included in the export JSON object)
+            const payment = { staff_id: staffRow["id"], ...p };
+            const pcols = Object.keys(payment);
+            db.prepare(`INSERT OR REPLACE INTO staff_payments (${pcols.join(", ")}) VALUES (${pcols.map(() => "?").join(", ")})`)
+              .run(...pcols.map((c) => payment[c]));
+          }
+          cnt++;
+        }
+        counts["staff"] = cnt;
+      }
+
+      // ── consumables ───────────────────────────────────────────────────────────
+      if (Array.isArray(moduleData["consumables"])) {
+        let cnt = 0;
+        for (const row of moduleData["consumables"] as Record<string, unknown>[]) {
+          const cols = Object.keys(row);
+          db.prepare(`INSERT OR REPLACE INTO consumables (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`)
+            .run(...cols.map((c) => row[c]));
+          // Re-credit daily_earnings for customer consumables linked to orders (mirrors deleteData reversal)
+          if (row["consumer_type"] === "customer" && row["order_id"] != null) {
+            try {
+              const qty = Number(row["quantity"]);
+              const ppu = Number(row["price_per_unit"]);
+              if (qty > 0 && ppu > 0) {
+                const dateIso = getZonedStartOfDayUtc(new Date(row["timestamp"] as string)).toISOString();
+                earningRepo.incrementEarnings(dateIso, qty * ppu);
+              }
+            } catch { /* ignore earnings errors */ }
+          }
+          cnt++;
+        }
+        counts["consumables"] = cnt;
+      }
+
+      // ── tables ────────────────────────────────────────────────────────────────
+      if (Array.isArray(moduleData["tables"])) {
+        let cnt = 0;
+        for (const row of moduleData["tables"] as Record<string, unknown>[]) {
+          const cols = Object.keys(row);
+          db.prepare(`INSERT OR REPLACE INTO tables_tb (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`)
+            .run(...cols.map((c) => row[c]));
+          cnt++;
+        }
+        counts["tables"] = cnt;
+      }
+
+      // ── dishes ────────────────────────────────────────────────────────────────
+      if (Array.isArray(moduleData["dishes"])) {
+        let cnt = 0;
+        for (const row of moduleData["dishes"] as Record<string, unknown>[]) {
+          const cols = Object.keys(row);
+          db.prepare(`INSERT OR REPLACE INTO dishes (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`)
+            .run(...cols.map((c) => row[c]));
+          cnt++;
+        }
+        counts["dishes"] = cnt;
+      }
+
+      // ── ledger (+ nested transactions) ───────────────────────────────────────
+      if (Array.isArray(moduleData["ledger"])) {
+        let cnt = 0;
+        for (const raw of moduleData["ledger"] as Record<string, unknown>[]) {
+          const { transactions: txRaw, ...ledgerRow } = raw;
+          const cols = Object.keys(ledgerRow);
+          db.prepare(`INSERT OR REPLACE INTO customer_ledger (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`)
+            .run(...cols.map((c) => ledgerRow[c]));
+
+          const transactions: Record<string, unknown>[] =
+            typeof txRaw === "string"
+              ? (JSON.parse(txRaw) as Record<string, unknown>[])
+              : Array.isArray(txRaw)
+              ? (txRaw as Record<string, unknown>[])
+              : [];
+
+          for (const t of transactions) {
+            // Ensure ledger_id is present (not included in the export JSON object)
+            const tx = { ledger_id: ledgerRow["id"], ...t };
+            const tcols = Object.keys(tx);
+            db.prepare(`INSERT OR REPLACE INTO customer_ledger_transactions (${tcols.join(", ")}) VALUES (${tcols.map(() => "?").join(", ")})`)
+              .run(...tcols.map((c) => tx[c]));
+          }
+          cnt++;
+        }
+        counts["ledger"] = cnt;
+      }
+    });
+
+    importTx();
+
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    res.json({
+      success: true,
+      message: `Restored ${total} record(s).`,
+      data: counts,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── Recalculate daily_earnings from actual orders + consumables ───────────────
+
+export const recalcEarnings = (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const db = getDb();
+
+    type OrderRow = { order_date: string; amount_paid: number };
+    type ConsumableRow = { timestamp: string; quantity: number; price_per_unit: number };
+
+    const orders = db.prepare(
+      `SELECT order_date, amount_paid FROM orders WHERE amount_paid > 0`
+    ).all() as OrderRow[];
+
+    const consumables = db.prepare(
+      `SELECT timestamp, quantity, price_per_unit FROM consumables
+       WHERE consumer_type = 'customer' AND order_id IS NOT NULL`
+    ).all() as ConsumableRow[];
+
+    // Accumulate totals per day-bucket (IST start-of-day stored as UTC ISO)
+    const totals = new Map<string, number>();
+
+    for (const o of orders) {
+      try {
+        const key = getZonedStartOfDayUtc(new Date(o.order_date)).toISOString();
+        totals.set(key, (totals.get(key) ?? 0) + o.amount_paid);
+      } catch { /* skip malformed dates */ }
+    }
+
+    for (const c of consumables) {
+      try {
+        const key = getZonedStartOfDayUtc(new Date(c.timestamp)).toISOString();
+        totals.set(key, (totals.get(key) ?? 0) + c.quantity * c.price_per_unit);
+      } catch { /* skip malformed dates */ }
+    }
+
+    const recalcTx = db.transaction(() => {
+      // Wipe existing earnings and rebuild clean
+      db.prepare("DELETE FROM daily_earnings").run();
+      try { db.prepare("DELETE FROM sqlite_sequence WHERE name = 'daily_earnings'").run(); } catch { /* ok */ }
+
+      for (const [dateIso, total] of totals) {
+        earningRepo.incrementEarnings(dateIso, total);
+      }
+    });
+
+    recalcTx();
+
+    res.json({
+      success: true,
+      message: `Recalculated earnings for ${totals.size} day(s).`,
+      data: Object.fromEntries(totals),
     });
   } catch (err) {
     next(err);

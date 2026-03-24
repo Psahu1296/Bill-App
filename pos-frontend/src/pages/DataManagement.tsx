@@ -60,6 +60,8 @@ const DataManagement: React.FC = () => {
   const [processing, setProcessing] = useState(false);
   const [result, setResult] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deletePreview, setDeletePreview] = useState<{ counts: Record<string, number>; cascaded: Record<string, number>; total: number } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [storageStats, setStorageStats] = useState<StorageStats>({ totalRecords: 0, dbSize: "—" });
 
   // Backup state
@@ -67,6 +69,7 @@ const DataManagement: React.FC = () => {
   const [backupProcessing, setBackupProcessing] = useState(false);
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [restoreProcessing, setRestoreProcessing] = useState(false);
+  const [recalcProcessing, setRecalcProcessing] = useState(false);
   const [backupResult, setBackupResult] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   // Full DB reset state
@@ -142,6 +145,19 @@ const DataManagement: React.FC = () => {
     }
   };
 
+  const handleRecalcEarnings = async () => {
+    setRecalcProcessing(true);
+    setBackupResult(null);
+    try {
+      const res = await axios.post<{ success: boolean; message: string }>("/api/data/recalc-earnings");
+      setBackupResult({ type: "success", message: res.data.message });
+    } catch {
+      setBackupResult({ type: "error", message: "Recalculation failed." });
+    } finally {
+      setRecalcProcessing(false);
+    }
+  };
+
   const handleRestore = async () => {
     if (!restoreFile) return;
     setRestoreProcessing(true);
@@ -203,6 +219,27 @@ const DataManagement: React.FC = () => {
     }
   };
 
+  const handleDeletePreview = async () => {
+    if (!selectedModules.length) {
+      setResult({ type: "error", message: "Please select at least one data module." });
+      return;
+    }
+    setPreviewLoading(true);
+    setDeletePreview(null);
+    try {
+      const params = new URLSearchParams({ modules: selectedModules.join(","), startDate, endDate });
+      const res = await axios.get<{ success: boolean; data: { counts: Record<string, number>; cascaded: Record<string, number>; total: number } }>(
+        `/api/data/delete-preview?${params.toString()}`
+      );
+      setDeletePreview(res.data.data);
+      setConfirmDelete(true);
+    } catch {
+      setResult({ type: "error", message: "Failed to fetch preview." });
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   const handleDelete = async () => {
     if (!selectedModules.length) {
       setResult({ type: "error", message: "Please select at least one data module." });
@@ -211,6 +248,7 @@ const DataManagement: React.FC = () => {
     setProcessing(true);
     setResult(null);
     setConfirmDelete(false);
+    setDeletePreview(null);
     try {
       const res = await axios.delete<{ success: boolean; message: string; data: Record<string, number> }>(
         "/api/data/delete",
@@ -537,6 +575,23 @@ const DataManagement: React.FC = () => {
                     </button>
                   </div>
 
+                  {/* Recalculate Earnings */}
+                  <div className="glass rounded-xl p-4 space-y-3">
+                    <p className="text-dhaba-text font-semibold text-xs uppercase tracking-wider">Fix Earnings</p>
+                    <p className="text-dhaba-muted text-xs">Recomputes daily earnings from actual orders & consumables. Use this if earnings show incorrect values after a restore.</p>
+                    <button
+                      onClick={handleRecalcEarnings}
+                      disabled={recalcProcessing}
+                      className="w-full py-2.5 rounded-xl font-bold text-sm bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {recalcProcessing ? (
+                        <><span className="animate-spin h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full" />Recalculating…</>
+                      ) : (
+                        <><FaSync />Recalculate Earnings</>
+                      )}
+                    </button>
+                  </div>
+
                   {/* Backup result */}
                   <AnimatePresence>
                     {backupResult && (
@@ -570,17 +625,18 @@ const DataManagement: React.FC = () => {
               {/* Delete confirmation */}
               {activeTab === "delete" && !confirmDelete && (
                 <button
-                  onClick={() => {
-                    if (!selectedModules.length) {
-                      setResult({ type: "error", message: "Please select at least one data module." });
-                      return;
-                    }
-                    setConfirmDelete(true);
-                  }}
-                  className="w-full py-3 rounded-2xl bg-dhaba-danger/15 text-red-400 font-bold text-sm hover:bg-dhaba-danger/25 transition-all"
+                  onClick={handleDeletePreview}
+                  disabled={previewLoading}
+                  className="w-full py-3 rounded-2xl bg-dhaba-danger/15 text-red-400 font-bold text-sm hover:bg-dhaba-danger/25 transition-all disabled:opacity-50"
                 >
-                  <FaTrashAlt className="inline mr-2" />
-                  Delete Selected Data
+                  {previewLoading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="animate-spin h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full" />
+                      Checking…
+                    </span>
+                  ) : (
+                    <><FaTrashAlt className="inline mr-2" />Delete Selected Data</>
+                  )}
                 </button>
               )}
 
@@ -590,6 +646,33 @@ const DataManagement: React.FC = () => {
                   animate={{ opacity: 1, y: 0 }}
                   className="space-y-3"
                 >
+                  {/* Preview counts */}
+                  {deletePreview && (
+                    <div className="glass rounded-xl p-3 space-y-1.5">
+                      <p className="text-dhaba-muted text-[10px] uppercase tracking-wider font-semibold mb-2">Selected</p>
+                      {Object.entries(deletePreview.counts).map(([mod, cnt]) => (
+                        <div key={mod} className="flex justify-between text-xs">
+                          <span className="text-dhaba-muted capitalize">{mod}</span>
+                          <span className={`font-bold ${cnt > 0 ? "text-red-400" : "text-dhaba-muted"}`}>{cnt} record{cnt !== 1 ? "s" : ""}</span>
+                        </div>
+                      ))}
+                      {Object.keys(deletePreview.cascaded).length > 0 && (
+                        <>
+                          <p className="text-amber-400 text-[10px] uppercase tracking-wider font-semibold pt-2">Also deleted (cascade)</p>
+                          {Object.entries(deletePreview.cascaded).map(([label, cnt]) => (
+                            <div key={label} className="flex justify-between text-xs">
+                              <span className="text-amber-300/70 capitalize">{label}</span>
+                              <span className="text-amber-400 font-bold">{cnt} record{cnt !== 1 ? "s" : ""}</span>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                      <div className="border-t border-dhaba-border/30 pt-1.5 mt-1.5 flex justify-between text-xs">
+                        <span className="text-dhaba-text font-semibold">Total</span>
+                        <span className="text-red-400 font-bold">{deletePreview.total} record{deletePreview.total !== 1 ? "s" : ""}</span>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 p-3 rounded-xl bg-dhaba-danger/10 border border-dhaba-danger/30">
                     <FaExclamationTriangle className="text-red-400 flex-shrink-0" />
                     <p className="text-red-300 text-xs font-medium">
@@ -598,7 +681,7 @@ const DataManagement: React.FC = () => {
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => setConfirmDelete(false)}
+                      onClick={() => { setConfirmDelete(false); setDeletePreview(null); }}
                       className="flex-1 py-2.5 rounded-xl glass-card text-dhaba-muted font-semibold text-sm hover:bg-dhaba-surface-hover transition-all"
                     >
                       Cancel
