@@ -212,3 +212,9 @@ export function update(id: string | number, updates: Record<string, any>) {
   db.prepare(`UPDATE orders SET ${sets.join(", ")} WHERE id = @id`).run(params);
   return findById(id, true);
 }
+
+export function remove(id: string | number): boolean {
+  const db = getDb();
+  const result = db.prepare("DELETE FROM orders WHERE id = ?").run(Number(id));
+  return result.changes > 0;
+}

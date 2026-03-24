@@ -88,9 +88,9 @@ const CustomerAutocomplete: React.FC<Props> = ({
         {/* Input */}
         <div className="relative flex items-center">
           <FaUser className="absolute left-3 text-dhaba-muted text-xs pointer-events-none" />
-          <Command.Input
+          <input
             value={value}
-            onValueChange={onChange}
+            onChange={(e) => onChange(e.target.value)}
             onFocus={() => { if (results.length > 0) setOpen(true); }}
             placeholder={placeholder}
             className={inputClassName ?? "w-full bg-dhaba-surface border border-dhaba-border/20 rounded-xl pl-8 pr-3 py-2 text-sm text-dhaba-text placeholder:text-dhaba-muted/50 focus:outline-none focus:border-dhaba-accent/40 transition-colors"}

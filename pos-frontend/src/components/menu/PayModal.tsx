@@ -37,7 +37,7 @@ const PayModal: React.FC<PayModalProps> = ({ isOpen, onClose, order, onSubmitPay
 
   useEffect(() => {
     if (isOpen) {
-      setAmountPaying(outstanding > 0 ? outstanding.toFixed(2) : "");
+      setAmountPaying(outstanding > 0 ? String(Math.ceil(outstanding)) : "");
       setSelectedPaymentMethod("Cash");
     }
   }, [isOpen, order]);
@@ -114,7 +114,7 @@ const PayModal: React.FC<PayModalProps> = ({ isOpen, onClose, order, onSubmitPay
                     </button>
                     <button
                       type="button"
-                      onClick={() => setAmountPaying(outstanding.toFixed(2))}
+                      onClick={() => setAmountPaying(String(Math.ceil(outstanding)))}
                       className="text-[10px] font-bold text-dhaba-accent hover:underline"
                     >
                       Pay Full
@@ -126,9 +126,9 @@ const PayModal: React.FC<PayModalProps> = ({ isOpen, onClose, order, onSubmitPay
                   value={amountPaying}
                   onChange={(e) => setAmountPaying(e.target.value)}
                   className="w-full glass-input rounded-xl px-4 py-2.5 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50 placeholder:text-dhaba-muted/50"
-                  step="0.01"
+                  step="1"
                   min="0"
-                  placeholder={outstanding.toFixed(2)}
+                  placeholder={String(Math.ceil(outstanding))}
                 />
                 {/* Live feedback */}
                 {hasInput && (

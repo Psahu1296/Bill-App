@@ -1,11 +1,13 @@
 import { Response, NextFunction } from "express";
 import createHttpError from "http-errors";
+import bcrypt from "bcryptjs";
 import * as orderRepo from "../repositories/orderRepo";
 import * as tableRepo from "../repositories/tableRepo";
 import * as dishRepo from "../repositories/dishRepo";
 import * as consumableRepo from "../repositories/consumableRepo";
 import * as ledgerRepo from "../repositories/ledgerRepo";
 import * as earningRepo from "../repositories/earningRepo";
+import * as userRepo from "../repositories/userRepo";
 import { getZonedStartOfDayUtc } from "./earningController";
 import { CustomRequest as Request } from "../types";
 
@@ -148,25 +150,6 @@ const addOrder = async (req: Request, res: Response, next: NextFunction) => {
 
     const newOrder = createOrderTx() as Record<string, unknown>;
 
-    // Ledger: only record if there is an outstanding balance
-    const customerPhone = orderData.customerDetails?.phone;
-    const customerName  = orderData.customerDetails?.name;
-    if (balanceDueOnOrder > 0) {
-      try {
-        ledgerRepo.upsertWithTransaction({
-          customerPhone,
-          customerName,
-          balanceDelta: balanceDueOnOrder,
-          transaction: {
-            orderId: Number(newOrder._id),
-            transactionType: "full_payment_due",
-            amount: totalBill,
-            notes: `Bill for Order #${newOrder._id}`,
-          },
-        });
-      } catch (e) { console.error("Ledger error on addOrder:", e); }
-    }
-
     // Daily earnings: count amountPaid immediately
     if (amountPaid > 0) {
       try {
@@ -264,27 +247,35 @@ const updateOrderById = async (req: Request, res: Response, next: NextFunction) 
     const updatedOrder = orderRepo.update(id, updatePayload) as Record<string, unknown>;
     if (!updatedOrder) return next(createHttpError(404, "Order not found after update!"));
 
-    // Ledger delta
-    const oldBalanceDue = Math.max(0, orderTotalWithTax - oldAmountPaid);
-    const newBalanceDue = updatedOrder.balanceDueOnOrder as number;
-    const netChange     = newBalanceDue - oldBalanceDue;
+    // Ledger: only record when the order JUST transitions to Completed with an outstanding balance.
+    // This prevents double-counting from in-flight payment updates during an ongoing order.
+    const justCompleted =
+      requestBodyUpdates.orderStatus === "Completed" &&
+      (currentOrder.orderStatus as string) !== "Completed";
 
-    if (netChange !== 0) {
-      const phone = (updatedOrder.customerDetails as Record<string,unknown>)?.phone as string;
-      const name  = (updatedOrder.customerDetails as Record<string,unknown>)?.name  as string;
-      try {
-        ledgerRepo.upsertWithTransaction({
-          customerPhone: phone,
-          customerName: name,
-          balanceDelta: netChange,
-          transaction: {
-            orderId: Number(updatedOrder._id),
-            transactionType: netChange > 0 ? "balance_increased" : "balance_decreased",
-            amount: Math.abs(netChange),
-            notes: `Order #${updatedOrder._id} updated. Net change: ${netChange.toFixed(2)}`,
-          },
-        });
-      } catch (e) { console.error("Ledger error on updateOrder:", e); }
+    if (justCompleted) {
+      const finalBalanceDue = (updatedOrder.balanceDueOnOrder as number) ?? 0;
+      if (finalBalanceDue > 0) {
+        const phone = (updatedOrder.customerDetails as Record<string,unknown>)?.phone as string;
+        const name  = (updatedOrder.customerDetails as Record<string,unknown>)?.name  as string;
+        // Guard: don't create a second entry if one already exists (e.g. order re-completed)
+        const alreadyRecorded = ledgerRepo.getFullPaymentDueForOrder(Number(updatedOrder._id));
+        if (!alreadyRecorded && phone) {
+          try {
+            ledgerRepo.upsertWithTransaction({
+              customerPhone: phone,
+              customerName: name,
+              balanceDelta: finalBalanceDue,
+              transaction: {
+                orderId: Number(updatedOrder._id),
+                transactionType: "full_payment_due",
+                amount: finalBalanceDue,
+                notes: `Order #${updatedOrder._id} completed — ₹${finalBalanceDue.toFixed(2)} outstanding`,
+              },
+            });
+          } catch (e) { console.error("Ledger error on order completion:", e); }
+        }
+      }
     }
 
     // Earnings delta
@@ -322,4 +313,78 @@ const updateOrderById = async (req: Request, res: Response, next: NextFunction) 
   }
 };
 
-export { addOrder, getOrderById, getOrders, updateOrderById };
+const deleteOrderById = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = req.params.id as string;
+    if (!id || isNaN(Number(id))) return next(createHttpError(400, "Invalid Order ID!"));
+
+    // Require the requesting user's password before allowing a destructive delete
+    const { password } = req.body as { password?: string };
+    if (!password) return next(createHttpError(400, "Password is required to delete an order."));
+    const currentUser = userRepo.findById(req.user!._id) as Record<string, unknown> | null;
+    if (!currentUser) return next(createHttpError(401, "User not found."));
+    const isMatch = await bcrypt.compare(password, currentUser.password as string);
+    if (!isMatch) return next(createHttpError(401, "Incorrect password."));
+
+    const order = orderRepo.findById(id, false) as Record<string, unknown> | null;
+    if (!order) return next(createHttpError(404, "Order not found!"));
+
+    const amountPaid       = (order.amountPaid as number) ?? 0;
+    const orderTotal       = ((order.bills as Record<string, unknown>)?.totalWithTax as number) ?? 0;
+    const balanceDue       = Math.max(0, orderTotal - amountPaid);
+    const orderDate        = new Date(order.orderDate as string);
+    const customerDetails  = order.customerDetails as Record<string, unknown>;
+    const phone            = customerDetails?.phone as string;
+    const name             = customerDetails?.name as string;
+
+    // Reverse ledger — only if a full_payment_due entry was recorded for this order (i.e. it was completed).
+    // Use the exact original amount rather than computing from balanceDue, so in-between manual
+    // payments don't cause the customer balance to go negative.
+    if (phone) {
+      const ledgerEntry = ledgerRepo.getFullPaymentDueForOrder(Number(id));
+      if (ledgerEntry) {
+        try {
+          ledgerRepo.upsertWithTransaction({
+            customerPhone: phone,
+            customerName: name,
+            balanceDelta: -ledgerEntry.amount,
+            transaction: {
+              orderId: Number(id),
+              transactionType: "balance_decreased",
+              amount: ledgerEntry.amount,
+              notes: `Order #${id} deleted — ₹${ledgerEntry.amount.toFixed(2)} reversed`,
+            },
+          });
+        } catch (e) { console.error("Ledger error on deleteOrder:", e); }
+      }
+    }
+
+    // Reverse earnings — subtract whatever was already paid
+    if (amountPaid > 0) {
+      try {
+        earningRepo.incrementEarnings(
+          getZonedStartOfDayUtc(orderDate).toISOString(),
+          -amountPaid
+        );
+      } catch (e) { console.error("Earnings error on deleteOrder:", e); }
+    }
+
+    // Free the table if it was booked for this order
+    const tableId = order.table as string | null;
+    if (tableId) {
+      const table = tableRepo.findById(tableId) as Record<string, unknown> | null;
+      if (table && String(table.currentOrder) === String(id)) {
+        tableRepo.update(tableId, { status: "Available", currentOrderId: null });
+      }
+    }
+
+    consumableRepo.removeByOrderId(id);
+    orderRepo.remove(id);
+
+    res.status(200).json({ success: true, message: "Order deleted successfully!" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export { addOrder, getOrderById, getOrders, updateOrderById, deleteOrderById };

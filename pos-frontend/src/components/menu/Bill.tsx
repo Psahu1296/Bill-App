@@ -178,9 +178,17 @@ const Bill: React.FC = () => {
     }
   };
 
-  // For PayModal: use locked bills from DB for existing orders
+  // For PayModal: use DB data for existing orders but always override bills with
+  // the locally-computed total so the modal reflects discount/roundoff instantly
+  // without waiting for a query refetch.
   const currentOrderData = orderId && existingOrder
-    ? existingOrder
+    ? {
+        ...existingOrder,
+        bills: {
+          ...existingOrder.bills,
+          totalWithTax: Math.round(finalTotal),
+        },
+      }
     : buildOrderData();
 
   return (

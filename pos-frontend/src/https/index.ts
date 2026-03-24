@@ -66,6 +66,9 @@ export const updateOrder = (data: { id: string; [key: string]: unknown }) => {
   return axiosWrapper.put(`/api/order/${id}`, body);
 };
 
+export const deleteOrder = (id: string, password: string) =>
+  axiosWrapper.delete(`/api/order/${id}`, { data: { password } });
+
 // Dishes Endpoints
 export const addDish = (data: AddDishPayload) => axiosWrapper.post("/api/dishes/", data);
 
@@ -132,6 +135,21 @@ export const addDebtToLedger = (
   phone: string,
   data: { amountDue: number; orderId?: string; customerName?: string; notes?: string }
 ) => axiosWrapper.post(`/api/ledger/${phone}/add-debt`, data);
+
+export const createLedgerEntry = (data: {
+  customerName: string;
+  customerPhone: string;
+  initialBalance?: number;
+  notes?: string;
+}) => axiosWrapper.post("/api/ledger/create", data);
+
+export const updateLedgerEntry = (
+  phone: string,
+  data: { customerName?: string; customerPhone?: string }
+) => axiosWrapper.patch(`/api/ledger/${phone}`, data);
+
+export const deleteLedgerEntry = (phone: string) =>
+  axiosWrapper.delete(`/api/ledger/${phone}`);
 
 // Consumables
 export const addConsumable = (data: AddConsumablePayload) =>

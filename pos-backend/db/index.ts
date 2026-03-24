@@ -13,6 +13,50 @@ function runMigrations(db: Database.Database) {
     db.prepare("ALTER TABLE orders ADD COLUMN delivery_address TEXT NOT NULL DEFAULT ''").run();
   }
 
+  // ── Ledger repair migration ──────────────────────────────────────────────────
+  // Old logic wrote to the ledger the moment an order was CREATED, then wrote
+  // delta entries every time a payment was updated mid-order.  This caused
+  // negative and inflated balances.  The new rule: ledger is only written when
+  // an order transitions to "Completed" with an outstanding balance.
+  //
+  // Step 1 — remove `full_payment_due` rows that are linked to orders that are
+  // NOT yet completed (these were written by the old "record on creation" logic).
+  db.prepare(`
+    DELETE FROM customer_ledger_transactions
+    WHERE transaction_type = 'full_payment_due'
+      AND order_id IS NOT NULL
+      AND order_id NOT IN (
+        SELECT id FROM orders WHERE order_status = 'Completed'
+      )
+  `).run();
+
+  // Step 2 — remove `balance_increased` / `balance_decreased` rows that were
+  // written by the old per-update delta logic (identified by the notes pattern).
+  db.prepare(`
+    DELETE FROM customer_ledger_transactions
+    WHERE transaction_type IN ('balance_increased', 'balance_decreased')
+      AND notes LIKE '% updated. Net change:%'
+  `).run();
+
+  // Step 3 — recompute balance_due for every customer from the transactions
+  // that survived the cleanup above.  Credits subtract, debits add.
+  db.prepare(`
+    UPDATE customer_ledger
+    SET balance_due = COALESCE((
+      SELECT SUM(
+        CASE
+          WHEN transaction_type IN ('balance_decreased', 'payment_received') THEN -amount
+          ELSE amount
+        END
+      )
+      FROM customer_ledger_transactions
+      WHERE ledger_id = customer_ledger.id
+    ), 0)
+  `).run();
+
+  // Step 4 — safety clamp: never let a customer's balance go below zero.
+  db.prepare("UPDATE customer_ledger SET balance_due = 0 WHERE balance_due < 0").run();
+
   // store_settings table was added later — create + seed if missing
   db.prepare(`
     CREATE TABLE IF NOT EXISTS store_settings (

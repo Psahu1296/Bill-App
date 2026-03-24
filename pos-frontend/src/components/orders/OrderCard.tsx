@@ -9,10 +9,11 @@ import { setCustomer, updateTable as tableStateUpdate } from "../../redux/slices
 import { updateList } from "../../redux/slices/cartSlice";
 import { useAppDispatch } from "../../redux/hooks";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { updateOrderStatus } from "../../https/index";
+import { updateOrderStatus, deleteOrder } from "../../https/index";
 import { enqueueSnackbar } from "notistack";
 import PayRemainingModal from "./PayRemainingModal";
 import type { Order, OrderStatus } from "../../types";
+import { MdDeleteOutline } from "react-icons/md";
 
 interface OrderCardProps {
   order: Order;
@@ -50,6 +51,8 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
   const { notifications, clearNotification } = useNotifications();
 
   const [showPayModal, setShowPayModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
 
   const notification = notifications.get(order._id);
   const isHighlighted = !!notification;
@@ -73,6 +76,21 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
     },
     onError: () => {
       enqueueSnackbar("Failed to update status.", { variant: "error" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteOrder(order._id, deletePassword),
+    onSuccess: () => {
+      enqueueSnackbar("Order deleted.", { variant: "success" });
+      setShowDeleteConfirm(false);
+      setDeletePassword("");
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["tables"] });
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      enqueueSnackbar(msg ?? "Failed to delete order.", { variant: "error" });
     },
   });
 
@@ -184,6 +202,13 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
         </div>
 
         <div className="text-right shrink-0 flex flex-col items-end gap-1">
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(true); }}
+            className="w-6 h-6 flex items-center justify-center rounded-lg text-dhaba-muted hover:text-dhaba-danger hover:bg-dhaba-danger/10 transition-colors mb-0.5"
+            title="Delete order"
+          >
+            <MdDeleteOutline className="text-base" />
+          </button>
           {isHighlighted && (
             <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-lg bg-dhaba-accent text-dhaba-bg animate-bounce">
               {notification?.type === "new_order" ? "🔔 New Order!" : "➕ Items Added!"}
@@ -330,6 +355,55 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
         </div>
       </div>
     </div>
+
+    {showDeleteConfirm && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(false); setDeletePassword(""); }}
+      >
+        <div
+          className="glass-card rounded-2xl p-6 w-80 shadow-glow"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-dhaba-danger/15 flex items-center justify-center shrink-0">
+              <MdDeleteOutline className="text-xl text-dhaba-danger" />
+            </div>
+            <div>
+              <p className="font-bold text-dhaba-text text-sm">Delete Order?</p>
+              <p className="text-xs text-dhaba-muted">#{order._id} · {order.customerDetails.name}</p>
+            </div>
+          </div>
+          <p className="text-xs text-dhaba-muted mb-4 leading-relaxed">
+            This permanently deletes the order and reverses any outstanding ledger balance and earnings.
+          </p>
+          <input
+            type="password"
+            placeholder="Enter your password to confirm"
+            value={deletePassword}
+            onChange={(e) => setDeletePassword(e.target.value)}
+            onClick={(e) => e.stopPropagation()}
+            className="glass-input w-full rounded-xl px-4 py-2.5 text-sm mb-4 focus:outline-none focus:ring-1 focus:ring-dhaba-danger/50"
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setShowDeleteConfirm(false); setDeletePassword(""); }}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-dhaba-surface text-dhaba-muted hover:bg-dhaba-surface-hover transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              disabled={deleteMutation.isPending || !deletePassword}
+              onClick={() => deleteMutation.mutate()}
+              className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-dhaba-danger/15 text-dhaba-danger hover:bg-dhaba-danger/25 transition-colors disabled:opacity-50"
+            >
+              {deleteMutation.isPending ? "Deleting…" : "Delete"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
 
     {showPayModal && (
       <div onClick={(e) => e.stopPropagation()}>
