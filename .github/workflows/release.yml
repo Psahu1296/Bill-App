@@ -108,16 +108,21 @@ jobs:
         shell: bash
         run: |
           mkdir -p build-resources/bin
+          BASE="https://github.com/cloudflare/cloudflared/releases/latest/download"
           if [ "$RUNNER_OS" = "Windows" ]; then
             curl -fsSL -o build-resources/bin/cloudflared-win32-x64.exe \
-              https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe
+              "$BASE/cloudflared-windows-amd64.exe"
           elif [ "$RUNNER_OS" = "macOS" ]; then
-            curl -fsSL -o build-resources/bin/cloudflared-darwin-universal \
-              https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-universal
+            curl -fsSL -o build-resources/bin/cloudflared-amd64 "$BASE/cloudflared-darwin-amd64"
+            curl -fsSL -o build-resources/bin/cloudflared-arm64 "$BASE/cloudflared-darwin-arm64"
+            chmod +x build-resources/bin/cloudflared-amd64 build-resources/bin/cloudflared-arm64
+            lipo -create -output build-resources/bin/cloudflared-darwin-universal \
+              build-resources/bin/cloudflared-amd64 build-resources/bin/cloudflared-arm64
             chmod +x build-resources/bin/cloudflared-darwin-universal
+            rm build-resources/bin/cloudflared-amd64 build-resources/bin/cloudflared-arm64
           else
             curl -fsSL -o build-resources/bin/cloudflared-linux-x64 \
-              https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+              "$BASE/cloudflared-linux-amd64"
             chmod +x build-resources/bin/cloudflared-linux-x64
           fi
 
