@@ -113,9 +113,11 @@ jobs:
             curl -fsSL -o build-resources/bin/cloudflared-win32-x64.exe \
               "$BASE/cloudflared-windows-amd64.exe"
           elif [ "$RUNNER_OS" = "macOS" ]; then
-            curl -fsSL -o build-resources/bin/cloudflared-amd64 "$BASE/cloudflared-darwin-amd64"
-            curl -fsSL -o build-resources/bin/cloudflared-arm64 "$BASE/cloudflared-darwin-arm64"
-            chmod +x build-resources/bin/cloudflared-amd64 build-resources/bin/cloudflared-arm64
+            # macOS assets are .tgz archives — extract the binary from each
+            curl -fsSL "$BASE/cloudflared-darwin-amd64.tgz" | tar -xz -C build-resources/bin --strip-components=0
+            mv build-resources/bin/cloudflared build-resources/bin/cloudflared-amd64
+            curl -fsSL "$BASE/cloudflared-darwin-arm64.tgz" | tar -xz -C build-resources/bin --strip-components=0
+            mv build-resources/bin/cloudflared build-resources/bin/cloudflared-arm64
             lipo -create -output build-resources/bin/cloudflared-darwin-universal \
               build-resources/bin/cloudflared-amd64 build-resources/bin/cloudflared-arm64
             chmod +x build-resources/bin/cloudflared-darwin-universal
