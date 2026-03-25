@@ -5,11 +5,13 @@ import { enqueueSnackbar } from "notistack";
 import DishCard from "./DishesCard";
 import AddDishModal from "../dashboard/AddDishModal";
 import BulkAddDishModal from "./BulkAddDishModal";
-import { FaSearch, FaCloudUploadAlt, FaPlus, FaUtensils } from "react-icons/fa";
+import DefaultDishesTab from "./DefaultDishesTab";
+import { FaSearch, FaCloudUploadAlt, FaPlus, FaUtensils, FaBookOpen } from "react-icons/fa";
 import type { Dish } from "../../types";
 
 const DishesList: React.FC = () => {
   const queryClient = useQueryClient();
+  const [tab, setTab] = useState<"menu" | "default">("menu");
   const [searchTerm, setSearchTerm] = useState("");
   const [isUpdateId, setIsUpdateId] = useState<string | null>(null);
   const [selectedDish, setSelectedDish] = useState<Dish | null>(null);
@@ -85,32 +87,64 @@ const DishesList: React.FC = () => {
           <p className="text-sm text-dhaba-muted mt-0.5">{dishList.length} items in menu</p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="glass-input rounded-xl flex items-center gap-3 px-4 py-2.5 w-80">
-            <FaSearch className="text-dhaba-muted text-sm" />
-            <input
-              type="text"
-              placeholder="Search dishes..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-transparent text-dhaba-text text-sm outline-none flex-1 placeholder:text-dhaba-muted/50"
-            />
-          </div>
-          <button
-            onClick={() => setIsBulkOpen(true)}
-            className="glass-card flex items-center gap-2 px-5 py-2.5 rounded-xl text-dhaba-accent font-bold text-sm hover:bg-dhaba-accent/10 transition-all border border-dhaba-accent/20"
-          >
-            <FaCloudUploadAlt /> Bulk Add
-          </button>
-          <button
-            onClick={() => setIsAddOpen(true)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-warm text-dhaba-bg font-bold text-sm hover:shadow-glow transition-all"
-          >
-            <FaPlus /> Add Dish
-          </button>
+          {tab === "menu" && (
+            <>
+              <div className="glass-input rounded-xl flex items-center gap-3 px-4 py-2.5 w-80">
+                <FaSearch className="text-dhaba-muted text-sm" />
+                <input
+                  type="text"
+                  placeholder="Search dishes..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="bg-transparent text-dhaba-text text-sm outline-none flex-1 placeholder:text-dhaba-muted/50"
+                />
+              </div>
+              <button
+                onClick={() => setIsBulkOpen(true)}
+                className="glass-card flex items-center gap-2 px-5 py-2.5 rounded-xl text-dhaba-accent font-bold text-sm hover:bg-dhaba-accent/10 transition-all border border-dhaba-accent/20"
+              >
+                <FaCloudUploadAlt /> Bulk Add
+              </button>
+              <button
+                onClick={() => setIsAddOpen(true)}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-warm text-dhaba-bg font-bold text-sm hover:shadow-glow transition-all"
+              >
+                <FaPlus /> Add Dish
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      <div>
+      {/* Tab switcher */}
+      <div className="flex gap-1 mb-6 glass-card rounded-xl p-1 self-start">
+        <button
+          onClick={() => setTab("menu")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+            tab === "menu"
+              ? "bg-gradient-warm text-dhaba-bg shadow-glow"
+              : "text-dhaba-muted hover:text-dhaba-text"
+          }`}
+        >
+          <FaUtensils className="text-xs" /> Menu
+        </button>
+        <button
+          onClick={() => setTab("default")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+            tab === "default"
+              ? "bg-gradient-warm text-dhaba-bg shadow-glow"
+              : "text-dhaba-muted hover:text-dhaba-text"
+          }`}
+        >
+          <FaBookOpen className="text-xs" /> Default Catalog
+        </button>
+      </div>
+
+      {tab === "default" && (
+        <DefaultDishesTab existingDishes={dishList} />
+      )}
+
+      {tab === "menu" && <div>
         {dishList.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center space-y-4">
             <div className="h-16 w-16 rounded-2xl bg-dhaba-accent/10 flex items-center justify-center">
@@ -145,7 +179,7 @@ const DishesList: React.FC = () => {
             ))}
           </div>
         )}
-      </div>
+      </div>}
 
       {isAddOpen && (
         <AddDishModal

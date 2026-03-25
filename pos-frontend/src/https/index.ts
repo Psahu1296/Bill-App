@@ -197,3 +197,14 @@ export const getOnlineOrdersStatus = () =>
 
 export const setOnlineOrdersStatus = (isOnline: boolean) =>
   axiosWrapper.put("/api/settings/online-orders", { isOnline });
+
+export const getSavedDishCatalog = () =>
+  axiosWrapper.get("/api/settings/dish-catalog");
+
+export const saveCurrentDishesAsCatalog = () =>
+  axiosWrapper.post("/api/settings/dish-catalog");
+
+export const patchDishCatalog = (data: {
+  add?: { name: string; image: string; type: string; category: string; variants: { size: string; price: number }[]; description: string; isAvailable: boolean; isFrequent: boolean }[];
+  remove?: string[];
+}) => axiosWrapper.patch("/api/settings/dish-catalog", data);
