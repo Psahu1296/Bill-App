@@ -25,10 +25,6 @@ export function initSchema(db: Database.Database): void {
       updated_at        TEXT    NOT NULL DEFAULT (datetime('now'))
     );
 
-    -- Seed the permanent virtual "Takeaway / Parcel" counter (table_no = 0)
-    -- is_virtual = 1 means multiple concurrent orders are allowed; status never changes
-    INSERT OR IGNORE INTO tables_tb (table_no, seats, is_virtual) VALUES (0, 0, 1);
-
     CREATE TABLE IF NOT EXISTS dishes (
       id               INTEGER PRIMARY KEY AUTOINCREMENT,
       image            TEXT    NOT NULL,
@@ -62,6 +58,11 @@ export function initSchema(db: Database.Database): void {
       created_at            TEXT    NOT NULL DEFAULT (datetime('now')),
       updated_at            TEXT    NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- Seed the permanent virtual "Takeaway / Parcel" counter (table_no = 0)
+    -- is_virtual = 1 means multiple concurrent orders are allowed; status never changes
+    -- Inserted after orders is created so the FK reference is satisfied
+    INSERT OR IGNORE INTO tables_tb (table_no, seats, is_virtual) VALUES (0, 0, 1);
 
     CREATE TABLE IF NOT EXISTS payments (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
