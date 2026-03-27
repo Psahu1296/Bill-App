@@ -8,8 +8,7 @@ import crypto from "crypto";
 import { CustomAutoUpdater } from "./updater";
 const autoUpdater = new CustomAutoUpdater();
 
-const PREFERRED_PORT = 5001;
-let resolvedPort     = PREFERRED_PORT;
+let resolvedPort = 5002; // updated after .env is loaded — see below
 
 // ── Port utilities ────────────────────────────────────────────────────────────
 
@@ -285,7 +284,10 @@ async function setupBackend(): Promise<void> {
 
   // 2. Resolve port — kill stale own instance or find next free port
   sendToSplash("server", "Checking port…", 25);
-  resolvedPort = await resolvePort(PREFERRED_PORT);
+  // Use the PORT from .env so the backend matches the port the Cloudflare
+  // named tunnel is configured to forward to. Falls back to 5002.
+  const preferredPort = parseInt(process.env.PORT ?? "5002", 10);
+  resolvedPort = await resolvePort(preferredPort);
 
   // 3. Environment variables — DATABASE_PATH tells better-sqlite3 where to store the file
   process.env["JWT_SECRET"]          = jwtSecret;
@@ -367,6 +369,15 @@ function createWindow(): void {
   });
 
   win.on("closed", () => { win = null; });
+
+  // F12 toggles DevTools in production for on-site debugging
+  win.webContents.on("before-input-event", (_e, input) => {
+    if (input.type === "keyDown" && input.key === "F12") {
+      win?.webContents.isDevToolsOpened()
+        ? win.webContents.closeDevTools()
+        : win?.webContents.openDevTools();
+    }
+  });
 }
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
@@ -446,6 +457,25 @@ ipcMain.on("updater:install", () => {
 
 ipcMain.on("shell:open-external", (_event, url: string) => {
   shell.openExternal(url).catch(console.error);
+});
+
+// ── IPC: server status ────────────────────────────────────────────────────────
+
+ipcMain.handle("server:info", () => ({
+  resolvedPort,
+  preferredPort: parseInt(process.env.PORT ?? "5002", 10),
+  tunnelUrl:     tunnelUrl || null,
+  tunnelRunning: !!(tunnelProcess && !tunnelProcess.killed),
+}));
+
+ipcMain.on("tunnel:restart", async () => {
+  if (tunnelProcess && !tunnelProcess.killed) {
+    tunnelProcess.kill();
+    tunnelProcess = null;
+    tunnelUrl = "";
+    win?.webContents.send("tunnel:url", null);
+  }
+  if (!isDev) await setupTunnel();
 });
 
 // Renderer can request current tunnel URL at any time (e.g. on page load)

@@ -41,6 +41,18 @@ contextBridge.exposeInMainWorld("appBridge", {
   /** Open a URL in the system default browser */
   openExternal: (url: string) => ipcRenderer.send("shell:open-external", url),
 
+  // ── Server status ───────────────────────────────────────────────────────────
+  /** Returns current port, preferred port, tunnel URL, and tunnel process state */
+  getServerInfo: (): Promise<{
+    resolvedPort: number;
+    preferredPort: number;
+    tunnelUrl: string | null;
+    tunnelRunning: boolean;
+  }> => ipcRenderer.invoke("server:info"),
+
+  /** Kill and restart the Cloudflare tunnel process */
+  restartTunnel: () => ipcRenderer.send("tunnel:restart"),
+
   /**
    * Subscribe to update lifecycle events from the main process.
    * Returns an unsubscribe function — call it in useEffect cleanup.
