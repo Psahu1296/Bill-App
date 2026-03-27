@@ -5,7 +5,8 @@ import net from "net";
 import http from "http";
 import { execSync, spawn, ChildProcess } from "child_process";
 import crypto from "crypto";
-import { autoUpdater } from "electron-updater";
+import { CustomAutoUpdater } from "./updater";
+const autoUpdater = new CustomAutoUpdater();
 
 const PREFERRED_PORT = 5001;
 let resolvedPort     = PREFERRED_PORT;
