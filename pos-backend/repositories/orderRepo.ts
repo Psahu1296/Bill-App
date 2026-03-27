@@ -173,7 +173,24 @@ export function appendItems(id: string | number, newItems: object[], updatedBill
   const normalised = existing.map((item) => ({ ...item, batch: item.batch ?? 1 }));
   const withBatch  = newItems.map((item) => ({ ...(item as object), batch: nextBatch }));
 
-  return update(id, { items: [...normalised, ...withBatch], bills: updatedBills });
+  // Accumulate bills: add new round's amounts on top of the existing totals
+  const existingBills = ((order.bills as Record<string, number>) ?? {});
+  const newBills = (updatedBills as Record<string, number>);
+  const cumulativeBills: Record<string, unknown> = { ...existingBills };
+  for (const key of ["total", "totalWithTax", "subtotal", "tax"] as const) {
+    if (newBills[key] != null) {
+      cumulativeBills[key] = (Number(existingBills[key]) || 0) + Number(newBills[key]);
+    }
+  }
+
+  const newTotal = Number(cumulativeBills.totalWithTax ?? cumulativeBills.total) || 0;
+  const newBalanceDue = Math.max(0, newTotal - (Number(order.amountPaid) || 0));
+
+  return update(id, {
+    items: [...normalised, ...withBatch],
+    bills: cumulativeBills,
+    balanceDueOnOrder: newBalanceDue,
+  });
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

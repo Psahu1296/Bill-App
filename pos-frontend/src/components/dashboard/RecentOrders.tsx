@@ -6,10 +6,12 @@ import { formatDateAndTime } from "../../utils";
 import { useNavigate } from "react-router-dom";
 import { IoPrintOutline } from "react-icons/io5";
 import type { Order, OrderStatus, PaymentStatus } from "../../types";
+import { useNotifications } from "../../context/NotificationContext";
 
 const RecentOrders: React.FC = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { notifications, clearNotification } = useNotifications();
 
   const handleRowClick = (order: Order) => {
     if (order.orderStatus === "Completed") {
@@ -100,11 +102,17 @@ const RecentOrders: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {orders.map((order, index) => (
+            {orders.map((order) => {
+              const notification = notifications.get(order._id);
+              return (
               <tr
-                key={index}
-                className="border-b border-dhaba-border/15 hover:bg-dhaba-surface-hover/50 transition-colors cursor-pointer"
-                onClick={() => handleRowClick(order)}
+                key={order._id}
+                className={`border-b border-dhaba-border/15 transition-colors cursor-pointer ${
+                  notification
+                    ? "bg-dhaba-accent/10 shadow-[inset_0_0_0_1px_hsl(var(--dhaba-accent)/0.35)] hover:bg-dhaba-accent/15"
+                    : "hover:bg-dhaba-surface-hover/50"
+                }`}
+                onClick={() => { clearNotification(order._id); handleRowClick(order); }}
               >
                 <td className="p-4 text-dhaba-text font-semibold">{order.customerDetails.name}</td>
                 <td className="p-4" onClick={(e) => e.stopPropagation()}>
@@ -143,7 +151,8 @@ const RecentOrders: React.FC = () => {
                   )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
