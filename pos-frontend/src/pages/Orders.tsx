@@ -2,13 +2,14 @@ import React, { useState, useEffect, useMemo } from "react";
 import BottomNav from "../components/shared/BottomNav";
 import OrderCard from "../components/orders/OrderCard";
 import BackButton from "../components/shared/BackButton";
+import AddPastOrderModal from "../components/orders/AddPastOrderModal";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { getOrders } from "../https/index";
 import { enqueueSnackbar } from "notistack";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaClipboardList, FaHourglassHalf, FaCheckCircle,
-  FaExclamationCircle, FaCalendarAlt,
+  FaExclamationCircle, FaCalendarAlt, FaPlus,
 } from "react-icons/fa";
 import { IoCheckmarkDoneCircle } from "react-icons/io5";
 import type { Order } from "../types";
@@ -24,6 +25,7 @@ function todayStr() {
 const Orders: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<FilterKey>("All");
   const [selectedDate, setSelectedDate] = useState(todayStr);
+  const [showAddPastOrder, setShowAddPastOrder] = useState(false);
   const isToday = selectedDate === todayStr();
 
   useEffect(() => { document.title = "Dhaba POS | Orders"; }, []);
@@ -119,8 +121,15 @@ const Orders: React.FC = () => {
           </div>
         </div>
 
-        {/* Date picker */}
+        {/* Add Past Order button + Date picker */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAddPastOrder(true)}
+            className="flex items-center gap-2 text-xs font-bold text-dhaba-bg bg-dhaba-accent px-3 py-2 rounded-xl hover:opacity-90 transition-all"
+          >
+            <FaPlus className="text-[10px]" />
+            Add Past Order
+          </button>
           {!isToday && (
             <button
               onClick={() => setSelectedDate(todayStr())}
@@ -250,6 +259,7 @@ const Orders: React.FC = () => {
         )}
       </div>
 
+      {showAddPastOrder && <AddPastOrderModal onClose={() => setShowAddPastOrder(false)} />}
       <BottomNav />
     </section>
   );

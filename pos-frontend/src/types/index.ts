@@ -189,11 +189,13 @@ export interface StaticTable {
 export interface AddOrderPayload {
   customerDetails: OrderCustomerDetails;
   orderStatus: OrderStatus;
+  paymentStatus?: PaymentStatus;
   bills: OrderBills;
   items: CartItem[];
   table: string | undefined;
   paymentMethod: PaymentMethod;
   amountPaid?: number;
+  orderDate?: string;
   paymentData?: {
     razorpay_order_id: string;
     razorpay_payment_id: string;
