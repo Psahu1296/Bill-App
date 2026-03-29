@@ -29,8 +29,12 @@ const MenuItem: React.FC<MenuItemProps> = ({ item }) => {
   const handleAddToCart = () => {
     if (!selectedVariant) return;
     dispatch(addItems({
-      id: item._id, name: item.name, variantSize: selectedVariant.size,
-      pricePerQuantity: selectedVariant.price, quantity: itemCount,
+      id: item._id,
+      name: item.name,
+      variantSize: selectedVariant.size,
+      pricePerQuantity: selectedVariant.price,
+      markedPricePerQuantity: selectedVariant.markedPrice,
+      quantity: itemCount,
       price: selectedVariant.price * itemCount,
     }));
     setItemCount(1);
@@ -98,10 +102,20 @@ const MenuItem: React.FC<MenuItemProps> = ({ item }) => {
         {/* Bottom: price + controls */}
         <div className="space-y-2">
           {/* Price */}
-          <p className={`font-display text-xl font-bold text-dhaba-text leading-none ${dishImage ? "pr-[44%]" : ""}`}>
-            ₹{selectedVariant.price}
+          <div className={`${dishImage ? "pr-[44%]" : ""} leading-none`}>
+            {selectedVariant.markedPrice != null && selectedVariant.markedPrice > selectedVariant.price && (
+              <span className="text-dhaba-muted text-[11px] line-through mr-1.5 font-normal">
+                ₹{selectedVariant.markedPrice}
+              </span>
+            )}
+            <span className="font-display text-xl font-bold text-dhaba-text">₹{selectedVariant.price}</span>
             <span className="text-dhaba-muted text-[10px] font-normal ml-1">{selectedVariant.size}</span>
-          </p>
+            {selectedVariant.markedPrice != null && selectedVariant.markedPrice > selectedVariant.price && (
+              <span className="block text-[9px] font-bold text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded-md mt-1 w-fit">
+                Save ₹{selectedVariant.markedPrice - selectedVariant.price}
+              </span>
+            )}
+          </div>
 
           {/* Variant pills + counter */}
           <div className="flex items-center justify-between gap-1.5">

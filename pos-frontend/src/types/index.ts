@@ -3,6 +3,7 @@
 export interface DishVariant {
   size: string;
   price: number;
+  markedPrice?: number;         // optional MRP / fake original price for strikethrough display
   // dishModel sets _id: false — Mongoose does not generate _id for variant subdocs
 }
 
@@ -41,6 +42,7 @@ export interface CartItem {
   name: string;
   variantSize?: string;
   pricePerQuantity: number;
+  markedPricePerQuantity?: number;  // optional MRP per unit — purely for display/savings on invoice
   quantity: number;
   price: number;
   batch?: number;

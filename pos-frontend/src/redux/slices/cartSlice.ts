@@ -17,11 +17,12 @@ const cartSlice = createSlice({
         quantity: number;
         name: string;
         pricePerQuantity: number;
+        markedPricePerQuantity?: number;
         variantSize?: string;
         price?: number;
       }>
     ) => {
-      const { id, quantity: quantityChange, name, pricePerQuantity } = action.payload;
+      const { id, quantity: quantityChange, name, pricePerQuantity, markedPricePerQuantity } = action.payload;
       const existingItem = state.find((item) => item.id === id);
 
       if (existingItem) {
@@ -36,6 +37,9 @@ const cartSlice = createSlice({
             id,
             name,
             pricePerQuantity,
+            ...(markedPricePerQuantity != null && markedPricePerQuantity > pricePerQuantity
+              ? { markedPricePerQuantity }
+              : {}),
             quantity: quantityChange,
             price: quantityChange * pricePerQuantity,
           });

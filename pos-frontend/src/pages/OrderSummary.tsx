@@ -9,7 +9,9 @@ import type { Order } from "../types";
 import { getAvatarName } from "../utils";
 import PayRemainingModal from "../components/orders/PayRemainingModal";
 import { IoPrintOutline } from "react-icons/io5";
+import { IoLogoWhatsapp } from "react-icons/io";
 import { printBill } from "../utils/printBill";
+import { shareOnWhatsApp } from "../utils/shareOnWhatsApp";
 
 const OrderSummary: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -146,6 +148,12 @@ const OrderSummary: React.FC = () => {
               className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-dhaba-success/10 text-dhaba-success font-bold text-base border border-dhaba-success/20 hover:bg-dhaba-success/20 transition-colors"
             >
               <IoPrintOutline className="text-xl" /> Print Invoice
+            </button>
+            <button
+              onClick={() => shareOnWhatsApp(order)}
+              className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-green-500/10 text-green-500 font-bold text-base border border-green-500/20 hover:bg-green-500/20 transition-colors"
+            >
+              <IoLogoWhatsapp className="text-xl" /> Share on WhatsApp
             </button>
           </div>
         </div>

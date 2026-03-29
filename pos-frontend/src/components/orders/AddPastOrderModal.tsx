@@ -105,6 +105,9 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
           name: dish.name,
           variantSize: variant.size,
           pricePerQuantity: variant.price,
+          ...(variant.markedPrice != null && variant.markedPrice > variant.price
+            ? { markedPricePerQuantity: variant.markedPrice }
+            : {}),
           quantity: 1,
           price: variant.price,
           batch: 1,
@@ -386,7 +389,14 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
 
                         {/* Price + Add button */}
                         <div className="flex items-center justify-between mt-auto">
-                          <span className="text-sm font-bold text-dhaba-text">₹{variant.price}</span>
+                          <div className="flex flex-col">
+                            {variant.markedPrice != null && variant.markedPrice > variant.price && (
+                              <span className="text-[10px] line-through text-dhaba-muted leading-none">
+                                ₹{variant.markedPrice}
+                              </span>
+                            )}
+                            <span className="text-sm font-bold text-dhaba-text">₹{variant.price}</span>
+                          </div>
                           {inCart ? (
                             <div className="flex items-center glass-input rounded-lg overflow-hidden">
                               <button

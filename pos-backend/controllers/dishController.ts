@@ -15,6 +15,11 @@ const addDish = async (req: Request, res: Response, next: NextFunction) => {
       if (!v.size || v.price === undefined || v.price === null || v.price < 0) {
         return next(createHttpError(400, "Each dish variant must have a valid size and non-negative price."));
       }
+      if (v.markedPrice !== undefined && v.markedPrice !== null) {
+        if (typeof v.markedPrice !== "number" || v.markedPrice <= v.price) {
+          return next(createHttpError(400, "Variant markedPrice must be a number greater than price."));
+        }
+      }
     }
 
     if (dishRepo.findByName(name)) {
@@ -77,6 +82,11 @@ const updateDish = async (req: Request, res: Response, next: NextFunction) => {
         if (!v.size || v.price === undefined || v.price === null || v.price < 0) {
           return next(createHttpError(400, "Each updated dish variant must have a valid size and non-negative price."));
         }
+        if (v.markedPrice !== undefined && v.markedPrice !== null) {
+          if (typeof v.markedPrice !== "number" || v.markedPrice <= v.price) {
+            return next(createHttpError(400, "Variant markedPrice must be a number greater than price."));
+          }
+        }
       }
     }
 
@@ -116,6 +126,11 @@ const bulkAddDishes = async (req: Request, res: Response, next: NextFunction) =>
       for (const v of d.variants) {
         if (!v.size || v.price === undefined || v.price === null || v.price < 0) {
           return next(createHttpError(400, `Dish at index ${index} has an invalid variant.`));
+        }
+        if (v.markedPrice !== undefined && v.markedPrice !== null) {
+          if (typeof v.markedPrice !== "number" || v.markedPrice <= v.price) {
+            return next(createHttpError(400, `Dish at index ${index}: variant markedPrice must be a number greater than price.`));
+          }
         }
       }
     }

@@ -34,12 +34,24 @@ const BillTemplate: React.FC<Props> = ({ order }) => {
 
       {/* Items */}
       <div style={{ fontWeight: "bold", marginBottom: "6px" }}>ITEMS</div>
-      {order.items.map((item, i) => (
-        <div key={i} style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
-          <span>{item.name}{item.variantSize ? ` (${item.variantSize})` : ""} ×{item.quantity}</span>
-          <span style={{ flexShrink: 0, marginLeft: "8px" }}>₹{item.price.toFixed(2)}</span>
-        </div>
-      ))}
+      {order.items.map((item, i) => {
+        const savedPerUnit = item.markedPricePerQuantity != null && item.markedPricePerQuantity > item.pricePerQuantity
+          ? item.markedPricePerQuantity - item.pricePerQuantity
+          : 0;
+        return (
+          <div key={i} style={{ marginBottom: "4px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span>{item.name}{item.variantSize ? ` (${item.variantSize})` : ""} ×{item.quantity}</span>
+              <span style={{ flexShrink: 0, marginLeft: "8px" }}>₹{item.price.toFixed(2)}</span>
+            </div>
+            {savedPerUnit > 0 && (
+              <div style={{ textAlign: "right", fontSize: "10px", color: "#888", textDecoration: "line-through" }}>
+                MRP ₹{(item.markedPricePerQuantity! * item.quantity).toFixed(2)}
+              </div>
+            )}
+          </div>
+        );
+      })}
 
       <hr style={{ border: "none", borderTop: "1px dashed #999", margin: "8px 0" }} />
 
@@ -59,8 +71,23 @@ const BillTemplate: React.FC<Props> = ({ order }) => {
       <Row label={`Paid (${order.paymentMethod})`} value={`₹${(order.amountPaid || 0).toFixed(2)}`} />
       {balanceDue > 0 && <Row label="Balance Due" value={`₹${balanceDue.toFixed(2)}`} bold />}
 
+      {/* Savings banner */}
+      {(() => {
+        const totalSaved = order.items.reduce((acc, item) => {
+          if (item.markedPricePerQuantity != null && item.markedPricePerQuantity > item.pricePerQuantity) {
+            return acc + (item.markedPricePerQuantity - item.pricePerQuantity) * item.quantity;
+          }
+          return acc;
+        }, 0);
+        return totalSaved > 0 ? (
+          <div style={{ textAlign: "center", marginTop: "8px", fontSize: "12px", color: "#2a8a2a", fontWeight: "bold" }}>
+            You saved ₹{totalSaved.toFixed(0)} today!
+          </div>
+        ) : null;
+      })()}
+
       {/* Footer */}
-      <div style={{ textAlign: "center", marginTop: "16px", fontSize: "11px", color: "#777" }}>
+      <div style={{ textAlign: "center", marginTop: "12px", fontSize: "11px", color: "#777" }}>
         Come again! ❤️
       </div>
     </div>

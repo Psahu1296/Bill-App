@@ -3,6 +3,8 @@ import { motion } from "framer-motion";
 import { FaCheck } from "react-icons/fa6";
 import type { Order } from "../../types";
 import { printBill } from "../../utils/printBill";
+import { shareOnWhatsApp } from "../../utils/shareOnWhatsApp";
+import { IoLogoWhatsapp } from "react-icons/io";
 
 interface InvoiceProps {
   orderInfo: Order;
@@ -55,17 +57,24 @@ const Invoice: React.FC<InvoiceProps> = ({ orderInfo, setShowInvoice }) => {
           <div className="mt-4 border-t pt-4">
             <h3 className="text-sm font-semibold">Items Ordered</h3>
             <ul className="text-sm text-gray-700">
-              {orderInfo.items.map((item, index) => (
-                <li
-                  key={index}
-                  className="flex justify-between items-center text-xs"
-                >
-                  <span>
-                    {item.name} x{item.quantity}
-                  </span>
-                  <span>₹{item.price.toFixed(2)}</span>
-                </li>
-              ))}
+              {orderInfo.items.map((item, index) => {
+                const savedPerUnit = item.markedPricePerQuantity != null && item.markedPricePerQuantity > item.pricePerQuantity
+                  ? item.markedPricePerQuantity - item.pricePerQuantity
+                  : 0;
+                return (
+                  <li key={index} className="flex flex-col text-xs mb-1">
+                    <div className="flex justify-between items-center">
+                      <span>{item.name} x{item.quantity}</span>
+                      <span>₹{item.price.toFixed(2)}</span>
+                    </div>
+                    {savedPerUnit > 0 && (
+                      <span className="text-right text-green-600 text-[10px]">
+                        saved ₹{(savedPerUnit * item.quantity).toFixed(0)} <span className="text-gray-400 line-through">(MRP ₹{(item.markedPricePerQuantity! * item.quantity).toFixed(2)})</span>
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </div>
 
@@ -87,6 +96,19 @@ const Invoice: React.FC<InvoiceProps> = ({ orderInfo, setShowInvoice }) => {
               <strong>Grand Total:</strong> ₹
               {orderInfo.bills.totalWithTax.toFixed(2)}
             </p>
+            {(() => {
+              const totalSaved = orderInfo.items.reduce((acc, item) => {
+                if (item.markedPricePerQuantity != null && item.markedPricePerQuantity > item.pricePerQuantity) {
+                  return acc + (item.markedPricePerQuantity - item.pricePerQuantity) * item.quantity;
+                }
+                return acc;
+              }, 0);
+              return totalSaved > 0 ? (
+                <p className="text-green-600 font-bold text-sm mt-1">
+                  You saved ₹{totalSaved.toFixed(0)} today!
+                </p>
+              ) : null;
+            })()}
           </div>
 
           <div className="mb-2 mt-2 text-xs">
@@ -118,6 +140,12 @@ const Invoice: React.FC<InvoiceProps> = ({ orderInfo, setShowInvoice }) => {
             className="text-blue-500 hover:underline text-xs px-4 py-2 rounded-lg"
           >
             Print Receipt
+          </button>
+          <button
+            onClick={() => shareOnWhatsApp(orderInfo)}
+            className="flex items-center gap-1 text-green-600 hover:underline text-xs px-4 py-2 rounded-lg"
+          >
+            <IoLogoWhatsapp className="text-base" /> WhatsApp
           </button>
           <button
             onClick={() => setShowInvoice(false)}

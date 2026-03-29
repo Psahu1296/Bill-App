@@ -63,7 +63,17 @@ const DishCard: React.FC<DishCardProps> = ({ dish, onEdit, onDelete }) => {
         )}
 
         {/* Price tag floating on image */}
-        <div className="absolute bottom-3 right-3 bg-dhaba-bg/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-dhaba-border/20">
+        <div className="absolute bottom-3 right-3 bg-dhaba-bg/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-dhaba-border/20 text-right">
+          {dish.variants?.[0]?.markedPrice != null && dish.variants[0].markedPrice > dish.variants[0].price && (
+            <>
+              <div className="text-[10px] line-through text-dhaba-muted leading-none mb-0.5">
+                ₹{dish.variants[0].markedPrice}
+              </div>
+              <div className="text-[9px] font-bold text-green-400 leading-none mb-0.5">
+                Save ₹{dish.variants[0].markedPrice - dish.variants[0].price}
+              </div>
+            </>
+          )}
           <span className="font-display text-lg font-bold text-dhaba-accent">
             ₹{dish.variants?.[0]?.price ?? "—"}
           </span>
@@ -96,7 +106,11 @@ const DishCard: React.FC<DishCardProps> = ({ dish, onEdit, onDelete }) => {
                 key={i}
                 className="glass-input text-[11px] font-semibold text-dhaba-text px-2.5 py-1 rounded-lg"
               >
-                {v.size} · <span className="text-dhaba-accent">₹{v.price}</span>
+                {v.size} ·{" "}
+                {v.markedPrice != null && v.markedPrice > v.price && (
+                  <span className="text-dhaba-muted line-through text-[10px] mr-1">₹{v.markedPrice}</span>
+                )}
+                <span className="text-dhaba-accent">₹{v.price}</span>
               </span>
             ))
           ) : (

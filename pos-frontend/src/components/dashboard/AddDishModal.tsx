@@ -16,7 +16,7 @@ interface DishFormData {
   name: string;
   type: string;
   category: string;
-  variants: { size: string; price: number | string }[];
+  variants: { size: string; price: number | string; markedPrice?: number | string }[];
   description: string;
   isAvailable: boolean;
   isFrequent: boolean;
@@ -53,7 +53,7 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
       name: "",
       type: "veg",
       category: "sabji",
-      variants: [{ size: "", price: "" }],
+      variants: [{ size: "", price: "", markedPrice: "" }],
       description: "",
       isAvailable: true,
       isFrequent: false,
@@ -98,7 +98,11 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
   const onSubmit = (data: DishFormData) => {
     const payload = {
       ...data,
-      variants: data.variants.map((v) => ({ ...v, price: parseFloat(String(v.price)) })),
+      variants: data.variants.map((v) => {
+        const base = { size: v.size, price: parseFloat(String(v.price)) };
+        const mp = parseFloat(String(v.markedPrice));
+        return (!isNaN(mp) && mp > base.price) ? { ...base, markedPrice: mp } : base;
+      }),
     };
     if (isEditMode && dish) {
       updateDishMutation.mutate({ id: dish._id, updates: payload });
@@ -117,8 +121,8 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
           category: dish.category || "sabji",
           variants:
             dish.variants?.length > 0
-              ? dish.variants.map((v) => ({ size: v.size || "", price: v.price || 0 }))
-              : [{ size: "", price: "" }],
+              ? dish.variants.map((v) => ({ size: v.size || "", price: v.price || 0, markedPrice: v.markedPrice ?? "" }))
+              : [{ size: "", price: "", markedPrice: "" }],
           description: dish.description || "",
           isAvailable: dish.isAvailable !== undefined ? dish.isAvailable : true,
           isFrequent: dish.isFrequent !== undefined ? dish.isFrequent : false,
@@ -235,16 +239,19 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
                 <label className={labelClass}>Variants / Pricing *</label>
                 <div className="rounded-2xl border border-dhaba-border/30 overflow-hidden">
                   {/* Table header */}
-                  <div className="grid grid-cols-[1fr_1fr_2.5rem] gap-2 px-4 py-2 bg-dhaba-surface/60 border-b border-dhaba-border/20">
+                  <div className="grid grid-cols-[1fr_1fr_1fr_2.5rem] gap-2 px-4 py-2 bg-dhaba-surface/60 border-b border-dhaba-border/20">
                     <span className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">Size</span>
                     <span className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">Price (₹)</span>
+                    <span className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">
+                      MRP (₹) <span className="normal-case font-normal opacity-60">optional</span>
+                    </span>
                     <span />
                   </div>
 
                   {/* Table rows */}
                   <div className="divide-y divide-dhaba-border/10">
                     {fields.map((field, index) => (
-                      <div key={field.id} className="grid grid-cols-[1fr_1fr_2.5rem] gap-2 items-center px-4 py-2.5">
+                      <div key={field.id} className="grid grid-cols-[1fr_1fr_1fr_2.5rem] gap-2 items-center px-4 py-2.5">
                         <div>
                           <select
                             {...register(`variants.${index}.size`, {
@@ -303,6 +310,30 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
                             <p className="text-dhaba-danger text-[10px] mt-0.5">{errors.variants[index]?.price?.message}</p>
                           )}
                         </div>
+                        {/* MRP cell */}
+                        <div>
+                          <input
+                            type="number"
+                            step="1"
+                            {...register(`variants.${index}.markedPrice`, {
+                              min: { value: 0, message: "≥ 0" },
+                              validate: (value) => {
+                                if (value === "" || value === undefined || value === null) return true;
+                                const mp = Number(value);
+                                const p  = Number(getValues(`variants.${index}.price`));
+                                return mp > p || "Must be > price";
+                              },
+                            })}
+                            className="w-full glass-input rounded-lg px-3 py-2 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50"
+                            placeholder="e.g. 300"
+                          />
+                          {errors.variants?.[index]?.markedPrice && (
+                            <p className="text-dhaba-danger text-[10px] mt-0.5">
+                              {errors.variants[index]?.markedPrice?.message}
+                            </p>
+                          )}
+                        </div>
+
                         <button
                           type="button"
                           onClick={() => remove(index)}
@@ -319,7 +350,7 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
                   <div className="px-4 py-2.5 border-t border-dhaba-border/20 bg-dhaba-surface/30">
                     <button
                       type="button"
-                      onClick={() => append({ size: "", price: "" })}
+                      onClick={() => append({ size: "", price: "", markedPrice: "" })}
                       className="flex items-center gap-1.5 text-dhaba-accent text-xs font-bold hover:underline"
                     >
                       <FaPlus size={10} /> Add Variant

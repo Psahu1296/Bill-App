@@ -21,7 +21,7 @@ const BulkAddDishModal: React.FC<BulkAddDishModalProps> = ({ isOpen, onClose }) 
       type: "main_course",
       category: "veg",
       variants: [
-        { size: "Full", price: 350 },
+        { size: "Full", price: 350, markedPrice: 420 },
         { size: "Half", price: 200 }
       ],
       description: "Creamy and delicious paneer dish."
@@ -108,6 +108,7 @@ const BulkAddDishModal: React.FC<BulkAddDishModalProps> = ({ isOpen, onClose }) 
               <li>• Required fields: <code>name</code>, <code>image</code>, <code>type</code>, <code>category</code>, <code>variants</code>.</li>
               <li>• <code>type</code> can be: starter, main_course, dessert, beverage, etc.</li>
               <li>• <code>category</code> can be: veg, non_veg, egg.</li>
+              <li>• Optional per-variant: <code>markedPrice</code> — must be a number greater than <code>price</code>. Shown as a strikethrough to customers.</li>
             </ul>
           </div>
         </div>
