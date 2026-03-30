@@ -71,6 +71,16 @@ body {
     box-shadow: 0 0 0 3px hsl(var(--dhaba-accent) / 0.15);
   }
 
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.7) sepia(1) saturate(2) hue-rotate(10deg);
+    cursor: pointer;
+    opacity: 0.7;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+  }
+
   .btn-accent {
     background: linear-gradient(135deg, hsl(var(--dhaba-accent)), hsl(var(--dhaba-orange)));
     color: hsl(15 12% 7%);

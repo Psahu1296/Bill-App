@@ -60,6 +60,7 @@ app.use(cors({
     if (origin.endsWith(".trycloudflare.com")) return cb(null, true);
     // Named tunnel domain (root + any subdomain)
     if (origin === "https://sahu-dhaba-pos.co.in" || origin.endsWith(".sahu-dhaba-pos.co.in")) return cb(null, true);
+    if(origin === "http://localhost:8080" || origin === "http://localhost:5173") return cb(null, true); // for local dev with frontend running on 5173/5174
     cb(new Error(`CORS: origin ${origin} not allowed`));
   },
   credentials: true,

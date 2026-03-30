@@ -10,16 +10,7 @@ import {
   getAllStaff,
   getDishes,
 } from "../https";
-import type { ConsumableEntry, ConsumableType, ConsumerType, StaffMember, Dish } from "../types";
-import type { StaffRole } from "./Staff";
-
-interface DailySummary {
-  totalSold: number;
-  totalRevenue: number;
-  staffConsumed: number;
-  ownerConsumed: number;
-  wastedValue: number;
-}
+import type { ConsumableEntry, ConsumableType, ConsumableConsumableDailySummary, ConsumerType, StaffMember, Dish, StaffRole } from "../types";
 
 interface SizeVariant { label: string; price: number; }
 
@@ -59,7 +50,7 @@ const ROLE_EMOJI: Record<StaffRole, string> = {
   cook: "👨‍🍳", supplier: "🚚", owner: "👑", manager: "📋", delivery: "🏍️", other: "👤",
 };
 
-const getSummaryFromEntries = (entries: ConsumableEntry[], type: ConsumableType): DailySummary => {
+const getSummaryFromEntries = (entries: ConsumableEntry[], type: ConsumableType): ConsumableDailySummary => {
   const items = entries.filter((e) => e.type === type);
   const customerItems = items.filter((e) => e.consumerType === "customer");
   const staffItems = items.filter((e) => e.consumerType === "staff");

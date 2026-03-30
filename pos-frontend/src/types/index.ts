@@ -294,6 +294,7 @@ export interface AddPaymentPayload {
   amount: number;
   type: "daily" | "monthly" | "advance" | "bonus" | "deduction";
   note?: string;
+  date?: string;
 }
 
 // ── API response wrapper ──────────────────────────────────────────────────────

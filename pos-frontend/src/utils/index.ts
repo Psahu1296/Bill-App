@@ -1,4 +1,6 @@
 // ── Local dish image imports ──────────────────────────────────────────────────
+import axios from "axios";
+import type { Order } from "../types";
 import imgChai            from "../assets/images/chai.jpg";
 import imgJeeraRice       from "../assets/images/jeera_rice.webp";
 import imgRice            from "../assets/images/rice.jpg";
@@ -142,3 +144,29 @@ export const formatDateAndTime = (date: string | Date): string => {
     timeZone: "Asia/Kolkata",
   });
 };
+
+export function getTodayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export function getErrorMessage(err: unknown, fallback = "Something went wrong."): string {
+  if (axios.isAxiosError(err)) {
+    return err.response?.data?.message || err.message || fallback;
+  }
+  if (err && typeof err === "object" && "message" in err) {
+    return (err as { message: string }).message || fallback;
+  }
+  return fallback;
+}
+
+export function computeOrderStats(orders: Order[]) {
+  return {
+    active: orders.filter(o => o.orderStatus === "In Progress" || o.orderStatus === "Ready").length,
+    inProgress: orders.filter(o => o.orderStatus === "In Progress").length,
+    ready: orders.filter(o => o.orderStatus === "Ready").length,
+    completed: orders.filter(o => o.orderStatus === "Completed").length,
+    totalRevenue: orders.reduce((s, o) => s + (o.amountPaid ?? 0), 0),
+    pendingBalance: orders.reduce((s, o) => s + Math.max(0, (o.bills?.totalWithTax ?? 0) - (o.amountPaid ?? 0)), 0),
+  };
+}

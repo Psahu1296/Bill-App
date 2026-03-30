@@ -8,6 +8,7 @@ import {
 } from "react-router-dom";
 import { Home, Auth, Orders, Tables, Menu, Dashboard, OrderSummary, Consumables, AppUpdate, Staff, DataManagement, DishesPage, ServerStatus } from "./pages";
 import Header from "./components/shared/Header";
+import { ErrorBoundary } from "./components/shared";
 import { useSelector } from "react-redux";
 import useLoadData from "./hooks/useLoadData";
 import FullScreenLoader from "./components/shared/FullScreenLoader";
@@ -162,7 +163,9 @@ function App() {
     <NotificationProvider>
       <Router>
         <AdminNotifyMount />
-        <Layout />
+        <ErrorBoundary>
+          <Layout />
+        </ErrorBoundary>
       </Router>
     </NotificationProvider>
   );
