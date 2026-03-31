@@ -6,7 +6,7 @@ import { getDb } from "../db";
 
 const addDish = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { image, name, type, category, variants, description, isAvailable, isFrequent } = req.body;
+    const { image, name, type, category, variants, description, isAvailable, isFrequent, isOnlineAvailable } = req.body;
 
     if (!name || !type || !category || !variants || !Array.isArray(variants) || variants.length === 0) {
       return next(createHttpError(400, "Missing required dish fields (name, type, category, variants) or variants is empty!"));
@@ -26,7 +26,7 @@ const addDish = async (req: Request, res: Response, next: NextFunction) => {
       return next(createHttpError(409, "Dish with this name already exists!"));
     }
 
-    const dish = dishRepo.create({ image, name, type, category, variants, description, isAvailable, isFrequent });
+    const dish = dishRepo.create({ image, name, type, category, variants, description, isAvailable, isFrequent, isOnlineAvailable });
     res.status(201).json({ success: true, message: "Dish added successfully!", data: dish });
   } catch (error) {
     next(error);
@@ -36,6 +36,14 @@ const addDish = async (req: Request, res: Response, next: NextFunction) => {
 const getDishes = async (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(200).json({ success: true, data: dishRepo.findAll() });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getOnlineDishes = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(200).json({ success: true, data: dishRepo.findOnlineAvailable() });
   } catch (error) {
     next(error);
   }
@@ -190,4 +198,4 @@ const seedDishes = async (_req: Request, res: Response, next: NextFunction) => {
   }
 };
 
-export { addDish, getDishes, getFrequentDishes, getDishById, updateDish, deleteDish, bulkAddDishes, seedDishes };
+export { addDish, getDishes, getOnlineDishes, getFrequentDishes, getDishById, updateDish, deleteDish, bulkAddDishes, seedDishes };

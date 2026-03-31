@@ -11,6 +11,7 @@ export const dummyDishes: Dish[] = [
     description: "Rich and creamy tomato gravy with soft paneer cubes.",
     isAvailable: true,
     isFrequent: true,
+    isOnlineAvailable: false,
     numberOfOrders: 120,
   },
   {
@@ -23,6 +24,7 @@ export const dummyDishes: Dish[] = [
     description: "Roasted marinated chicken chunks in spiced curry sauce.",
     isAvailable: true,
     isFrequent: true,
+    isOnlineAvailable: false,
     numberOfOrders: 200,
   },
   {
@@ -34,6 +36,7 @@ export const dummyDishes: Dish[] = [
     variants: [{ size: "Standard", price: 40 }],
     isAvailable: true,
     isFrequent: true,
+    isOnlineAvailable: false,
     numberOfOrders: 500,
   },
   {
@@ -45,6 +48,7 @@ export const dummyDishes: Dish[] = [
     variants: [{ size: "Full", price: 180 }],
     isAvailable: true,
     isFrequent: false,
+    isOnlineAvailable: false,
     numberOfOrders: 85,
   }
 ];

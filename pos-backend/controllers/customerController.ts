@@ -10,7 +10,7 @@ export async function getPublicDishes(req: Request, res: Response, next: NextFun
   try {
     const all = DishRepo.findAll();
     const available = all
-      .filter(d => d && d.isAvailable)
+      .filter(d => d && d.isAvailable && d.isOnlineAvailable)
       .map(d => {
         // strip internal tracking field before sending to public
         if (!d) return d;

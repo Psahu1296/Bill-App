@@ -4,6 +4,7 @@ export interface DishVariant {
   size: string;
   price: number;
   markedPrice?: number;         // optional MRP / fake original price for strikethrough display
+  onlinePrice?: number;         // optional price override for online orders
   // dishModel sets _id: false — Mongoose does not generate _id for variant subdocs
 }
 
@@ -17,6 +18,7 @@ export interface Dish {
   description?: string;
   isAvailable: boolean;
   isFrequent: boolean;
+  isOnlineAvailable: boolean;
   numberOfOrders: number;
 }
 
@@ -213,6 +215,7 @@ export interface AddDishPayload {
   description?: string;
   isAvailable?: boolean;
   isFrequent?: boolean;
+  isOnlineAvailable?: boolean;
 }
 
 export interface AddExpensePayload {

@@ -57,8 +57,15 @@ const DishCard: React.FC<DishCardProps> = ({ dish, onEdit, onDelete }) => {
 
         {/* Popular fire badge */}
         {dish.isFrequent && (
-          <div className="absolute top-3 right-3 bg-dhaba-accent/20 text-dhaba-accent p-2 rounded-lg backdrop-blur-sm">
+          <div className={`absolute ${dish.isOnlineAvailable ? "top-12" : "top-3"} right-3 bg-dhaba-accent/20 text-dhaba-accent p-2 rounded-lg backdrop-blur-sm`}>
             <FaFire size={12} />
+          </div>
+        )}
+
+        {/* Online available badge */}
+        {dish.isOnlineAvailable && (
+          <div className="absolute top-3 right-3 bg-blue-500/20 text-blue-400 px-2 py-1 rounded-lg backdrop-blur-sm text-[9px] font-bold tracking-wider">
+            ONLINE
           </div>
         )}
 
@@ -111,6 +118,9 @@ const DishCard: React.FC<DishCardProps> = ({ dish, onEdit, onDelete }) => {
                   <span className="text-dhaba-muted line-through text-[10px] mr-1">₹{v.markedPrice}</span>
                 )}
                 <span className="text-dhaba-accent">₹{v.price}</span>
+                {v.onlinePrice != null && v.onlinePrice > 0 && (
+                  <span className="text-blue-400 text-[10px] ml-1">(online ₹{v.onlinePrice})</span>
+                )}
               </span>
             ))
           ) : (

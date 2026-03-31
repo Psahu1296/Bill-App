@@ -72,6 +72,11 @@ function runMigrations(db: Database.Database) {
     db.prepare("ALTER TABLE tables_tb ADD COLUMN is_virtual INTEGER NOT NULL DEFAULT 0").run();
   } catch { /* column already exists — safe to ignore */ }
 
+  // is_online_available column — controls per-dish online ordering availability
+  try {
+    db.prepare("ALTER TABLE dishes ADD COLUMN is_online_available INTEGER NOT NULL DEFAULT 0").run();
+  } catch { /* column already exists — safe to ignore */ }
+
   // Ensure the virtual takeaway table always exists (safe after restore or delete)
   db.prepare("INSERT OR IGNORE INTO tables_tb (table_no, seats, is_virtual) VALUES (0, 0, 1)").run();
 }

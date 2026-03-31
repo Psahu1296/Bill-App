@@ -16,10 +16,11 @@ interface DishFormData {
   name: string;
   type: string;
   category: string;
-  variants: { size: string; price: number | string; markedPrice?: number | string }[];
+  variants: { size: string; price: number | string; markedPrice?: number | string; onlinePrice?: number | string }[];
   description: string;
   isAvailable: boolean;
   isFrequent: boolean;
+  isOnlineAvailable: boolean;
 }
 
 interface AddDishModalProps {
@@ -53,10 +54,11 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
       name: "",
       type: "veg",
       category: "sabji",
-      variants: [{ size: "", price: "", markedPrice: "" }],
+      variants: [{ size: "", price: "", markedPrice: "", onlinePrice: "" }],
       description: "",
       isAvailable: true,
       isFrequent: false,
+      isOnlineAvailable: false,
     },
   });
 
@@ -101,7 +103,9 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
       variants: data.variants.map((v) => {
         const base = { size: v.size, price: parseFloat(String(v.price)) };
         const mp = parseFloat(String(v.markedPrice));
-        return (!isNaN(mp) && mp > base.price) ? { ...base, markedPrice: mp } : base;
+        const op = parseFloat(String(v.onlinePrice));
+        const withMp = (!isNaN(mp) && mp > base.price) ? { ...base, markedPrice: mp } : base;
+        return (!isNaN(op) && op > 0) ? { ...withMp, onlinePrice: op } : withMp;
       }),
     };
     if (isEditMode && dish) {
@@ -121,11 +125,12 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
           category: dish.category || "sabji",
           variants:
             dish.variants?.length > 0
-              ? dish.variants.map((v) => ({ size: v.size || "", price: v.price || 0, markedPrice: v.markedPrice ?? "" }))
-              : [{ size: "", price: "", markedPrice: "" }],
+              ? dish.variants.map((v) => ({ size: v.size || "", price: v.price || 0, markedPrice: v.markedPrice ?? "", onlinePrice: v.onlinePrice ?? "" }))
+              : [{ size: "", price: "", markedPrice: "", onlinePrice: "" }],
           description: dish.description || "",
           isAvailable: dish.isAvailable !== undefined ? dish.isAvailable : true,
           isFrequent: dish.isFrequent !== undefined ? dish.isFrequent : false,
+          isOnlineAvailable: dish.isOnlineAvailable !== undefined ? dish.isOnlineAvailable : false,
         });
       } else {
         reset();
@@ -239,11 +244,14 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
                 <label className={labelClass}>Variants / Pricing *</label>
                 <div className="rounded-2xl border border-dhaba-border/30 overflow-hidden">
                   {/* Table header */}
-                  <div className="grid grid-cols-[1fr_1fr_1fr_2.5rem] gap-2 px-4 py-2 bg-dhaba-surface/60 border-b border-dhaba-border/20">
+                  <div className="grid grid-cols-[1fr_1fr_1fr_1fr_2.5rem] gap-2 px-4 py-2 bg-dhaba-surface/60 border-b border-dhaba-border/20">
                     <span className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">Size</span>
                     <span className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">Price (₹)</span>
                     <span className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">
                       MRP (₹) <span className="normal-case font-normal opacity-60">optional</span>
+                    </span>
+                    <span className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">
+                      Online (₹) <span className="normal-case font-normal opacity-60">optional</span>
                     </span>
                     <span />
                   </div>
@@ -251,7 +259,7 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
                   {/* Table rows */}
                   <div className="divide-y divide-dhaba-border/10">
                     {fields.map((field, index) => (
-                      <div key={field.id} className="grid grid-cols-[1fr_1fr_1fr_2.5rem] gap-2 items-center px-4 py-2.5">
+                      <div key={field.id} className="grid grid-cols-[1fr_1fr_1fr_1fr_2.5rem] gap-2 items-center px-4 py-2.5">
                         <div>
                           <select
                             {...register(`variants.${index}.size`, {
@@ -334,6 +342,24 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
                           )}
                         </div>
 
+                        {/* Online Price cell */}
+                        <div>
+                          <input
+                            type="number"
+                            step="1"
+                            {...register(`variants.${index}.onlinePrice`, {
+                              min: { value: 0, message: "≥ 0" },
+                            })}
+                            className="w-full glass-input rounded-lg px-3 py-2 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50"
+                            placeholder="e.g. 250"
+                          />
+                          {errors.variants?.[index]?.onlinePrice && (
+                            <p className="text-dhaba-danger text-[10px] mt-0.5">
+                              {errors.variants[index]?.onlinePrice?.message}
+                            </p>
+                          )}
+                        </div>
+
                         <button
                           type="button"
                           onClick={() => remove(index)}
@@ -350,7 +376,7 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
                   <div className="px-4 py-2.5 border-t border-dhaba-border/20 bg-dhaba-surface/30">
                     <button
                       type="button"
-                      onClick={() => append({ size: "", price: "", markedPrice: "" })}
+                      onClick={() => append({ size: "", price: "", markedPrice: "", onlinePrice: "" })}
                       className="flex items-center gap-1.5 text-dhaba-accent text-xs font-bold hover:underline"
                     >
                       <FaPlus size={10} /> Add Variant
@@ -374,9 +400,10 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
               <div className="flex gap-3">
                 {(
                   [
-                    { id: "isAvailable", label: "Available for Order" },
-                    { id: "isFrequent",  label: "Frequently Ordered" },
-                  ] as { id: "isAvailable" | "isFrequent"; label: string }[]
+                    { id: "isAvailable",       label: "Available for Order" },
+                    { id: "isFrequent",        label: "Frequently Ordered"  },
+                    { id: "isOnlineAvailable", label: "Available Online"    },
+                  ] as { id: "isAvailable" | "isFrequent" | "isOnlineAvailable"; label: string }[]
                 ).map(({ id, label }) => (
                   <label
                     key={id}
