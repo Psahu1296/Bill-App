@@ -10,7 +10,7 @@ import {
   getAllStaff,
   getDishes,
 } from "../https";
-import type { ConsumableEntry, ConsumableType, ConsumableConsumableDailySummary, ConsumerType, StaffMember, Dish, StaffRole } from "../types";
+import type { ConsumableEntry, ConsumableType, ConsumableDailySummary, ConsumerType, StaffMember, Dish, StaffRole } from "../types";
 
 interface SizeVariant { label: string; price: number; }
 
