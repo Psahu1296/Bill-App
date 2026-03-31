@@ -4,7 +4,7 @@ import { MdTableBar, MdCategory } from "react-icons/md";
 import { BiSolidDish } from "react-icons/bi";
 import Metrics from "../components/dashboard/Metrics";
 import RecentOrders from "../components/dashboard/RecentOrders";
-import Modal from "../components/dashboard/Modal";
+import AddTableModal from "../components/dashboard/AddTableModal";
 import AddExpenseModal from "../components/dashboard/AddExpenseModal";
 
 const buttons = [
@@ -62,7 +62,7 @@ const Dashboard: React.FC = () => {
       {activeTab === "Metrics" && <Metrics />}
       {activeTab === "Orders" && <RecentOrders />}
 
-      {modalType === "table" && <Modal setIsTableModalOpen={() => setModalType("")} />}
+      {modalType === "table" && <AddTableModal setIsTableModalOpen={() => setModalType("")} />}
       {modalType === "expenses" && (
         <AddExpenseModal isOpen={modalType === "expenses"} onClose={() => setModalType("")} onExpenseAdded={() => setModalType("")} />
       )}

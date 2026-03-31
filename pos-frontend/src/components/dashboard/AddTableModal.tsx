@@ -7,11 +7,11 @@ import { addTable, getTables } from "../../https";
 import { enqueueSnackbar } from "notistack";
 import type { Table } from "../../types";
 
-interface ModalProps {
+interface AddTableModalProps {
   setIsTableModalOpen: () => void;
 }
 
-const Modal: React.FC<ModalProps> = ({ setIsTableModalOpen }) => {
+const AddTableModal: React.FC<AddTableModalProps> = ({ setIsTableModalOpen }) => {
   const queryClient = useQueryClient();
   const [tableData, setTableData] = useState({ tableNo: "", seats: "4" });
 
@@ -147,4 +147,4 @@ const Modal: React.FC<ModalProps> = ({ setIsTableModalOpen }) => {
   );
 };
 
-export default Modal;
+export default AddTableModal;

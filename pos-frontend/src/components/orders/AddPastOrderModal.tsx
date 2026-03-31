@@ -1,46 +1,40 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { enqueueSnackbar } from "notistack";
-import {
-  FaTimes, FaClipboardList, FaSearch, FaPlus, FaMinus, FaTrash,
-} from "react-icons/fa";
+import { FaTimes, FaClipboardList, FaPlus, FaMinus } from "react-icons/fa";
 import { MdTableRestaurant } from "react-icons/md";
 import { getTables, getDishes, addOrder } from "../../https";
-import type { Table, Dish, DishVariant, CartItem, OrderStatus, PaymentMethod } from "../../types";
+import { getTodayISO } from "../../utils";
+import type { Table, Dish, DishVariant, OrderStatus, PaymentMethod } from "../../types";
+import PastOrderItemBuilder, { type LocalCartItem } from "./PastOrderItemBuilder";
+import PastOrderSummary from "./PastOrderSummary";
 
 interface AddPastOrderModalProps {
   onClose: () => void;
 }
 
-interface LocalCartItem extends CartItem {
-  dishId: string;
-}
-
-const TAX_RATE = 0; // No separate GST — totalWithTax = total - discount + roundOff
-
 const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
   const queryClient = useQueryClient();
 
-  // ── Form state ────────────────────────────────────────────────
+  // ── Customer state ────────────────────────────────────────────
   const [customerName, setCustomerName]   = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [guests, setGuests]               = useState(1);
-  const [tableId, setTableId]             = useState<string>("");
-  const [orderDate, setOrderDate]         = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  });
+  const [tableId, setTableId]             = useState("");
+  const [orderDate, setOrderDate]         = useState(getTodayISO);
+
+  // ── Bill state ────────────────────────────────────────────────
   const [discount, setDiscount]           = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Cash");
   const [orderStatus, setOrderStatus]     = useState<OrderStatus>("Completed");
   const [amountPaid, setAmountPaid]       = useState(0);
+  const [amountPaidTouched, setAmountPaidTouched] = useState(false);
 
-  // ── Menu state ────────────────────────────────────────────────
+  // ── Menu / cart state ─────────────────────────────────────────
   const [search, setSearch]               = useState("");
   const [catFilter, setCatFilter]         = useState("All");
   const [cartItems, setCartItems]         = useState<LocalCartItem[]>([]);
-  // Tracks selected variant per dish: dishId -> variant
   const [selectedVariants, setSelectedVariants] = useState<Record<string, DishVariant>>({});
 
   // ── Data fetching ─────────────────────────────────────────────
@@ -55,39 +49,25 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
     staleTime: 5 * 60_000,
   });
 
-  const allTables: Table[]  = tablesRes?.data?.data ?? [];
-  const allDishes: Dish[]   = dishesRes?.data?.data ?? [];
+  const allTables: Table[] = tablesRes?.data?.data ?? [];
+  const allDishes: Dish[]  = dishesRes?.data?.data ?? [];
 
-  // ── Category list ─────────────────────────────────────────────
-  const categories = useMemo(() => {
-    const cats = Array.from(new Set(allDishes.map((d) => d.category))).sort();
-    return ["All", ...cats];
-  }, [allDishes]);
+  // ── Bill derived values ───────────────────────────────────────
+  const subtotal           = cartItems.reduce((s, i) => s + i.price, 0);
+  const finalTotal         = Math.max(0, subtotal - discount);
+  const displayAmountPaid  = amountPaidTouched ? amountPaid : finalTotal;
 
-  // ── Filtered dishes ───────────────────────────────────────────
-  const filteredDishes = useMemo(() => {
-    return allDishes.filter((d) => {
-      if (!d.isAvailable || !d.variants.length) return false;
-      const matchCat = catFilter === "All" || d.category === catFilter;
-      const matchSearch = d.name.toLowerCase().includes(search.toLowerCase());
-      return matchCat && matchSearch;
-    });
-  }, [allDishes, catFilter, search]);
+  // ── Cart handlers ─────────────────────────────────────────────
+  const handleVariantSelect = useCallback((dishId: string, variant: DishVariant) => {
+    setSelectedVariants((prev) => ({ ...prev, [dishId]: variant }));
+  }, []);
 
-  // ── Get active variant for a dish ─────────────────────────────
-  const getVariant = (dish: Dish): DishVariant => {
-    if (selectedVariants[dish._id]) return selectedVariants[dish._id];
-    return (
+  const handleAddToCart = useCallback((dish: Dish) => {
+    const variant =
+      selectedVariants[dish._id] ||
       dish.variants.find((v) => v.size === "Full") ||
       dish.variants.find((v) => v.size === "Regular") ||
-      dish.variants[0]
-    );
-  };
-
-  // ── Add dish to cart ──────────────────────────────────────────
-  const addToCart = (dish: Dish) => {
-    const variant = getVariant(dish);
-    const key = `${dish._id}_${variant.size}`;
+      dish.variants[0];
     setCartItems((prev) => {
       const existing = prev.find((i) => i.id === dish._id && i.variantSize === variant.size);
       if (existing) {
@@ -114,10 +94,9 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
         },
       ];
     });
-    void key; // suppress unused warning
-  };
+  }, [selectedVariants]);
 
-  const changeQty = (id: string, variantSize: string | undefined, delta: number) => {
+  const handleChangeQty = useCallback((id: string, variantSize: string | undefined, delta: number) => {
     setCartItems((prev) =>
       prev
         .map((i) => {
@@ -128,20 +107,21 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
         })
         .filter(Boolean)
     );
-  };
+  }, []);
 
-  const removeFromCart = (id: string, variantSize: string | undefined) => {
+  const handleRemoveFromCart = useCallback((id: string, variantSize: string | undefined) => {
     setCartItems((prev) => prev.filter((i) => !(i.id === id && i.variantSize === variantSize)));
-  };
+  }, []);
 
-  // ── Bill calculation ──────────────────────────────────────────
-  const subtotal     = cartItems.reduce((s, i) => s + i.price, 0);
-  const finalTotal   = Math.max(0, subtotal - discount);
-  const TAX_UNUSED   = TAX_RATE; void TAX_UNUSED;
+  // ── Bill handlers ─────────────────────────────────────────────
+  const handleAmountPaidChange = useCallback((v: number) => {
+    setAmountPaidTouched(true);
+    setAmountPaid(v);
+  }, []);
 
-  // Sync amountPaid to finalTotal when it changes (unless admin has explicitly changed it)
-  const [amountPaidTouched, setAmountPaidTouched] = useState(false);
-  const displayAmountPaid = amountPaidTouched ? amountPaid : finalTotal;
+  const handleDecrGuests = useCallback(() => setGuests((g) => Math.max(1, g - 1)), []);
+  const handleIncrGuests = useCallback(() => setGuests((g) => g + 1), []);
+  const handleSelectTable = useCallback((id: string) => setTableId(id), []);
 
   // ── Mutation ──────────────────────────────────────────────────
   const { mutate: submit, isPending } = useMutation({
@@ -156,7 +136,7 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
     },
   });
 
-  const handleSubmit = () => {
+  const handleSubmit = useCallback(() => {
     if (!customerName.trim()) {
       enqueueSnackbar("Customer name is required", { variant: "warning" }); return;
     }
@@ -166,9 +146,7 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
     if (cartItems.length === 0) {
       enqueueSnackbar("Add at least one item", { variant: "warning" }); return;
     }
-
     const paid = amountPaidTouched ? amountPaid : finalTotal;
-
     submit({
       customerDetails: { name: customerName.trim(), phone: customerPhone.trim(), guests },
       orderStatus,
@@ -184,7 +162,10 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
       amountPaid: paid,
       orderDate: new Date(orderDate).toISOString(),
     });
-  };
+  }, [
+    customerName, customerPhone, guests, cartItems, amountPaidTouched, amountPaid,
+    finalTotal, subtotal, discount, orderStatus, tableId, paymentMethod, orderDate, submit,
+  ]);
 
   return (
     <AnimatePresence>
@@ -245,14 +226,14 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
                   <label className="text-xs text-dhaba-muted mb-1 block">Guests</label>
                   <div className="glass-input rounded-xl flex items-center overflow-hidden">
                     <button
-                      onClick={() => setGuests((g) => Math.max(1, g - 1))}
+                      onClick={handleDecrGuests}
                       className="px-3 py-2.5 text-dhaba-accent font-bold hover:bg-dhaba-surface transition-colors"
                     >
                       <FaMinus className="text-xs" />
                     </button>
                     <span className="flex-1 text-center text-sm font-bold text-dhaba-text">{guests}</span>
                     <button
-                      onClick={() => setGuests((g) => g + 1)}
+                      onClick={handleIncrGuests}
                       className="px-3 py-2.5 text-dhaba-accent font-bold hover:bg-dhaba-surface transition-colors"
                     >
                       <FaPlus className="text-xs" />
@@ -278,7 +259,7 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     <button
-                      onClick={() => setTableId("")}
+                      onClick={() => handleSelectTable("")}
                       className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
                         tableId === ""
                           ? "bg-amber-500/20 border border-amber-500/40 text-amber-400"
@@ -290,7 +271,7 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
                     {allTables.filter((t) => !t.isVirtual).map((t) => (
                       <button
                         key={t._id}
-                        onClick={() => setTableId(t._id)}
+                        onClick={() => handleSelectTable(t._id)}
                         className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
                           tableId === t._id
                             ? "bg-dhaba-accent/20 border border-dhaba-accent/40 text-dhaba-accent"
@@ -306,255 +287,33 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
               </div>
             </section>
 
-            {/* ── Menu Selection ── */}
-            <section>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-dhaba-muted mb-3">Select Menu Items</h3>
+            <PastOrderItemBuilder
+              allDishes={allDishes}
+              dishesLoading={dishesLoading}
+              cartItems={cartItems}
+              selectedVariants={selectedVariants}
+              search={search}
+              catFilter={catFilter}
+              onSearchChange={setSearch}
+              onCatFilterChange={setCatFilter}
+              onVariantSelect={handleVariantSelect}
+              onAddToCart={handleAddToCart}
+              onChangeQty={handleChangeQty}
+              onRemoveFromCart={handleRemoveFromCart}
+            />
 
-              {/* Search + category filter */}
-              <div className="flex gap-2 mb-3">
-                <div className="flex-1 glass-input rounded-xl flex items-center gap-2 px-3 py-2">
-                  <FaSearch className="text-dhaba-muted text-xs flex-shrink-0" />
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search dishes…"
-                    className="bg-transparent text-sm text-dhaba-text placeholder-dhaba-muted focus:outline-none flex-1"
-                  />
-                </div>
-              </div>
-
-              {/* Category pills */}
-              <div className="flex gap-1.5 flex-wrap mb-3">
-                {categories.map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setCatFilter(cat)}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                      catFilter === cat
-                        ? "bg-dhaba-accent text-dhaba-bg"
-                        : "glass-input text-dhaba-muted hover:text-dhaba-text"
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-
-              {/* Dish cards */}
-              {dishesLoading ? (
-                <div className="flex items-center justify-center py-8 text-dhaba-muted gap-2">
-                  <div className="h-4 w-4 border-2 border-dhaba-accent border-t-transparent rounded-full animate-spin" />
-                  Loading menu…
-                </div>
-              ) : filteredDishes.length === 0 ? (
-                <p className="text-center text-sm text-dhaba-muted py-8">No dishes found</p>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-64 overflow-y-auto pr-1">
-                  {filteredDishes.map((dish) => {
-                    const variant = getVariant(dish);
-                    const inCart  = cartItems.find((i) => i.id === dish._id && i.variantSize === variant.size);
-                    const isNonVeg = dish.type === "non-veg";
-                    return (
-                      <div
-                        key={dish._id}
-                        className="glass-card rounded-2xl p-3 flex flex-col gap-2 border border-dhaba-border/10"
-                      >
-                        {/* Name + type */}
-                        <div className="flex items-start gap-1.5">
-                          <span className={`mt-0.5 inline-flex items-center justify-center w-3 h-3 rounded-sm border flex-shrink-0 ${isNonVeg ? "border-red-500" : "border-green-500"}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${isNonVeg ? "bg-red-500" : "bg-green-500"}`} />
-                          </span>
-                          <span className="text-xs font-bold text-dhaba-text leading-tight line-clamp-2">{dish.name}</span>
-                        </div>
-
-                        {/* Variant pills */}
-                        {dish.variants.length > 1 && (
-                          <div className="flex gap-1 flex-wrap">
-                            {dish.variants.map((v) => (
-                              <button
-                                key={v.size}
-                                onClick={() => setSelectedVariants((prev) => ({ ...prev, [dish._id]: v }))}
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all ${
-                                  variant.size === v.size
-                                    ? "bg-dhaba-accent text-dhaba-bg"
-                                    : "glass-input text-dhaba-muted"
-                                }`}
-                              >
-                                {v.size}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Price + Add button */}
-                        <div className="flex items-center justify-between mt-auto">
-                          <div className="flex flex-col">
-                            {variant.markedPrice != null && variant.markedPrice > variant.price && (
-                              <span className="text-[10px] line-through text-dhaba-muted leading-none">
-                                ₹{variant.markedPrice}
-                              </span>
-                            )}
-                            <span className="text-sm font-bold text-dhaba-text">₹{variant.price}</span>
-                          </div>
-                          {inCart ? (
-                            <div className="flex items-center glass-input rounded-lg overflow-hidden">
-                              <button
-                                onClick={() => changeQty(dish._id, variant.size, -1)}
-                                className="px-2 py-1 text-dhaba-accent font-bold text-xs hover:bg-dhaba-surface transition-colors"
-                              >
-                                <FaMinus className="text-[9px]" />
-                              </button>
-                              <span className="px-2 text-xs font-bold text-dhaba-text min-w-[20px] text-center">
-                                {inCart.quantity}
-                              </span>
-                              <button
-                                onClick={() => changeQty(dish._id, variant.size, 1)}
-                                className="px-2 py-1 text-dhaba-accent font-bold text-xs hover:bg-dhaba-surface transition-colors"
-                              >
-                                <FaPlus className="text-[9px]" />
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => addToCart(dish)}
-                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-dhaba-accent/15 text-dhaba-accent text-xs font-bold hover:bg-dhaba-accent/25 transition-colors"
-                            >
-                              <FaPlus className="text-[9px]" /> Add
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            {/* ── Cart / Order Items ── */}
-            {cartItems.length > 0 && (
-              <section>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-dhaba-muted mb-3">
-                  Order Items <span className="text-dhaba-accent">({cartItems.length})</span>
-                </h3>
-                <div className="space-y-1.5">
-                  {cartItems.map((item) => (
-                    <div
-                      key={`${item.id}_${item.variantSize}`}
-                      className="flex items-center justify-between glass-input rounded-xl px-4 py-2.5"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-dhaba-text truncate">{item.name}</p>
-                        <p className="text-[11px] text-dhaba-muted">{item.variantSize} · ₹{item.pricePerQuantity} each</p>
-                      </div>
-                      <div className="flex items-center gap-3 ml-3">
-                        <div className="flex items-center glass-card rounded-lg overflow-hidden">
-                          <button
-                            onClick={() => changeQty(item.id, item.variantSize, -1)}
-                            className="px-2 py-1 text-dhaba-accent font-bold text-sm hover:bg-dhaba-surface transition-colors"
-                          >
-                            −
-                          </button>
-                          <span className="px-2 text-sm font-bold text-dhaba-text min-w-[24px] text-center">{item.quantity}</span>
-                          <button
-                            onClick={() => changeQty(item.id, item.variantSize, 1)}
-                            className="px-2 py-1 text-dhaba-accent font-bold text-sm hover:bg-dhaba-surface transition-colors"
-                          >
-                            +
-                          </button>
-                        </div>
-                        <span className="text-sm font-bold text-dhaba-text w-16 text-right">₹{item.price}</span>
-                        <button
-                          onClick={() => removeFromCart(item.id, item.variantSize)}
-                          className="p-1.5 rounded-lg hover:bg-dhaba-danger/10 text-dhaba-muted hover:text-dhaba-danger transition-colors"
-                        >
-                          <FaTrash className="text-xs" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* ── Bill Summary + Payment ── */}
-            <section className="glass-card rounded-2xl p-5 space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-dhaba-muted">Bill & Payment</h3>
-
-              {/* Bill rows */}
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-dhaba-muted">Subtotal</span>
-                  <span className="font-semibold text-dhaba-text">₹{subtotal}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-dhaba-muted">Discount</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-dhaba-muted">₹</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={discount}
-                      onChange={(e) => setDiscount(Math.max(0, Number(e.target.value)))}
-                      className="glass-input rounded-lg px-2 py-1 w-20 text-right text-dhaba-text focus:outline-none focus:ring-1 focus:ring-dhaba-accent/40 text-sm"
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-between border-t border-dhaba-border/20 pt-2 font-bold">
-                  <span className="text-dhaba-text">Total</span>
-                  <span className="text-dhaba-accent text-base">₹{finalTotal}</span>
-                </div>
-              </div>
-
-              {/* Payment method */}
-              <div>
-                <p className="text-xs text-dhaba-muted mb-2">Payment Method</p>
-                <div className="flex gap-2">
-                  {(["Cash", "Online"] as PaymentMethod[]).map((pm) => (
-                    <button
-                      key={pm}
-                      onClick={() => setPaymentMethod(pm)}
-                      className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${
-                        paymentMethod === pm
-                          ? "bg-dhaba-accent text-dhaba-bg"
-                          : "glass-input text-dhaba-muted hover:text-dhaba-text"
-                      }`}
-                    >
-                      {pm}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Amount paid */}
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex-1">
-                  <p className="text-xs text-dhaba-muted mb-1">Amount Paid (₹)</p>
-                  <input
-                    type="number"
-                    min={0}
-                    value={displayAmountPaid}
-                    onChange={(e) => {
-                      setAmountPaidTouched(true);
-                      setAmountPaid(Math.max(0, Number(e.target.value)));
-                    }}
-                    className="glass-input w-full rounded-xl px-4 py-2.5 text-sm text-dhaba-text focus:outline-none focus:ring-1 focus:ring-dhaba-accent/40"
-                  />
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs text-dhaba-muted mb-1">Order Status</p>
-                  <select
-                    value={orderStatus}
-                    onChange={(e) => setOrderStatus(e.target.value as OrderStatus)}
-                    className="glass-input w-full rounded-xl px-4 py-2.5 text-sm text-dhaba-text focus:outline-none focus:ring-1 focus:ring-dhaba-accent/40 bg-transparent"
-                  >
-                    <option value="Completed">Completed</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Ready">Ready</option>
-                  </select>
-                </div>
-              </div>
-            </section>
+            <PastOrderSummary
+              subtotal={subtotal}
+              discount={discount}
+              finalTotal={finalTotal}
+              paymentMethod={paymentMethod}
+              orderStatus={orderStatus}
+              displayAmountPaid={displayAmountPaid}
+              onDiscountChange={setDiscount}
+              onPaymentMethodChange={setPaymentMethod}
+              onAmountPaidChange={handleAmountPaidChange}
+              onOrderStatusChange={setOrderStatus}
+            />
 
           </div>
 
