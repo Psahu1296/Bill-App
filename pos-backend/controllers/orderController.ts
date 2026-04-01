@@ -113,15 +113,26 @@ const addOrder = async (req: Request, res: Response, next: NextFunction) => {
         }
       }
 
-      const updatedOrder = orderRepo.update(_id, {
-        ...orderData,
-        tableId: Number(tableId),
-        amountPaid,
-        balanceDueOnOrder,
-      }) as Record<string, unknown>;
-      if (!updatedOrder) return next(createHttpError(404, "Order not found for update!"));
-      consumableRepo.removeByOrderId(_id);
-      syncConsumablesFromOrder(updatedOrder);
+      const db = require("../db").getDb();
+      let updatedOrder: Record<string, unknown>;
+      try {
+        updatedOrder = db.transaction(() => {
+          const result = orderRepo.update(_id, {
+            ...orderData,
+            tableId: Number(tableId),
+            amountPaid,
+            balanceDueOnOrder,
+          }) as Record<string, unknown> | null;
+          if (!result) throw new Error("Order not found for update");
+          consumableRepo.removeByOrderId(_id);
+          syncConsumablesFromOrder(result);
+          return result;
+        })();
+      } catch (e) {
+        const msg = (e as Error).message;
+        if (msg === "Order not found for update") return next(createHttpError(404, "Order not found for update!"));
+        throw e;
+      }
       return res.status(200).json({ success: true, message: "Order updated!", data: updatedOrder });
     }
 
@@ -248,67 +259,75 @@ const updateOrderById = async (req: Request, res: Response, next: NextFunction) 
       updatePayload.balanceDueOnOrder = orderTotalWithTax;
     }
 
-    const updatedOrder = orderRepo.update(id, updatePayload) as Record<string, unknown>;
-    if (!updatedOrder) return next(createHttpError(404, "Order not found after update!"));
-
-    // Ledger: only record when the order JUST transitions to Completed with an outstanding balance.
-    // This prevents double-counting from in-flight payment updates during an ongoing order.
+    // Determine justCompleted before the transaction (pure logic, no DB)
     const justCompleted =
       requestBodyUpdates.orderStatus === "Completed" &&
       (currentOrder.orderStatus as string) !== "Completed";
 
-    if (justCompleted) {
-      const finalBalanceDue = (updatedOrder.balanceDueOnOrder as number) ?? 0;
-      if (finalBalanceDue > 0) {
-        const phone = (updatedOrder.customerDetails as Record<string,unknown>)?.phone as string;
-        const name  = (updatedOrder.customerDetails as Record<string,unknown>)?.name  as string;
-        // Guard: don't create a second entry if one already exists (e.g. order re-completed)
-        const alreadyRecorded = ledgerRepo.getFullPaymentDueForOrder(Number(updatedOrder._id));
-        if (!alreadyRecorded && phone) {
-          try {
-            ledgerRepo.upsertWithTransaction({
-              customerPhone: phone,
-              customerName: name,
-              balanceDelta: finalBalanceDue,
-              transaction: {
-                orderId: Number(updatedOrder._id),
-                transactionType: "full_payment_due",
-                amount: finalBalanceDue,
-                notes: `Order #${updatedOrder._id} completed — ₹${finalBalanceDue.toFixed(2)} outstanding`,
-              },
-            });
-          } catch (e) { console.error("Ledger error on order completion:", e); }
-        }
-      }
-    }
-
-    // Earnings delta
-    if (amountChangeForEarnings !== 0) {
-      try {
-        earningRepo.incrementEarnings(
-          getZonedStartOfDayUtc(orderCreationDate).toISOString(),
-          amountChangeForEarnings
-        );
-      } catch (e) { console.error("Earnings error on updateOrder:", e); }
-    }
-
-    // Auto table status
     const tableId = currentOrder.table as string | null;
-    if (tableId) {
-      const targetTable = tableRepo.findById(tableId) as Record<string, unknown> | null;
-      if (targetTable && String(targetTable.currentOrder) === String(currentOrder._id)) {
-        const isSettled   = updatedOrder.orderStatus === "Completed" && updatedOrder.paymentStatus === "Paid";
-        const isCancelled = updatedOrder.orderStatus === "Cancelled";
-        if ((isSettled || isCancelled) && targetTable.status !== "Available") {
-          tableRepo.update(tableId, { status: "Available", currentOrderId: null });
-        }
-      }
-    }
 
-    // Re-sync consumables if items changed
-    if (requestBodyUpdates.items !== undefined) {
-      consumableRepo.removeByOrderId(id);
-      syncConsumablesFromOrder(updatedOrder);
+    const db = require("../db").getDb();
+    let updatedOrder: Record<string, unknown>;
+    try {
+      updatedOrder = db.transaction(() => {
+        const result = orderRepo.update(id, updatePayload) as Record<string, unknown> | null;
+        if (!result) throw new Error("Order not found after update");
+
+        // Ledger: only record when the order JUST transitions to Completed with outstanding balance
+        if (justCompleted) {
+          const finalBalanceDue = (result.balanceDueOnOrder as number) ?? 0;
+          if (finalBalanceDue > 0) {
+            const phone = (result.customerDetails as Record<string,unknown>)?.phone as string;
+            const name  = (result.customerDetails as Record<string,unknown>)?.name  as string;
+            const alreadyRecorded = ledgerRepo.getFullPaymentDueForOrder(Number(result._id));
+            if (!alreadyRecorded && phone) {
+              ledgerRepo.upsertWithTransaction({
+                customerPhone: phone,
+                customerName: name,
+                balanceDelta: finalBalanceDue,
+                transaction: {
+                  orderId: Number(result._id),
+                  transactionType: "full_payment_due",
+                  amount: finalBalanceDue,
+                  notes: `Order #${result._id} completed — ₹${finalBalanceDue.toFixed(2)} outstanding`,
+                },
+              });
+            }
+          }
+        }
+
+        // Earnings delta
+        if (amountChangeForEarnings !== 0) {
+          earningRepo.incrementEarnings(
+            getZonedStartOfDayUtc(orderCreationDate).toISOString(),
+            amountChangeForEarnings
+          );
+        }
+
+        // Auto table status
+        if (tableId) {
+          const targetTable = tableRepo.findById(tableId) as Record<string, unknown> | null;
+          if (targetTable && String(targetTable.currentOrder) === String(currentOrder._id)) {
+            const isSettled   = result.orderStatus === "Completed" && result.paymentStatus === "Paid";
+            const isCancelled = result.orderStatus === "Cancelled";
+            if ((isSettled || isCancelled) && targetTable.status !== "Available") {
+              tableRepo.update(tableId, { status: "Available", currentOrderId: null });
+            }
+          }
+        }
+
+        // Re-sync consumables if items changed
+        if (requestBodyUpdates.items !== undefined) {
+          consumableRepo.removeByOrderId(id);
+          syncConsumablesFromOrder(result);
+        }
+
+        return result;
+      })();
+    } catch (e) {
+      const msg = (e as Error).message;
+      if (msg === "Order not found after update") return next(createHttpError(404, "Order not found after update!"));
+      throw e;
     }
 
     res.status(200).json({ success: true, message: "Order updated successfully!", data: updatedOrder });
@@ -341,49 +360,46 @@ const deleteOrderById = async (req: Request, res: Response, next: NextFunction) 
     const phone            = customerDetails?.phone as string;
     const name             = customerDetails?.name as string;
 
-    // Reverse ledger — only if a full_payment_due entry was recorded for this order (i.e. it was completed).
-    // Use the exact original amount rather than computing from balanceDue, so in-between manual
-    // payments don't cause the customer balance to go negative.
-    if (phone) {
-      const ledgerEntry = ledgerRepo.getFullPaymentDueForOrder(Number(id));
-      if (ledgerEntry) {
-        try {
-          ledgerRepo.upsertWithTransaction({
-            customerPhone: phone,
-            customerName: name,
-            balanceDelta: -ledgerEntry.amount,
-            transaction: {
-              orderId: Number(id),
-              transactionType: "balance_decreased",
-              amount: ledgerEntry.amount,
-              notes: `Order #${id} deleted — ₹${ledgerEntry.amount.toFixed(2)} reversed`,
-            },
-          });
-        } catch (e) { console.error("Ledger error on deleteOrder:", e); }
-      }
-    }
+    // Look up ledger entry before the transaction (read-only, safe outside)
+    const ledgerEntry = phone ? ledgerRepo.getFullPaymentDueForOrder(Number(id)) : null;
+    const tableId = order.table as string | null;
 
-    // Reverse earnings — subtract whatever was already paid
-    if (amountPaid > 0) {
-      try {
+    const db = require("../db").getDb();
+    db.transaction(() => {
+      // Reverse ledger — only if a full_payment_due entry was recorded for this order
+      if (phone && ledgerEntry) {
+        ledgerRepo.upsertWithTransaction({
+          customerPhone: phone,
+          customerName: name,
+          balanceDelta: -ledgerEntry.amount,
+          transaction: {
+            orderId: Number(id),
+            transactionType: "balance_decreased",
+            amount: ledgerEntry.amount,
+            notes: `Order #${id} deleted — ₹${ledgerEntry.amount.toFixed(2)} reversed`,
+          },
+        });
+      }
+
+      // Reverse earnings
+      if (amountPaid > 0) {
         earningRepo.incrementEarnings(
           getZonedStartOfDayUtc(orderDate).toISOString(),
           -amountPaid
         );
-      } catch (e) { console.error("Earnings error on deleteOrder:", e); }
-    }
-
-    // Free the table if it was booked for this order
-    const tableId = order.table as string | null;
-    if (tableId) {
-      const table = tableRepo.findById(tableId) as Record<string, unknown> | null;
-      if (table && String(table.currentOrder) === String(id)) {
-        tableRepo.update(tableId, { status: "Available", currentOrderId: null });
       }
-    }
 
-    consumableRepo.removeByOrderId(id);
-    orderRepo.remove(id);
+      // Free the table if it was booked for this order
+      if (tableId) {
+        const table = tableRepo.findById(tableId) as Record<string, unknown> | null;
+        if (table && String(table.currentOrder) === String(id)) {
+          tableRepo.update(tableId, { status: "Available", currentOrderId: null });
+        }
+      }
+
+      consumableRepo.removeByOrderId(id);
+      orderRepo.remove(id);
+    })();
 
     res.status(200).json({ success: true, message: "Order deleted successfully!" });
   } catch (error) {
