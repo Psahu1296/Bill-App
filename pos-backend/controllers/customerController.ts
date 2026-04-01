@@ -60,7 +60,7 @@ export async function placeCustomerOrder(req: Request, res: Response, next: Next
 
     const order = OrderRepo.create({
       customerDetails: enrichedCustomerDetails,
-      orderStatus: "In Progress",
+      orderStatus: "Pending",
       bills,
       items,
       tableId: tableNo ? Number(tableNo) : null,

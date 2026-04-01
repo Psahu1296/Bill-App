@@ -63,7 +63,7 @@ export interface OrderBills {
   totalWithTax: number;
 }
 
-export type OrderStatus = 'In Progress' | 'Ready' | 'Completed' | 'Cancelled';
+export type OrderStatus = 'Pending' | 'Cooking' | 'In Progress' | 'Ready' | 'Completed' | 'Cancelled';
 export type PaymentStatus = 'Pending' | 'Paid' | 'Refunded';
 export type PaymentMethod = 'Cash' | 'Online';
 

@@ -14,7 +14,7 @@ import {
 import { IoCheckmarkDoneCircle } from "react-icons/io5";
 import type { Order } from "../types";
 
-const STATUS_FILTERS = ["All", "In Progress", "Ready", "Completed"] as const;
+const STATUS_FILTERS = ["All", "Pending", "Cooking", "Ready", "Completed"] as const;
 type FilterKey = typeof STATUS_FILTERS[number];
 
 function todayStr() {
@@ -37,8 +37,22 @@ const Orders: React.FC = () => {
     refetchInterval: 30_000,
   });
 
-  // Active orders fetched without date filter so lingering In Progress / Ready
+  // Active orders fetched without date filter so lingering Pending / Cooking / Ready
   // orders from previous days always show up when viewing today.
+  const { data: activePendingRes } = useQuery({
+    queryKey: ["orders", "active", "pending"],
+    queryFn: () => getOrders({ orderStatus: "Pending" }),
+    placeholderData: keepPreviousData,
+    refetchInterval: 15_000,
+    enabled: isToday,
+  });
+  const { data: activeCookingRes } = useQuery({
+    queryKey: ["orders", "active", "cooking"],
+    queryFn: () => getOrders({ orderStatus: "Cooking" }),
+    placeholderData: keepPreviousData,
+    refetchInterval: 30_000,
+    enabled: isToday,
+  });
   const { data: activeInProgressRes } = useQuery({
     queryKey: ["orders", "active", "inprogress"],
     queryFn: () => getOrders({ orderStatus: "In Progress" }),
@@ -63,8 +77,10 @@ const Orders: React.FC = () => {
     if (!isToday) return dateFiltered;
     // Merge date-filtered + all active orders (dedup by _id)
     const extra: Order[] = [
+      ...((activePendingRes?.data?.data   as Order[]) ?? []),
+      ...((activeCookingRes?.data?.data   as Order[]) ?? []),
       ...((activeInProgressRes?.data?.data as Order[]) ?? []),
-      ...((activeReadyRes?.data?.data   as Order[]) ?? []),
+      ...((activeReadyRes?.data?.data     as Order[]) ?? []),
     ];
     const map = new Map<string, Order>();
     [...dateFiltered, ...extra].forEach((o) => map.set(o._id, o));
@@ -73,17 +89,19 @@ const Orders: React.FC = () => {
 
   // ── Stats ──────────────────────────────────────────────────────
   const stats = useMemo(() => {
-    const inProgress = allOrders.filter((o) => o.orderStatus === "In Progress").length;
+    const pendingOrders = allOrders.filter((o) => o.orderStatus === "Pending").length;
+    const cooking    = allOrders.filter((o) => o.orderStatus === "Cooking" || o.orderStatus === "In Progress").length;
     const ready      = allOrders.filter((o) => o.orderStatus === "Ready").length;
     const completed  = allOrders.filter((o) => o.orderStatus === "Completed").length;
     const revenue    = allOrders.reduce((s, o) => s + (o.amountPaid || 0), 0);
-    const pending    = allOrders.reduce((s, o) => s + Math.max(0, o.bills.totalWithTax - (o.amountPaid || 0)), 0);
-    return { total: allOrders.length, inProgress, ready, completed, revenue, pending };
+    const pendingDue = allOrders.reduce((s, o) => s + Math.max(0, o.bills.totalWithTax - (o.amountPaid || 0)), 0);
+    return { total: allOrders.length, pendingOrders, cooking, ready, completed, revenue, pendingDue };
   }, [allOrders]);
 
   // ── Filtered list ─────────────────────────────────────────────
   const filteredOrders = useMemo<Order[]>(() => {
     if (statusFilter === "All") return allOrders;
+    if (statusFilter === "Cooking") return allOrders.filter((o) => o.orderStatus === "Cooking" || o.orderStatus === "In Progress");
     return allOrders.filter((o) => o.orderStatus === statusFilter);
   }, [statusFilter, allOrders]);
 
@@ -91,7 +109,8 @@ const Orders: React.FC = () => {
   const grouped = useMemo(() => {
     if (statusFilter !== "All") return null;
     return {
-      inProgress: allOrders.filter((o) => o.orderStatus === "In Progress"),
+      pending:    allOrders.filter((o) => o.orderStatus === "Pending"),
+      cooking:    allOrders.filter((o) => o.orderStatus === "Cooking" || o.orderStatus === "In Progress"),
       ready:      allOrders.filter((o) => o.orderStatus === "Ready"),
       completed:  allOrders.filter((o) => o.orderStatus === "Completed"),
     };
@@ -99,10 +118,11 @@ const Orders: React.FC = () => {
 
   // ── Filter pill config ────────────────────────────────────────
   const pillCfg: Record<FilterKey, { color: string; active: string; count: number }> = {
-    "All":         { color: "text-dhaba-muted hover:text-dhaba-text",        active: "bg-dhaba-surface text-dhaba-text shadow-sm",        count: stats.total },
-    "In Progress": { color: "text-dhaba-accent/70 hover:text-dhaba-accent",   active: "bg-dhaba-accent/15 text-dhaba-accent",              count: stats.inProgress },
-    "Ready":       { color: "text-dhaba-success/70 hover:text-dhaba-success", active: "bg-dhaba-success/15 text-dhaba-success",            count: stats.ready },
-    "Completed":   { color: "text-dhaba-muted hover:text-dhaba-text",         active: "bg-dhaba-surface text-dhaba-text shadow-sm",        count: stats.completed },
+    "All":       { color: "text-dhaba-muted hover:text-dhaba-text",          active: "bg-dhaba-surface text-dhaba-text shadow-sm",      count: stats.total },
+    "Pending":   { color: "text-dhaba-warning/70 hover:text-dhaba-warning",  active: "bg-dhaba-warning/15 text-dhaba-warning",          count: stats.pendingOrders },
+    "Cooking":   { color: "text-dhaba-accent/70 hover:text-dhaba-accent",    active: "bg-dhaba-accent/15 text-dhaba-accent",            count: stats.cooking },
+    "Ready":     { color: "text-dhaba-success/70 hover:text-dhaba-success",  active: "bg-dhaba-success/15 text-dhaba-success",          count: stats.ready },
+    "Completed": { color: "text-dhaba-muted hover:text-dhaba-text",          active: "bg-dhaba-surface text-dhaba-text shadow-sm",      count: stats.completed },
   };
 
   return (
@@ -153,11 +173,11 @@ const Orders: React.FC = () => {
       {/* ── Stats strip ── */}
       <div className="grid grid-cols-5 divide-x divide-dhaba-border/20 border-b border-dhaba-border/20">
         {[
-          { icon: <FaClipboardList />,      label: "Total",       value: stats.total,                           color: "text-dhaba-text" },
-          { icon: <FaHourglassHalf />,      label: "In Progress", value: stats.inProgress,                      color: "text-dhaba-accent" },
-          { icon: <FaCheckCircle />,        label: "Ready",       value: stats.ready,                           color: "text-dhaba-success" },
-          { icon: <IoCheckmarkDoneCircle />,label: "Revenue",     value: `₹${stats.revenue.toFixed(0)}`,        color: "text-dhaba-success" },
-          { icon: <FaExclamationCircle />,  label: "Pending Due", value: `₹${stats.pending.toFixed(0)}`,        color: stats.pending > 0 ? "text-dhaba-danger" : "text-dhaba-muted" },
+          { icon: <FaClipboardList />,      label: "Total",       value: stats.total,                              color: "text-dhaba-text" },
+          { icon: <FaHourglassHalf />,      label: "New",         value: stats.pendingOrders,                      color: stats.pendingOrders > 0 ? "text-dhaba-warning animate-pulse" : "text-dhaba-muted" },
+          { icon: <FaCheckCircle />,        label: "Ready",       value: stats.ready,                              color: "text-dhaba-success" },
+          { icon: <IoCheckmarkDoneCircle />,label: "Revenue",     value: `₹${stats.revenue.toFixed(0)}`,           color: "text-dhaba-success" },
+          { icon: <FaExclamationCircle />,  label: "Pending Due", value: `₹${stats.pendingDue.toFixed(0)}`,        color: stats.pendingDue > 0 ? "text-dhaba-danger" : "text-dhaba-muted" },
         ].map(({ icon, label, value, color }) => (
           <div key={label} className="flex flex-col items-center py-3 gap-1">
             <span className={`text-sm ${color}`}>{icon}</span>
@@ -205,14 +225,24 @@ const Orders: React.FC = () => {
         ) : grouped ? (
           /* Grouped "All" view */
           <div className="space-y-6">
-            {grouped.inProgress.length > 0 && (
+            {grouped.pending.length > 0 && (
               <Section
-                title="In Progress"
-                count={grouped.inProgress.length}
+                title="New Orders — Awaiting Acceptance"
+                count={grouped.pending.length}
+                color="text-dhaba-warning"
+                dotColor="bg-dhaba-warning"
+                pulse
+                orders={grouped.pending}
+              />
+            )}
+            {grouped.cooking.length > 0 && (
+              <Section
+                title="Cooking"
+                count={grouped.cooking.length}
                 color="text-dhaba-accent"
                 dotColor="bg-dhaba-accent"
                 pulse
-                orders={grouped.inProgress}
+                orders={grouped.cooking}
               />
             )}
             {grouped.ready.length > 0 && (

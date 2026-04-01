@@ -22,6 +22,20 @@ interface OrderCardProps {
 
 function getCardConfig(status: OrderStatus, balanceDue: number) {
   const cfg = {
+    "Pending": {
+      border:   "border-l-4 border-l-dhaba-warning",
+      headerBg: "bg-dhaba-warning/5",
+      badge:    "bg-dhaba-warning/15 text-dhaba-warning",
+      icon:     <span className="inline-block h-2 w-2 rounded-full bg-dhaba-warning animate-pulse mr-1.5 align-middle" />,
+      subtext:  "Awaiting acceptance",
+    },
+    "Cooking": {
+      border:   "border-l-4 border-l-dhaba-accent",
+      headerBg: "bg-dhaba-accent/5",
+      badge:    "bg-dhaba-accent/15 text-dhaba-accent",
+      icon:     <span className="inline-block h-2 w-2 rounded-full bg-dhaba-accent animate-pulse mr-1.5 align-middle" />,
+      subtext:  "Kitchen is preparing",
+    },
     "In Progress": {
       border:   "border-l-4 border-l-dhaba-accent",
       headerBg: "bg-dhaba-accent/5",
