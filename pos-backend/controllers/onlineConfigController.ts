@@ -87,7 +87,7 @@ export function addDeliveryArea(req: Request, res: Response, next: NextFunction)
 // DELETE /api/online-config/delivery-areas/:id — PROTECTED
 export function deleteDeliveryArea(req: Request, res: Response, next: NextFunction) {
   try {
-    const { id } = req.params;
+    const id = String(req.params["id"]);
     const deleted = OnlineConfigRepo.deleteArea(id);
     if (!deleted) {
       res.status(404).json({ success: false, message: "Area not found" });
@@ -102,7 +102,7 @@ export function deleteDeliveryArea(req: Request, res: Response, next: NextFuncti
 // PATCH /api/online-config/delivery-areas/:id — PROTECTED
 export function toggleDeliveryArea(req: Request, res: Response, next: NextFunction) {
   try {
-    const { id } = req.params;
+    const id = String(req.params["id"]);
     const { isActive } = req.body as { isActive?: boolean };
     if (typeof isActive !== "boolean") {
       res.status(400).json({ success: false, message: "isActive must be a boolean" });

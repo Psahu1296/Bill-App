@@ -6,7 +6,7 @@ import { normalizePhone } from "../utils/normalizePhone";
 // Returns saved profile or { data: null } — never 404
 export function getCustomerProfile(req: Request, res: Response, next: NextFunction) {
   try {
-    const phone = normalizePhone(req.params["phone"] ?? "");
+    const phone = normalizePhone(String(req.params["phone"] ?? ""));
     if (phone.length < 10) {
       res.status(400).json({ success: false, message: "Invalid phone number" });
       return;
@@ -52,7 +52,7 @@ export function upsertCustomerProfile(req: Request, res: Response, next: NextFun
 // Updates only the fields provided (name and/or preferredArea)
 export function updateCustomerProfile(req: Request, res: Response, next: NextFunction) {
   try {
-    const phone = normalizePhone(req.params["phone"] ?? "");
+    const phone = normalizePhone(String(req.params["phone"] ?? ""));
     if (phone.length < 10) {
       res.status(400).json({ success: false, message: "Invalid phone number" });
       return;

@@ -238,14 +238,15 @@ export async function streamOrderStatus(req: Request, res: Response, next: NextF
 // ── GET /api/customer/orders/:phone ─────────────────────────────────────────
 export function getCustomerOrders(req: Request, res: Response, next: NextFunction) {
   try {
-    const phone = normalizePhone(req.params["phone"] ?? "");
+    const phone = normalizePhone(String(req.params["phone"] ?? ""));
     if (phone.length < 10) {
       res.status(400).json({ success: false, message: "Invalid phone number" });
       return;
     }
-    const orders = OrderRepo.findAll({ customerPhone: phone });
+    const orders = OrderRepo.findAll({ customerPhone: phone }) as Record<string, unknown>[];
     // Strip POS-internal fields before sending to customer
-    const safe = orders.map(({ paymentData: _pd, amountPaid: _ap, balanceDueOnOrder: _bd, ...pub }) => {
+    const safe = orders.map((o) => {
+      const { paymentData: _pd, amountPaid: _ap, balanceDueOnOrder: _bd, ...pub } = o;
       void _pd; void _ap; void _bd;
       return pub;
     });
