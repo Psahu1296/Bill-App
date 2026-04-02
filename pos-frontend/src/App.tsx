@@ -6,7 +6,7 @@ import {
   useLocation,
   Navigate,
 } from "react-router-dom";
-import { Home, Auth, Orders, Tables, Menu, Dashboard, OrderSummary, Consumables, AppUpdate, Staff, DataManagement, DishesPage, ServerStatus } from "./pages";
+import { Home, Auth, Orders, Tables, Menu, Dashboard, OrderSummary, Consumables, AppUpdate, Staff, DataManagement, DishesPage, ServerStatus, OnlineConfig } from "./pages";
 import Header from "./components/shared/Header";
 import { ErrorBoundary } from "./components/shared";
 import { useSelector } from "react-redux";
@@ -134,6 +134,14 @@ function Layout() {
           element={
             <ProtectedRoutes>
               <ServerStatus />
+            </ProtectedRoutes>
+          }
+        />
+        <Route
+          path="/online-config"
+          element={
+            <ProtectedRoutes>
+              <OnlineConfig />
             </ProtectedRoutes>
           }
         />

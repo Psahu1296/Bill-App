@@ -138,6 +138,24 @@ export interface CustomerLedger {
   transactions: LedgerTransaction[];
 }
 
+// ── Online Config ─────────────────────────────────────────────────────────────
+
+export interface OnlineConfigFlags {
+  isOnline: boolean;
+  deliveryEnabled: boolean;
+  availableTimeStart: string;
+  availableTimeEnd: string;
+}
+
+export interface DeliveryArea {
+  _id: string;
+  name: string;
+  isActive: boolean;
+  deliveryFee: number;
+  minOrderAmount: number;
+  createdAt: string;
+}
+
 // ── Metrics / Constants ───────────────────────────────────────────────────────
 
 export interface MetricItem {

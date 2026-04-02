@@ -8,6 +8,8 @@ function rowToArea(row: Record<string, unknown>) {
     _id: String(row["id"]),
     name: row["name"] as string,
     isActive: row["is_active"] !== 0,
+    deliveryFee: Number(row["delivery_fee"] ?? 0),
+    minOrderAmount: Number(row["min_order_amount"] ?? 0),
     createdAt: row["created_at"] as string,
     updatedAt: row["updated_at"] as string,
   };
@@ -27,15 +29,28 @@ export function getActiveAreas() {
   return rows.map(rowToArea);
 }
 
-export function addArea(name: string) {
+export function addArea(name: string, deliveryFee = 0, minOrderAmount = 0) {
   const db = getDb();
   const result = db
-    .prepare("INSERT INTO delivery_areas (name) VALUES (?)")
-    .run(name.trim());
+    .prepare("INSERT INTO delivery_areas (name, delivery_fee, min_order_amount) VALUES (?, ?, ?)")
+    .run(name.trim(), deliveryFee, minOrderAmount);
   const row = db
     .prepare("SELECT * FROM delivery_areas WHERE id = ?")
     .get(result.lastInsertRowid) as Record<string, unknown>;
   return rowToArea(row);
+}
+
+export function updateArea(id: string | number, updates: { deliveryFee?: number; minOrderAmount?: number }) {
+  const db = getDb();
+  const sets: string[] = ["updated_at = datetime('now')"];
+  const values: unknown[] = [];
+  if (updates.deliveryFee !== undefined) { sets.push("delivery_fee = ?"); values.push(updates.deliveryFee); }
+  if (updates.minOrderAmount !== undefined) { sets.push("min_order_amount = ?"); values.push(updates.minOrderAmount); }
+  if (sets.length === 1) return null; // nothing to update
+  values.push(Number(id));
+  db.prepare(`UPDATE delivery_areas SET ${sets.join(", ")} WHERE id = ?`).run(...values);
+  const row = db.prepare("SELECT * FROM delivery_areas WHERE id = ?").get(Number(id)) as Record<string, unknown> | undefined;
+  return row ? rowToArea(row) : null;
 }
 
 export function deleteArea(id: string | number) {

@@ -96,6 +96,14 @@ function runMigrations(db: Database.Database) {
   db.prepare("INSERT OR IGNORE INTO store_settings (key, value) VALUES ('available_time_end', '22:00')").run();
   db.prepare("INSERT OR IGNORE INTO store_settings (key, value) VALUES ('delivery_enabled', 'true')").run();
 
+  // delivery_fee and min_order_amount columns on delivery_areas
+  try {
+    db.prepare("ALTER TABLE delivery_areas ADD COLUMN delivery_fee REAL NOT NULL DEFAULT 0").run();
+  } catch { /* column already exists */ }
+  try {
+    db.prepare("ALTER TABLE delivery_areas ADD COLUMN min_order_amount REAL NOT NULL DEFAULT 0").run();
+  } catch { /* column already exists */ }
+
   // customer_profiles table — public-facing customer identity store (separate from POS ledger)
   db.prepare(`
     CREATE TABLE IF NOT EXISTS customer_profiles (

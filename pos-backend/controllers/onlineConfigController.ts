@@ -67,12 +67,16 @@ export function getDeliveryAreas(req: Request, res: Response, next: NextFunction
 // POST /api/online-config/delivery-areas — PROTECTED
 export function addDeliveryArea(req: Request, res: Response, next: NextFunction) {
   try {
-    const { name } = req.body as { name?: string };
+    const { name, deliveryFee, minOrderAmount } = req.body as {
+      name?: string;
+      deliveryFee?: number;
+      minOrderAmount?: number;
+    };
     if (!name || !name.trim()) {
       res.status(400).json({ success: false, message: "name is required" });
       return;
     }
-    const data = OnlineConfigRepo.addArea(name);
+    const data = OnlineConfigRepo.addArea(name, deliveryFee ?? 0, minOrderAmount ?? 0);
     res.status(201).json({ success: true, data });
   } catch (err: unknown) {
     // SQLite UNIQUE constraint violation
@@ -100,15 +104,30 @@ export function deleteDeliveryArea(req: Request, res: Response, next: NextFuncti
 }
 
 // PATCH /api/online-config/delivery-areas/:id — PROTECTED
-export function toggleDeliveryArea(req: Request, res: Response, next: NextFunction) {
+// Handles: isActive toggle, deliveryFee update, minOrderAmount update (any combination)
+export function updateDeliveryArea(req: Request, res: Response, next: NextFunction) {
   try {
     const id = String(req.params["id"]);
-    const { isActive } = req.body as { isActive?: boolean };
-    if (typeof isActive !== "boolean") {
-      res.status(400).json({ success: false, message: "isActive must be a boolean" });
-      return;
+    const { isActive, deliveryFee, minOrderAmount } = req.body as {
+      isActive?: boolean;
+      deliveryFee?: number;
+      minOrderAmount?: number;
+    };
+
+    let data: ReturnType<typeof OnlineConfigRepo.toggleArea> = null;
+
+    if (isActive !== undefined) {
+      if (typeof isActive !== "boolean") {
+        res.status(400).json({ success: false, message: "isActive must be a boolean" });
+        return;
+      }
+      data = OnlineConfigRepo.toggleArea(id, isActive);
     }
-    const data = OnlineConfigRepo.toggleArea(id, isActive);
+
+    if (deliveryFee !== undefined || minOrderAmount !== undefined) {
+      data = OnlineConfigRepo.updateArea(id, { deliveryFee, minOrderAmount });
+    }
+
     if (!data) {
       res.status(404).json({ success: false, message: "Area not found" });
       return;

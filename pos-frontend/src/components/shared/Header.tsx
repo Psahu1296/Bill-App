@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { FaCoffee, FaUsers, FaDatabase, FaSyncAlt, FaServer } from "react-icons/fa";
-import { MdSystemUpdateAlt, MdDashboard, MdWifi, MdWifiOff } from "react-icons/md";
+import { MdSystemUpdateAlt, MdDashboard, MdWifi, MdWifiOff, MdSettings } from "react-icons/md";
 import { MdContentCopy, MdCheck, MdSignalWifiStatusbarConnectedNoInternet4 } from "react-icons/md";
 import logo from "../../assets/images/logo.png";
 import { useSelector } from "react-redux";
@@ -143,6 +143,16 @@ const Header: React.FC = () => {
               title="Server Status"
             >
               <FaServer className="text-dhaba-muted text-xl group-hover:text-dhaba-accent transition-colors" />
+            </button>
+          )}
+
+          {userData.role === "Admin" && (
+            <button
+              onClick={() => navigate("/online-config")}
+              className="glass-card rounded-xl p-2.5 hover:bg-dhaba-surface-hover transition-all duration-200 group"
+              title="Online Config"
+            >
+              <MdSettings className="text-dhaba-muted text-xl group-hover:text-dhaba-accent transition-colors" />
             </button>
           )}
 

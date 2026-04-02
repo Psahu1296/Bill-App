@@ -208,3 +208,26 @@ export const patchDishCatalog = (data: {
   add?: { name: string; image: string; type: string; category: string; variants: { size: string; price: number }[]; description: string; isAvailable: boolean; isFrequent: boolean }[];
   remove?: string[];
 }) => axiosWrapper.patch("/api/settings/dish-catalog", data);
+
+// Online Config
+export const getOnlineConfigFlags = () =>
+  axiosWrapper.get("/api/online-config/flags");
+
+export const updateOnlineConfigFlags = (data: {
+  isOnline?: boolean;
+  deliveryEnabled?: boolean;
+  availableTimeStart?: string;
+  availableTimeEnd?: string;
+}) => axiosWrapper.put("/api/online-config/flags", data);
+
+export const getDeliveryAreas = (all = true) =>
+  axiosWrapper.get(`/api/online-config/delivery-areas${all ? "?all=true" : ""}`);
+
+export const addDeliveryArea = (name: string, deliveryFee = 0, minOrderAmount = 0) =>
+  axiosWrapper.post("/api/online-config/delivery-areas", { name, deliveryFee, minOrderAmount });
+
+export const deleteDeliveryArea = (id: string) =>
+  axiosWrapper.delete(`/api/online-config/delivery-areas/${id}`);
+
+export const toggleDeliveryArea = (id: string, data: { isActive?: boolean; deliveryFee?: number; minOrderAmount?: number }) =>
+  axiosWrapper.patch(`/api/online-config/delivery-areas/${id}`, data);
