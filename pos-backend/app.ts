@@ -25,6 +25,7 @@ import customerRoute from "./routes/customerRoute";
 import phonePeRoute from "./routes/phonePeRoute";
 import settingsRoute from "./routes/settingsRoute";
 import adminNotifyRoute from "./routes/adminNotifyRoute";
+import onlineConfigRoute from "./routes/onlineConfigRoute";
 
 const app = express();
 
@@ -130,6 +131,7 @@ app.use("/api/customer", customerRoute);
 app.use("/api/payment/phonepe", phonePeRoute);
 app.use("/api/settings", settingsRoute);
 app.use("/api/admin/notify", adminNotifyRoute);
+app.use("/api/online-config", onlineConfigRoute);
 
 // Serve frontend static files
 // In production FRONTEND_DIST_PATH points to resources/frontend/dist (extraResources).

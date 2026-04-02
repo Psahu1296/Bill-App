@@ -79,6 +79,35 @@ function runMigrations(db: Database.Database) {
 
   // Ensure the virtual takeaway table always exists (safe after restore or delete)
   db.prepare("INSERT OR IGNORE INTO tables_tb (table_no, seats, is_virtual) VALUES (0, 0, 1)").run();
+
+  // delivery_areas table — added for online config module
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS delivery_areas (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      name       TEXT    NOT NULL UNIQUE,
+      is_active  INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT    NOT NULL DEFAULT (datetime('now'))
+    )
+  `).run();
+
+  // Seed online config flags (idempotent)
+  db.prepare("INSERT OR IGNORE INTO store_settings (key, value) VALUES ('available_time_start', '09:00')").run();
+  db.prepare("INSERT OR IGNORE INTO store_settings (key, value) VALUES ('available_time_end', '22:00')").run();
+  db.prepare("INSERT OR IGNORE INTO store_settings (key, value) VALUES ('delivery_enabled', 'true')").run();
+
+  // customer_profiles table — public-facing customer identity store (separate from POS ledger)
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS customer_profiles (
+      phone           TEXT PRIMARY KEY,
+      name            TEXT NOT NULL DEFAULT '',
+      preferred_area  TEXT NOT NULL DEFAULT '',
+      total_orders    INTEGER NOT NULL DEFAULT 0,
+      last_ordered_at TEXT,
+      created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `).run();
 }
 
 let _db: Database.Database | null = null;

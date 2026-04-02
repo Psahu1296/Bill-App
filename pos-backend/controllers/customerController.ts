@@ -4,6 +4,7 @@ import * as DishRepo from "../repositories/dishRepo";
 import * as OrderRepo from "../repositories/orderRepo";
 import * as SettingsRepo from "../repositories/settingsRepo";
 import { notifEmitter } from "../utils/notificationEmitter";
+import { normalizePhone } from "../utils/normalizePhone";
 
 // ── GET /api/customer/dishes ─────────────────────────────────────────────────
 export async function getPublicDishes(req: Request, res: Response, next: NextFunction) {
@@ -229,6 +230,26 @@ export async function streamOrderStatus(req: Request, res: Response, next: NextF
       clearInterval(poll);
       clearTimeout(timeout);
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── GET /api/customer/orders/:phone ─────────────────────────────────────────
+export function getCustomerOrders(req: Request, res: Response, next: NextFunction) {
+  try {
+    const phone = normalizePhone(req.params["phone"] ?? "");
+    if (phone.length < 10) {
+      res.status(400).json({ success: false, message: "Invalid phone number" });
+      return;
+    }
+    const orders = OrderRepo.findAll({ customerPhone: phone });
+    // Strip POS-internal fields before sending to customer
+    const safe = orders.map(({ paymentData: _pd, amountPaid: _ap, balanceDueOnOrder: _bd, ...pub }) => {
+      void _pd; void _ap; void _bd;
+      return pub;
+    });
+    res.json({ success: true, data: safe });
   } catch (err) {
     next(err);
   }

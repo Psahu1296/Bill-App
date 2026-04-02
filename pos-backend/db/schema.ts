@@ -167,5 +167,17 @@ export function initSchema(db: Database.Database): void {
 
     -- Seed default settings (idempotent)
     INSERT OR IGNORE INTO store_settings (key, value) VALUES ('online_orders', 'true');
+    INSERT OR IGNORE INTO store_settings (key, value) VALUES ('available_time_start', '09:00');
+    INSERT OR IGNORE INTO store_settings (key, value) VALUES ('available_time_end', '22:00');
+    INSERT OR IGNORE INTO store_settings (key, value) VALUES ('delivery_enabled', 'true');
+
+    -- Delivery areas for online ordering
+    CREATE TABLE IF NOT EXISTS delivery_areas (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      name       TEXT    NOT NULL UNIQUE,
+      is_active  INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 }
