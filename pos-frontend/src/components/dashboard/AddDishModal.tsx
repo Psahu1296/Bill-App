@@ -244,14 +244,14 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
                 <label className={labelClass}>Variants / Pricing *</label>
                 <div className="rounded-2xl border border-dhaba-border/30 overflow-hidden">
                   {/* Table header */}
-                  <div className="grid grid-cols-[1fr_1fr_1fr_1fr_2.5rem] gap-2 px-4 py-2 bg-dhaba-surface/60 border-b border-dhaba-border/20">
+                  <div className="grid grid-cols-[1.2fr_2fr_1.2fr_1.2fr_2rem] gap-2 px-4 py-2 bg-dhaba-surface/60 border-b border-dhaba-border/20">
                     <span className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">Size</span>
                     <span className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">Price (₹)</span>
                     <span className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">
-                      MRP (₹) <span className="normal-case font-normal opacity-60">optional</span>
+                      MRP <span className="normal-case font-normal opacity-60">(opt)</span>
                     </span>
                     <span className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">
-                      Online (₹) <span className="normal-case font-normal opacity-60">optional</span>
+                      Online <span className="normal-case font-normal opacity-60">(opt)</span>
                     </span>
                     <span />
                   </div>
@@ -259,7 +259,7 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
                   {/* Table rows */}
                   <div className="divide-y divide-dhaba-border/10">
                     {fields.map((field, index) => (
-                      <div key={field.id} className="grid grid-cols-[1fr_1fr_1fr_1fr_2.5rem] gap-2 items-center px-4 py-2.5">
+                      <div key={field.id} className="grid grid-cols-[1.2fr_2fr_1.2fr_1.2fr_2rem] gap-2 items-center px-4 py-2.5">
                         <div>
                           <select
                             {...register(`variants.${index}.size`, {
