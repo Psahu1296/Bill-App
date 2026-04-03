@@ -50,6 +50,7 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
   });
 
   const allTables: Table[] = tablesRes?.data?.data ?? [];
+  const virtualTable: Table | undefined = allTables.find((t) => t.isVirtual);
   const allDishes: Dish[]  = dishesRes?.data?.data ?? [];
 
   // ── Bill derived values ───────────────────────────────────────
@@ -157,7 +158,7 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
         totalWithTax: finalTotal,
       },
       items: cartItems.map(({ dishId: _d, ...rest }) => rest),
-      table: tableId || undefined,
+      table: tableId || virtualTable?._id,
       paymentMethod,
       amountPaid: paid,
       orderDate: new Date(orderDate).toISOString(),
