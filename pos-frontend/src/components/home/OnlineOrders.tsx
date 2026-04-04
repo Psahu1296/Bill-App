@@ -17,7 +17,6 @@ const DeliveryRow: React.FC<{ order: Order }> = ({ order }) => {
   const navigate = useNavigate();
 
   const isPending    = order.orderStatus === "Pending";
-  const isCooking    = order.orderStatus === "Cooking" || order.orderStatus === "In Progress";
   const isReady      = order.orderStatus === "Ready";
   const balanceDue   = Math.max(0, order.bills.totalWithTax - (order.amountPaid || 0));
 
@@ -35,7 +34,7 @@ const DeliveryRow: React.FC<{ order: Order }> = ({ order }) => {
     navigate(`/menu?orderId=${order._id}`);
   };
 
-  const deliveryAddress = (order as Record<string, unknown>).deliveryAddress as string | undefined;
+  const deliveryAddress = (order as unknown as Record<string, unknown>).deliveryAddress as string | undefined;
 
   return (
     <div
