@@ -143,6 +143,17 @@ let backendStarted = false;
 let tunnelProcess: ChildProcess | null = null;
 let tunnelUrl = "";
 
+// ── Tunnel watchdog state ─────────────────────────────────────────────────────
+let isQuitting = false;
+let tunnelRestartCount = 0;
+let healthTimer: ReturnType<typeof setInterval> | null = null;
+let healthFailures = 0;
+
+app.on("before-quit", () => {
+  isQuitting = true;
+  if (healthTimer) { clearInterval(healthTimer); healthTimer = null; }
+});
+
 // ── Cloudflare Tunnel ─────────────────────────────────────────────────────────
 
 /** Resolve the cloudflared binary: packaged resources first, then system PATH. */
@@ -175,7 +186,7 @@ function startCloudflaredTunnel(): Promise<string> {
     const bin = cloudflaredBin();
     sendToSplash("tunnel", "Starting Cloudflare tunnel…", 85);
 
-    tunnelProcess = spawn(bin, ["tunnel", "run", "--token", token], {
+    tunnelProcess = spawn(bin, ["tunnel", "--protocol", "http2", "run", "--token", token], {
       stdio: ["ignore", "pipe", "pipe"],
     });
 
@@ -219,6 +230,28 @@ function startCloudflaredTunnel(): Promise<string> {
       }
     }, 20_000);
   });
+}
+
+// ── Tunnel health check ───────────────────────────────────────────────────────
+
+function startTunnelHealthCheck() {
+  if (healthTimer) clearInterval(healthTimer);
+  healthFailures = 0;
+  healthTimer = setInterval(async () => {
+    if (!tunnelUrl || isQuitting) return;
+    try {
+      const res = await fetch(`${tunnelUrl}/health`, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) { healthFailures = 0; return; }
+    } catch { /* network error — fall through */ }
+    healthFailures++;
+    console.warn(`[tunnel] health check failed (${healthFailures}/2)`);
+    if (healthFailures >= 2) {
+      clearInterval(healthTimer!); healthTimer = null;
+      console.warn("[tunnel] health check failed twice — restarting tunnel");
+      if (tunnelProcess && !tunnelProcess.killed) tunnelProcess.kill();
+      // The process exit watchdog in setupTunnel() will handle the restart
+    }
+  }, 45_000);
 }
 
 // ── Updater helper ────────────────────────────────────────────────────────────
@@ -319,10 +352,26 @@ async function setupTunnel(): Promise<void> {
     // Persist URL so the renderer can read it via IPC
     const urlFile = path.join(app.getPath("userData"), "tunnel-url.txt");
     fs.writeFileSync(urlFile, url, "utf-8");
+    tunnelRestartCount = 0; // reset exponential backoff on clean connect
     // Let the renderer know the URL is ready
     win?.webContents.send("tunnel:url", url);
     sendToSplash("tunnel-ready", `Tunnel ready: ${url}`, 95);
     console.log("[tunnel] URL:", url);
+
+    // ── Layer 1: process exit watchdog ────────────────────────────────────────
+    tunnelProcess?.on("exit", (code) => {
+      if (isQuitting) return; // intentional shutdown — don't restart
+      const delay = Math.min(5_000 * Math.pow(2, tunnelRestartCount), 30_000);
+      tunnelRestartCount++;
+      console.warn(`[tunnel] exited (code ${code}), restart #${tunnelRestartCount} in ${delay}ms`);
+      tunnelUrl = "";
+      if (healthTimer) { clearInterval(healthTimer); healthTimer = null; }
+      win?.webContents.send("tunnel:url", null);
+      setTimeout(() => { if (!isQuitting) setupTunnel(); }, delay);
+    });
+
+    // ── Layer 2: health-check polling (catches zombie tunnel) ─────────────────
+    startTunnelHealthCheck();
   } catch (err) {
     // Tunnel failure is non-fatal — POS still works locally
     console.warn("[tunnel] Could not start:", (err as Error).message);
