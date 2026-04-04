@@ -62,10 +62,10 @@ const PastOrderSummary: React.FC<PastOrderSummaryProps> = ({
             <button
               key={pm}
               onClick={() => onPaymentMethodChange(pm)}
-              className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${
+              className={`flex-1 py-2 rounded-xl text-sm font-bold border transition-all ${
                 paymentMethod === pm
-                  ? "bg-dhaba-accent text-dhaba-bg"
-                  : "glass-input text-dhaba-muted hover:text-dhaba-text"
+                  ? "bg-dhaba-accent/20 border-dhaba-accent/40 text-dhaba-accent"
+                  : "bg-dhaba-surface/60 border-dhaba-border/30 text-dhaba-muted hover:text-dhaba-text hover:border-dhaba-border/60"
               }`}
             >
               {pm}

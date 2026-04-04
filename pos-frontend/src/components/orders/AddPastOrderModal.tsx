@@ -2,8 +2,10 @@ import React, { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { enqueueSnackbar } from "notistack";
-import { FaTimes, FaClipboardList, FaPlus, FaMinus } from "react-icons/fa";
+import { FaTimes, FaClipboardList, FaPlus, FaMinus, FaShoppingBag } from "react-icons/fa";
 import { MdTableRestaurant } from "react-icons/md";
+import { PiTruckTrailerLight } from "react-icons/pi";
+
 import { getTables, getDishes, addOrder } from "../../https";
 import { getTodayISO } from "../../utils";
 import type { Table, Dish, DishVariant, OrderStatus, PaymentMethod } from "../../types";
@@ -22,6 +24,8 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
   const [customerPhone, setCustomerPhone] = useState("");
   const [guests, setGuests]               = useState(1);
   const [tableId, setTableId]             = useState("");
+  const [orderType, setOrderType]         = useState<"dine-in" | "takeaway" | "delivery">("takeaway");
+  const [isDriver, setIsDriver]           = useState(false);
   const [orderDate, setOrderDate]         = useState(getTodayISO);
 
   // ── Bill state ────────────────────────────────────────────────
@@ -124,6 +128,27 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
   const handleIncrGuests = useCallback(() => setGuests((g) => g + 1), []);
   const handleSelectTable = useCallback((id: string) => setTableId(id), []);
 
+  const handleSelectOrderType = useCallback((type: "dine-in" | "takeaway" | "delivery") => {
+    setOrderType(type);
+    if (type !== "dine-in") setTableId("");
+    if (type !== "delivery") setIsDriver(false);
+  }, []);
+
+  const handleToggleDriver = useCallback(() => {
+    setIsDriver((prev) => {
+      const next = !prev;
+      if (next) {
+        setCustomerName("Driver");
+        setCustomerPhone("0000000000");
+        setTableId("");
+      } else {
+        setCustomerName("");
+        setCustomerPhone("");
+      }
+      return next;
+    });
+  }, []);
+
   // ── Mutation ──────────────────────────────────────────────────
   const { mutate: submit, isPending } = useMutation({
     mutationFn: addOrder,
@@ -149,7 +174,12 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
     }
     const paid = amountPaidTouched ? amountPaid : finalTotal;
     submit({
-      customerDetails: { name: customerName.trim(), phone: customerPhone.trim(), guests },
+      customerDetails: {
+        name: orderType === "delivery" && !customerName.trim() ? "Driver" : customerName.trim(),
+        phone: customerPhone.trim(),
+        guests,
+      },
+      orderType,
       orderStatus,
       paymentStatus: paid >= finalTotal ? "Paid" : "Pending",
       bills: {
@@ -165,7 +195,7 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
     });
   }, [
     customerName, customerPhone, guests, cartItems, amountPaidTouched, amountPaid,
-    finalTotal, subtotal, discount, orderStatus, tableId, paymentMethod, orderDate, submit,
+    finalTotal, subtotal, discount, orderStatus, orderType, isDriver, tableId, paymentMethod, orderDate, submit, virtualTable,
   ]);
 
   return (
@@ -201,16 +231,31 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
 
             {/* ── Customer Details ── */}
             <section>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-dhaba-muted mb-3">Customer Details</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-dhaba-muted">Customer Details</h3>
+                {/* Driver toggle */}
+                <button
+                  onClick={handleToggleDriver}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                    isDriver
+                      ? "bg-blue-500/20 border-blue-500/40 text-blue-400"
+                      : "bg-dhaba-surface/60 border-dhaba-border/30 text-dhaba-muted hover:text-dhaba-text hover:border-dhaba-border/60"
+                  }`}
+                >
+                  <PiTruckTrailerLight className="text-xs" />
+                  {isDriver ? "Driver (on)" : "Driver order"}
+                </button>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-dhaba-muted mb-1 block">Name *</label>
                   <input
                     type="text"
                     value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
+                    onChange={(e) => { if (!isDriver) setCustomerName(e.target.value); }}
+                    readOnly={isDriver}
                     placeholder="Customer name"
-                    className="glass-input w-full rounded-xl px-4 py-2.5 text-sm text-dhaba-text placeholder-dhaba-muted focus:outline-none focus:ring-1 focus:ring-dhaba-accent/40"
+                    className={`glass-input w-full rounded-xl px-4 py-2.5 text-sm text-dhaba-text placeholder-dhaba-muted focus:outline-none focus:ring-1 focus:ring-dhaba-accent/40 ${isDriver ? "opacity-60 cursor-not-allowed" : ""}`}
                   />
                 </div>
                 <div>
@@ -218,9 +263,10 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
                   <input
                     type="tel"
                     value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    onChange={(e) => { if (!isDriver) setCustomerPhone(e.target.value); }}
+                    readOnly={isDriver}
                     placeholder="10-digit number"
-                    className="glass-input w-full rounded-xl px-4 py-2.5 text-sm text-dhaba-text placeholder-dhaba-muted focus:outline-none focus:ring-1 focus:ring-dhaba-accent/40"
+                    className={`glass-input w-full rounded-xl px-4 py-2.5 text-sm text-dhaba-text placeholder-dhaba-muted focus:outline-none focus:ring-1 focus:ring-dhaba-accent/40 ${isDriver ? "opacity-60 cursor-not-allowed" : ""}`}
                   />
                 </div>
                 <div>
@@ -252,31 +298,48 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
                 </div>
               </div>
 
-              {/* Table selector */}
+              {/* Order type + table selector */}
               <div className="mt-3">
-                <label className="text-xs text-dhaba-muted mb-1 block">Table</label>
+                <label className="text-xs text-dhaba-muted mb-2 block">Order Type & Table</label>
                 {tablesLoading ? (
                   <div className="glass-input rounded-xl px-4 py-2.5 text-sm text-dhaba-muted">Loading tables…</div>
                 ) : (
                   <div className="flex flex-wrap gap-2">
+                    {/* Takeaway */}
                     <button
-                      onClick={() => handleSelectTable("")}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                        tableId === ""
-                          ? "bg-amber-500/20 border border-amber-500/40 text-amber-400"
-                          : "glass-input text-dhaba-muted hover:text-dhaba-text"
+                      onClick={() => handleSelectOrderType("takeaway")}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
+                        orderType === "takeaway"
+                          ? "bg-amber-500/20 border-amber-500/40 text-amber-400"
+                          : "bg-dhaba-surface/60 border-dhaba-border/30 text-dhaba-muted hover:text-dhaba-text hover:border-dhaba-border/60"
                       }`}
                     >
+                      <FaShoppingBag className="text-xs" />
                       Takeaway
                     </button>
+
+                    {/* Delivery / Driver */}
+                    <button
+                      onClick={() => handleSelectOrderType("delivery")}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
+                        orderType === "delivery"
+                          ? "bg-blue-500/20 border-blue-500/40 text-blue-400"
+                          : "bg-dhaba-surface/60 border-dhaba-border/30 text-dhaba-muted hover:text-dhaba-text hover:border-dhaba-border/60"
+                      }`}
+                    >
+                      <PiTruckTrailerLight className="text-xs" />
+                      Delivery
+                    </button>
+
+                    {/* Physical tables (dine-in) */}
                     {allTables.filter((t) => !t.isVirtual).map((t) => (
                       <button
                         key={t._id}
-                        onClick={() => handleSelectTable(t._id)}
-                        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                          tableId === t._id
-                            ? "bg-dhaba-accent/20 border border-dhaba-accent/40 text-dhaba-accent"
-                            : "glass-input text-dhaba-muted hover:text-dhaba-text"
+                        onClick={() => { handleSelectOrderType("dine-in"); handleSelectTable(t._id); }}
+                        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
+                          orderType === "dine-in" && tableId === t._id
+                            ? "bg-dhaba-accent/20 border-dhaba-accent/40 text-dhaba-accent"
+                            : "bg-dhaba-surface/60 border-dhaba-border/30 text-dhaba-muted hover:text-dhaba-text hover:border-dhaba-border/60"
                         }`}
                       >
                         <MdTableRestaurant className="text-sm" />
@@ -323,8 +386,8 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
             <button
               onClick={handleSubmit}
               disabled={isPending || cartItems.length === 0}
-              className="w-full py-3.5 rounded-2xl bg-dhaba-accent text-dhaba-bg font-bold text-sm
-                hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed
+              className="w-full py-3.5 rounded-2xl bg-gradient-warm text-dhaba-bg font-bold text-sm
+                hover:shadow-glow active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed
                 flex items-center justify-center gap-2"
             >
               {isPending ? (

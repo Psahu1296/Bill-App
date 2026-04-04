@@ -15,6 +15,22 @@ const typeFilters = [
   { key: "non-veg", label: "Non-Veg", icon: <FaDrumstickBite /> },
 ];
 
+const keywordFilters = [
+  { key: "all",     label: "All" },
+  { key: "dal",     label: "Dal" },
+  { key: "paneer",  label: "Paneer" },
+  { key: "chicken", label: "Chicken" },
+  { key: "fish",    label: "Fish" },
+  { key: "mutton",  label: "Mutton" },
+  { key: "egg",     label: "Egg" },
+  { key: "rice",    label: "Rice" },
+  { key: "naan",    label: "Naan" },
+  { key: "roti",    label: "Roti" },
+  { key: "soup",    label: "Soup" },
+  { key: "biryani", label: "Biryani" },
+  { key: "lassi",   label: "Lassi" },
+];
+
 const categoryFilters = [
   { key: "all", label: "All" },
   { key: "rice", label: "Rice", icon: <GiRiceCooker /> },
@@ -29,6 +45,7 @@ const MenuContainer: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeType, setActiveType] = useState("all");
   const [activeCategory, setActiveCategory] = useState("all");
+  const [activeKeyword, setActiveKeyword] = useState("all");
   const [availableOnly, setAvailableOnly] = useState(false);
   const [frequentOnly, setFrequentOnly] = useState(false);
 
@@ -104,13 +121,16 @@ const MenuContainer: React.FC = () => {
       if (activeCategory !== "all") {
         if (dish.category?.toLowerCase() !== activeCategory) return false;
       }
+      if (activeKeyword !== "all") {
+        if (!dish.name.toLowerCase().includes(activeKeyword)) return false;
+      }
       return true;
     });
     if (frequentOnly) {
       result = [...result].sort((a, b) => (b.numberOfOrders ?? 0) - (a.numberOfOrders ?? 0));
     }
     return result;
-  }, [allDishes, searchTerm, activeType, activeCategory, availableOnly, frequentOnly]);
+  }, [allDishes, searchTerm, activeType, activeCategory, activeKeyword, availableOnly, frequentOnly]);
 
   if (isLoading) {
     return (
@@ -174,7 +194,7 @@ const MenuContainer: React.FC = () => {
             placeholder="Search dishes..."
             className="bg-transparent text-dhaba-text text-sm outline-none flex-1 placeholder:text-dhaba-muted/50"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => { setSearchTerm(e.target.value); setActiveKeyword("all"); }}
           />
         </div>
 
@@ -279,6 +299,29 @@ const MenuContainer: React.FC = () => {
             {f.label}
           </button>
         ))}
+      </div>
+
+      {/* Keyword (ingredient) quick filters */}
+      <div className="px-6 mb-3 flex flex-wrap items-center gap-1.5">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-dhaba-muted/60 mr-1 shrink-0">
+          Ingredient
+        </span>
+        {keywordFilters.map((f) => {
+          const isActive = activeKeyword === f.key;
+          return (
+            <button
+              key={f.key}
+              onClick={() => { setActiveKeyword(f.key); setSearchTerm(""); }}
+              className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                isActive
+                  ? "bg-orange-500/25 text-orange-400 border border-orange-500/50"
+                  : "glass-input text-dhaba-muted hover:text-dhaba-text"
+              }`}
+            >
+              {f.label}
+            </button>
+          );
+        })}
       </div>
 
       <div className="h-px bg-dhaba-border/20 mx-6" />

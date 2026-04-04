@@ -210,6 +210,7 @@ export interface StaticTable {
 
 export interface AddOrderPayload {
   customerDetails: OrderCustomerDetails;
+  orderType?: "dine-in" | "takeaway" | "delivery";
   orderStatus: OrderStatus;
   paymentStatus?: PaymentStatus;
   bills: OrderBills;
