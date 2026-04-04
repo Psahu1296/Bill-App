@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import BottomNav from "../components/shared/BottomNav";
 import Greetings from "../components/home/Greetings";
 import RecentOrders from "../components/home/RecentOrders";
+import OnlineOrders from "../components/home/OnlineOrders";
 import PopularDishes from "../components/home/PopularDishes";
 import NewOrderModal from "../components/home/NewOrderModal";
 import QuickConsumableModal from "../components/home/QuickConsumableModal";
@@ -204,6 +205,9 @@ const Home: React.FC = () => {
         <div className="flex gap-5 pb-2">
           <div className="flex-[3]">
             <RecentOrders />
+          </div>
+          <div className="flex-[2]">
+            <OnlineOrders />
           </div>
           <div className="flex-[2]">
             <PopularDishes />

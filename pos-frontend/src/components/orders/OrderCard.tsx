@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNotifications } from "../../context/NotificationContext";
-import { FaCheckDouble, FaPhone, FaUser, FaUtensils } from "react-icons/fa";
+import { FaCheckDouble, FaPhone, FaUser, FaUtensils, FaMotorcycle } from "react-icons/fa";
 import { IoCheckmarkDoneCircle, IoTimeOutline } from "react-icons/io5";
 import { MdTableRestaurant, MdDeleteOutline } from "react-icons/md";
 import { formatDateAndTime, getAvatarName } from "../../utils/index";
@@ -153,6 +153,9 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
   };
 
   const cfg = getCardConfig(order.orderStatus, balanceDue);
+  const isDelivery = order.orderType === "delivery";
+  const borderCls = isDelivery ? "border-l-4 border-l-blue-400" : cfg.border;
+  const headerBgCls = isDelivery ? "bg-blue-500/5" : cfg.headerBg;
   const batchGroups = groupItemsByBatch(order.items);
   const hasMultipleBatches = batchGroups.length > 1;
   const previewItems = order.items.slice(0, 3);
@@ -164,12 +167,13 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
         onClick={() => { clearNotification(order._id); onOrderClick(); }}
         className={`w-full glass-card rounded-2xl overflow-hidden transition-all duration-200 cursor-pointer
           hover:-translate-y-0.5 hover:shadow-glow
-          ${isHighlighted ? "ring-2 ring-dhaba-accent animate-pulse shadow-glow" : cfg.border}
+          ${isHighlighted ? "ring-2 ring-dhaba-accent animate-pulse shadow-glow" : borderCls}
+          ${isDelivery ? "border border-blue-500/10" : ""}
           ${isCompleted && isFullyPaid ? "opacity-60" : ""}
         `}
       >
         {/* ── Header ── */}
-        <div className={`flex items-center justify-between px-4 py-3 ${cfg.headerBg} border-b border-dhaba-border/20`}>
+        <div className={`flex items-center justify-between px-4 py-3 ${headerBgCls} border-b border-dhaba-border/20`}>
           <div className="flex items-center gap-3">
             <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-sm font-bold text-dhaba-bg shrink-0
               ${isInProgress ? "bg-gradient-warm" : isReady ? "bg-dhaba-success" : "bg-dhaba-muted/40"}
@@ -198,6 +202,11 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
             >
               <MdDeleteOutline className="text-base" />
             </button>
+            {isDelivery && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-blue-500/15 text-blue-400">
+                <FaMotorcycle className="text-[9px]" /> Delivery
+              </span>
+            )}
             {isHighlighted && (
               <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-lg bg-dhaba-accent text-dhaba-bg animate-bounce">
                 {notification?.type === "new_order" ? "🔔 New Order!" : "➕ Items Added!"}

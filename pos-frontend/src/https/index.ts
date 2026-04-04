@@ -37,6 +37,16 @@ export const updateTable = ({
 export const createOrderRazorpay = (data: { amount: number }) =>
   axiosWrapper.post("/api/payment/create-order", data);
 
+export const initiatePhonePePayment = (data: {
+  amount: number;
+  orderId: string;
+  customerPhone?: string;
+  redirectUrl: string;
+}) => axiosWrapper.post("/api/payment/phonepe/initiate", data);
+
+export const getPhonePePaymentStatus = (txnId: string) =>
+  axiosWrapper.get(`/api/payment/phonepe/status/${txnId}`);
+
 export const verifyPaymentRazorpay = (data: {
   razorpay_order_id: string;
   razorpay_payment_id: string;

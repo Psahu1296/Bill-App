@@ -73,10 +73,6 @@ app.use(
   "/api/payment/webhook-verification",
   express.raw({ type: "application/json" })
 );
-app.use(
-  "/api/payment/phonepe/callback",
-  express.raw({ type: "application/json" })
-);
 
 app.use(express.json());
   app.use(cookieParser());

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useSelector } from "react-redux";
 import { getTotalPrice } from "../../redux/slices/cartSlice";
-import { addOrder, createOrderRazorpay, updateOrder, verifyPaymentRazorpay, getOrderById } from "../../https/index";
+import { addOrder, createOrderRazorpay, updateOrder, verifyPaymentRazorpay, getOrderById, initiatePhonePePayment } from "../../https/index";
 import { enqueueSnackbar } from "notistack";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { removeAllItems } from "../../redux/slices/cartSlice";
@@ -14,7 +14,13 @@ import type { RootState } from "../../redux/store";
 import type { Order, AddOrderPayload, PaymentMethod, OrderStatus } from "../../types";
 
 declare global {
-  interface Window { Razorpay: new (options: Record<string, unknown>) => { open: () => void }; }
+  interface Window {
+    Razorpay: new (options: Record<string, unknown>) => { open: () => void };
+    PhonePeCheckout: {
+      transact: (options: { tokenUrl: string; callback: (response: string) => void; type: "IFRAME" | "REDIRECT" }) => void;
+      closePage: () => void;
+    };
+  }
 }
 
 function loadScript(src: string): Promise<boolean> {
@@ -97,6 +103,7 @@ const Bill: React.FC = () => {
 
   const handlePlaceOrder = async () => {
     if (!paymentMethod) { enqueueSnackbar("Please select a payment method!", { variant: "warning" }); return; }
+
     if (paymentMethod === "Online") {
       try {
         const res = await loadScript("https://checkout.razorpay.com/v1/checkout.js");
@@ -118,10 +125,55 @@ const Bill: React.FC = () => {
         };
         new window.Razorpay(options).open();
       } catch { enqueueSnackbar("Payment Failed!", { variant: "error" }); }
-    } else {
-      const orderData = orderId ? { id: orderId, ...buildOrderData() } : buildOrderData();
-      orderMutation.mutate(orderData);
+      return;
     }
+
+    if (paymentMethod === "PhonePe") {
+      try {
+        const scriptUrl = import.meta.env.VITE_PHONEPE_ENV === "PRODUCTION"
+          ? "https://mercury.phonepe.com/web/bundle/checkout.js"
+          : "https://mercury-stg.phonepe.com/web/bundle/checkout.js";
+        const loaded = await loadScript(scriptUrl);
+        if (!loaded) { enqueueSnackbar("PhonePe SDK failed to load.", { variant: "warning" }); return; }
+
+        // Create the order first so the webhook can reference it by ID
+        const orderResp = await addOrder({ ...buildOrderData(), paymentStatus: "Pending" });
+        const newOrder  = (orderResp.data as { data: { _id: string } }).data;
+        const newOrderId = newOrder._id;
+
+        const { data: ppResp } = await initiatePhonePePayment({
+          amount:        finalTotal,
+          orderId:       newOrderId,
+          customerPhone: customerData.customerPhone,
+          redirectUrl:   window.location.href,
+        });
+        const tokenUrl = (ppResp as { data: { redirectUrl: string } }).data.redirectUrl;
+
+        window.PhonePeCheckout.transact({
+          tokenUrl,
+          type: "IFRAME",
+          callback: (response: string) => {
+            if (response === "USER_CANCEL") {
+              enqueueSnackbar("Payment cancelled.", { variant: "warning" });
+              return;
+            }
+            if (response === "CONCLUDED") {
+              dispatch(removeCustomer());
+              dispatch(removeAllItems());
+              queryClient.invalidateQueries({ queryKey: ["earnings"] });
+              queryClient.invalidateQueries({ queryKey: ["orders"] });
+              enqueueSnackbar("Order placed! Payment verification in progress.", { variant: "success" });
+              setIsPayModalOpen(false);
+              navigate("/", { replace: true });
+            }
+          },
+        });
+      } catch { enqueueSnackbar("PhonePe payment failed!", { variant: "error" }); }
+      return;
+    }
+
+    const orderData = orderId ? { id: orderId, ...buildOrderData() } : buildOrderData();
+    orderMutation.mutate(orderData);
   };
 
   type OrderMutationData = AddOrderPayload & { id?: string };

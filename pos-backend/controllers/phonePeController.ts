@@ -1,29 +1,59 @@
 /**
- * PhonePe Payment Gateway integration.
- * Docs: https://developer.phonepe.com/v1/reference/pay-api
+ * PhonePe Payment Gateway integration — SDK v2 (OAuth / O-Bearer token).
+ * Docs: https://developer.phonepe.com/payment-gateway/website-integration/standard-checkout
  *
  * All amounts are in paise (₹1 = 100 paise).
  */
 import { Request, Response, NextFunction } from "express";
-import crypto from "crypto";
 import createHttpError from "http-errors";
 import config from "../config/config";
 import * as OrderRepo from "../repositories/orderRepo";
 import * as PaymentRepo from "../repositories/paymentRepo";
 
-const BASE_UAT  = "https://api-preprod.phonepe.com/apis/pg-sandbox";
-const BASE_PROD = "https://api.phonepe.com/apis/hermes";
+// Sandbox shares one base URL; production uses separate hosts for token vs API
+const UAT_BASE       = "https://api-preprod.phonepe.com/apis/pg-sandbox";
+const PROD_TOKEN_URL = "https://api.phonepe.com/apis/identity-manager/v1/oauth/token";
+const PROD_API_BASE  = "https://api.phonepe.com/apis/pg";
 
-function base() {
-  return config.phonePeEnv === "PRODUCTION" ? BASE_PROD : BASE_UAT;
-}
+const isProd = () => config.phonePeEnv === "PRODUCTION";
+const tokenEndpoint = () => isProd() ? PROD_TOKEN_URL : `${UAT_BASE}/v1/oauth/token`;
+const apiBase       = () => isProd() ? PROD_API_BASE  : UAT_BASE;
 
-function sha256Hex(data: string) {
-  return crypto.createHash("sha256").update(data).digest("hex");
-}
+// ── OAuth token cache ────────────────────────────────────────────────────────
+let cachedToken: string | null = null;
+let tokenExpiresAt = 0; // Unix ms
 
-function xVerify(b64Payload: string, endpoint: string) {
-  return `${sha256Hex(b64Payload + endpoint + config.phonePeSaltKey)}###${config.phonePeSaltIndex}`;
+async function getAccessToken(): Promise<string> {
+  const now = Date.now();
+  if (cachedToken && now < tokenExpiresAt - 30_000) return cachedToken;
+
+  const resp = await fetch(tokenEndpoint(), {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type:     "client_credentials",
+      client_id:      config.phonePeClientId,
+      client_secret:  config.phonePeClientSecret,
+      client_version: String(config.phonePeClientVersion),
+    }),
+  });
+
+  if (!resp.ok) {
+    const err = await resp.text();
+    throw new Error(`PhonePe token fetch failed: ${err}`);
+  }
+
+  // expires_in can be null — use expires_at (Unix seconds) instead
+  const json = await resp.json() as {
+    access_token: string;
+    expires_in:   number | null;
+    expires_at:   number;
+  };
+  cachedToken    = json.access_token;
+  tokenExpiresAt = json.expires_at
+    ? json.expires_at * 1000
+    : now + (json.expires_in ?? 3600) * 1000;
+  return cachedToken;
 }
 
 // ── POST /api/payment/phonepe/initiate ───────────────────────────────────────
@@ -34,52 +64,45 @@ export async function initiatePayment(req: Request, res: Response, next: NextFun
     if (!amount || !orderId || !redirectUrl) {
       return next(createHttpError(400, "amount, orderId, and redirectUrl are required"));
     }
-    if (!config.phonePeMerchantId || !config.phonePeSaltKey) {
+    if (!config.phonePeClientId || !config.phonePeClientSecret) {
       return next(createHttpError(503, "PhonePe is not configured on this server"));
     }
 
-    const merchantTransactionId = `TXN_${orderId}_${Date.now()}`;
-    const amountPaise = Math.round(Number(amount) * 100);
+    const merchantOrderId = `TXN_${orderId}_${Date.now()}`;
+    const amountPaise     = Math.round(Number(amount) * 100);
+    const token           = await getAccessToken();
 
-    const payload = {
-      merchantId: config.phonePeMerchantId,
-      merchantTransactionId,
-      merchantUserId: `USER_${customerPhone ?? "guest"}`,
-      amount: amountPaise,
-      redirectUrl,
-      redirectMode: "REDIRECT",
-      callbackUrl: `${process.env.SERVER_URL ?? ""}/api/payment/phonepe/callback`,
-      mobileNumber: customerPhone ?? undefined,
-      paymentInstrument: { type: "PAY_PAGE" },
-    };
-
-    const b64 = Buffer.from(JSON.stringify(payload)).toString("base64");
-    const endpoint = "/pg/v1/pay";
-
-    const resp = await fetch(`${base()}${endpoint}`, {
+    const resp = await fetch(`${apiBase()}/checkout/v2/pay`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "X-VERIFY": xVerify(b64, endpoint),
+        "Content-Type":  "application/json",
+        "Authorization": `O-Bearer ${token}`,
       },
-      body: JSON.stringify({ request: b64 }),
+      body: JSON.stringify({
+        merchantOrderId,
+        amount:      amountPaise,
+        expireAfter: 1200,
+        paymentFlow: {
+          type:         "PG_CHECKOUT",
+          message:      `Payment for order #${orderId}`,
+          merchantUrls: { redirectUrl },        // callbackUrl goes in PhonePe dashboard, not here
+        },
+        ...(customerPhone ? { metaInfo: { udf1: String(customerPhone) } } : {}),
+      }),
     });
 
     const json = await resp.json() as Record<string, unknown>;
 
-    if (!json.success) {
+    if (!resp.ok) {
       console.error("PhonePe initiate failed:", json);
       return next(createHttpError(502, (json.message as string) ?? "PhonePe payment initiation failed"));
     }
 
-    const instrumentResponse = (json.data as Record<string, unknown>)?.instrumentResponse as Record<string, unknown> | undefined;
-    const redirectInfo = instrumentResponse?.redirectInfo as Record<string, unknown> | undefined;
-
     res.json({
       success: true,
       data: {
-        redirectUrl: redirectInfo?.url,
-        merchantTransactionId,
+        redirectUrl:          json.redirectUrl,
+        merchantTransactionId: merchantOrderId,
       },
     });
   } catch (err) {
@@ -88,63 +111,53 @@ export async function initiatePayment(req: Request, res: Response, next: NextFun
 }
 
 // ── POST /api/payment/phonepe/callback ───────────────────────────────────────
-// PhonePe sends a server-to-server POST with base64-encoded response body.
-// Raw body is required for signature verification (registered before json middleware).
+// PhonePe posts JSON with an "O-Bearer" Authorization header.
+// Verify the token, then update order/payment records.
 export async function handleCallback(req: Request, res: Response, next: NextFunction) {
   try {
-    const xVerifyHeader = req.headers["x-verify"] as string | undefined;
-    const rawBody = req.body as Buffer;
-
-    if (!xVerifyHeader || !rawBody) {
-      return res.status(400).json({ success: false });
-    }
-
-    // Verify signature: SHA256(base64Body + saltKey) + "###" + saltIndex
-    const b64Body = rawBody.toString();
-    const [receivedHash] = xVerifyHeader.split("###");
-    const expectedHash = sha256Hex(b64Body + config.phonePeSaltKey);
-
-    if (receivedHash !== expectedHash) {
-      console.warn("PhonePe callback: signature mismatch");
+    const authHeader = req.headers["authorization"] as string | undefined;
+    if (!authHeader?.startsWith("O-Bearer ")) {
       return res.status(401).json({ success: false });
     }
 
-    const decoded = JSON.parse(Buffer.from(b64Body, "base64").toString()) as Record<string, unknown>;
-    const txnData = decoded.data as Record<string, unknown> | undefined;
-
-    if (!txnData) {
-      return res.status(200).json({ success: true }); // acknowledge but nothing to do
+    const callbackToken = authHeader.slice("O-Bearer ".length);
+    const verifyResp = await fetch(`${apiBase()}/v1/oauth/token/verify`, {
+      headers: { "Authorization": `O-Bearer ${callbackToken}` },
+    });
+    if (!verifyResp.ok) {
+      console.warn("PhonePe callback: token verification failed");
+      return res.status(401).json({ success: false });
     }
 
-    const state      = txnData.paymentState as string;    // COMPLETED | FAILED | PENDING
-    const txnId      = txnData.transactionId as string;
-    const merchantTxn = txnData.merchantTransactionId as string; // "TXN_{orderId}_{ts}"
+    const body    = req.body as Record<string, unknown>;
+    // Webhook shape: { event: "checkout.order.completed", payload: { merchantOrderId, state, orderId, ... } }
+    const payload = (body.payload ?? body) as Record<string, unknown>;
+    const merchantOrderId = payload.merchantOrderId as string | undefined;
+    const state           = payload.state           as string | undefined;
+    const txnId           = payload.orderId         as string | undefined;
 
-    // Extract internal orderId from merchantTransactionId: "TXN_{orderId}_{ts}"
-    const parts   = merchantTxn?.split("_") ?? [];
-    const orderId = parts[1];
+    // Extract internal orderId from merchantOrderId: "TXN_{orderId}_{ts}"
+    const orderId = merchantOrderId?.split("_")[1];
 
     if (orderId && state === "COMPLETED") {
       const order = OrderRepo.findById(orderId, false);
       if (order) {
-        const bills = order.bills as { totalWithTax?: number };
-        const total = bills?.totalWithTax ?? 0;
+        const total = (order.bills as { totalWithTax?: number })?.totalWithTax ?? 0;
         OrderRepo.update(orderId, {
-          paymentStatus: "Paid",
-          paymentMethod: "Online",
-          amountPaid: total,
+          paymentStatus:    "Paid",
+          paymentMethod:    "Online",
+          amountPaid:       total,
           balanceDueOnOrder: 0,
-          paymentData: decoded,
+          paymentData:      body,
         });
-        // Record in payments table
         PaymentRepo.create({
-          paymentId: txnId,
+          paymentId: txnId ?? merchantOrderId ?? "",
           orderId,
-          amount: total,
-          currency: "INR",
-          status: "COMPLETED",
-          method: "UPI",
-          contact: (order.customerDetails as { phone?: string })?.phone ?? "",
+          amount:    total,
+          currency:  "INR",
+          status:    "COMPLETED",
+          method:    "UPI",
+          contact:   (order.customerDetails as { phone?: string })?.phone ?? "",
         });
       }
     }
@@ -159,29 +172,25 @@ export async function handleCallback(req: Request, res: Response, next: NextFunc
 export async function checkPaymentStatus(req: Request, res: Response, next: NextFunction) {
   try {
     const { txnId } = req.params;
-    if (!config.phonePeMerchantId || !config.phonePeSaltKey) {
+    if (!config.phonePeClientId || !config.phonePeClientSecret) {
       return next(createHttpError(503, "PhonePe is not configured on this server"));
     }
 
-    const endpoint = `/pg/v1/status/${config.phonePeMerchantId}/${txnId}`;
-    const hash = sha256Hex(endpoint + config.phonePeSaltKey);
-    const verify = `${hash}###${config.phonePeSaltIndex}`;
+    const token = await getAccessToken();
 
-    const resp = await fetch(`${base()}${endpoint}`, {
+    const resp = await fetch(`${apiBase()}/checkout/v2/order/${txnId}/status`, {
       headers: {
-        "Content-Type": "application/json",
-        "X-VERIFY": verify,
-        "X-MERCHANT-ID": config.phonePeMerchantId,
+        "Content-Type":  "application/json",
+        "Authorization": `O-Bearer ${token}`,
       },
     });
 
     const json = await resp.json() as Record<string, unknown>;
-    const txnData = json.data as Record<string, unknown> | undefined;
 
     res.json({
       success: true,
       data: {
-        state:   txnData?.paymentState ?? "PENDING",
+        state:   json.state   ?? "PENDING",
         code:    json.code,
         message: json.message,
       },

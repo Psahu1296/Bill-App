@@ -21,9 +21,9 @@ const config = Object.freeze({
     razorpyWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET,
     frontendUrl: process.env.FRONTEND_URL || "http://localhost:5173",
     customerAppUrl: process.env.CUSTOMER_APP_URL || "https://sahu-dhaba.netlify.app",
-    phonePeMerchantId: process.env.PHONEPE_MERCHANT_ID || "",
-    phonePeSaltKey: process.env.PHONEPE_SALT_KEY || "",
-    phonePeSaltIndex: Number(process.env.PHONEPE_SALT_INDEX ?? 1),
+    phonePeClientId: process.env.PHONEPE_CLIENT_ID || "",
+    phonePeClientSecret: process.env.PHONEPE_CLIENT_SECRET || "",
+    phonePeClientVersion: Number(process.env.PHONEPE_CLIENT_VERSION ?? 1),
     phonePeEnv: (process.env.PHONEPE_ENV || "UAT") as "UAT" | "PRODUCTION",
 });
 
