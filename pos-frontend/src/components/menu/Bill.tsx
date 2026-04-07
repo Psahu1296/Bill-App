@@ -226,6 +226,8 @@ const Bill: React.FC = () => {
         ...orderData,
         amountPaid: paidAmount,
         paymentMethod: payMethod,
+        paymentStatus: isFullyPaid ? "Paid" : "Pending",
+        orderStatus: isFullyPaid ? "Completed" : "In Progress",
       } as unknown as OrderMutationData);
     }
   };
