@@ -3,13 +3,14 @@ import { getDb } from "../db";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToApi(row: any) {
   if (!row) return null;
-  const { id, number_of_orders, is_available, is_frequent, is_online_available, created_at, updated_at, variants, ...rest } = row;
+  const { id, number_of_orders, is_available, is_frequent, is_online_available, description_hi, created_at, updated_at, variants, ...rest } = row;
   return {
     _id: String(id),
     numberOfOrders: number_of_orders,
     isAvailable: Boolean(is_available),
     isFrequent: Boolean(is_frequent),
     isOnlineAvailable: Boolean(is_online_available),
+    descriptionHi: description_hi ?? '',
     variants: variants ? JSON.parse(variants) : [],
     createdAt: created_at,
     updatedAt: updated_at,
@@ -45,16 +46,17 @@ export function findFrequent(minOrders: number, limit: number) {
 
 export function create(data: {
   image: string; name: string; type: string; category: string;
-  variants: object[]; description?: string; isAvailable?: boolean; isFrequent?: boolean; isOnlineAvailable?: boolean;
+  variants: object[]; description?: string; descriptionHi?: string; isAvailable?: boolean; isFrequent?: boolean; isOnlineAvailable?: boolean;
 }) {
   const db = getDb();
   const result = db.prepare(
-    `INSERT INTO dishes (image, name, type, category, variants, description, is_available, is_frequent, is_online_available)
-     VALUES (@image, @name, @type, @category, @variants, @description, @isAvailable, @isFrequent, @isOnlineAvailable)`
+    `INSERT INTO dishes (image, name, type, category, variants, description, description_hi, is_available, is_frequent, is_online_available)
+     VALUES (@image, @name, @type, @category, @variants, @description, @descriptionHi, @isAvailable, @isFrequent, @isOnlineAvailable)`
   ).run({
     ...data,
     variants: JSON.stringify(data.variants),
     description: data.description ?? '',
+    descriptionHi: data.descriptionHi ?? '',
     isAvailable: data.isAvailable !== false ? 1 : 0,
     isFrequent: data.isFrequent ? 1 : 0,
     isOnlineAvailable: data.isOnlineAvailable ? 1 : 0,
@@ -65,8 +67,8 @@ export function create(data: {
 export function bulkCreate(dishes: Parameters<typeof create>[0][]) {
   const db = getDb();
   const stmt = db.prepare(
-    `INSERT INTO dishes (image, name, type, category, variants, description, is_available, is_frequent, is_online_available)
-     VALUES (@image, @name, @type, @category, @variants, @description, @isAvailable, @isFrequent, @isOnlineAvailable)`
+    `INSERT INTO dishes (image, name, type, category, variants, description, description_hi, is_available, is_frequent, is_online_available)
+     VALUES (@image, @name, @type, @category, @variants, @description, @descriptionHi, @isAvailable, @isFrequent, @isOnlineAvailable)`
   );
   const insertMany = db.transaction((list: typeof dishes) => {
     const saved = [];
@@ -75,6 +77,7 @@ export function bulkCreate(dishes: Parameters<typeof create>[0][]) {
         ...d,
         variants: JSON.stringify(d.variants),
         description: d.description ?? '',
+        descriptionHi: (d as { descriptionHi?: string }).descriptionHi ?? '',
         isAvailable: d.isAvailable !== false ? 1 : 0,
         isFrequent: d.isFrequent ? 1 : 0,
         isOnlineAvailable: (d as { isOnlineAvailable?: boolean }).isOnlineAvailable ? 1 : 0,
@@ -89,7 +92,7 @@ export function bulkCreate(dishes: Parameters<typeof create>[0][]) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function update(id: string | number, updates: Record<string, any>) {
   const db = getDb();
-  const allowed = ["image", "name", "type", "category", "variants", "description", "isAvailable", "isFrequent", "isOnlineAvailable", "numberOfOrders"];
+  const allowed = ["image", "name", "type", "category", "variants", "description", "descriptionHi", "isAvailable", "isFrequent", "isOnlineAvailable", "numberOfOrders"];
   const sets: string[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const params: Record<string, any> = { id: Number(id) };
@@ -100,6 +103,7 @@ export function update(id: string | number, updates: Record<string, any>) {
                 : key === "isFrequent"  ? "is_frequent"
                 : key === "isOnlineAvailable" ? "is_online_available"
                 : key === "numberOfOrders" ? "number_of_orders"
+                : key === "descriptionHi" ? "description_hi"
                 : key;
       sets.push(`${col} = @${key}`);
       if (key === "variants") params[key] = JSON.stringify(updates[key]);

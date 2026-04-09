@@ -16,6 +16,7 @@ export interface Dish {
   category: string;
   variants: DishVariant[];
   description?: string;
+  descriptionHi?: string;
   isAvailable: boolean;
   isFrequent: boolean;
   isOnlineAvailable: boolean;
@@ -232,6 +233,7 @@ export interface AddDishPayload {
   category: string;
   variants: DishVariant[];
   description?: string;
+  descriptionHi?: string;
   isAvailable?: boolean;
   isFrequent?: boolean;
   isOnlineAvailable?: boolean;

@@ -34,6 +34,7 @@ export function initSchema(db: Database.Database): void {
       category         TEXT    NOT NULL,
       variants         TEXT    NOT NULL DEFAULT '[]',   -- JSON array
       description      TEXT    NOT NULL DEFAULT '',
+      description_hi   TEXT    NOT NULL DEFAULT '',
       is_available        INTEGER NOT NULL DEFAULT 1,
       is_frequent         INTEGER NOT NULL DEFAULT 0,
       is_online_available INTEGER NOT NULL DEFAULT 0,

@@ -18,6 +18,7 @@ interface DishFormData {
   category: string;
   variants: { size: string; price: number | string; markedPrice?: number | string; onlinePrice?: number | string }[];
   description: string;
+  descriptionHi: string;
   isAvailable: boolean;
   isFrequent: boolean;
   isOnlineAvailable: boolean;
@@ -56,6 +57,7 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
       category: "sabji",
       variants: [{ size: "", price: "", markedPrice: "", onlinePrice: "" }],
       description: "",
+      descriptionHi: "",
       isAvailable: true,
       isFrequent: false,
       isOnlineAvailable: false,
@@ -128,6 +130,7 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
               ? dish.variants.map((v) => ({ size: v.size || "", price: v.price || 0, markedPrice: v.markedPrice ?? "", onlinePrice: v.onlinePrice ?? "" }))
               : [{ size: "", price: "", markedPrice: "", onlinePrice: "" }],
           description: dish.description || "",
+          descriptionHi: dish.descriptionHi || "",
           isAvailable: dish.isAvailable !== undefined ? dish.isAvailable : true,
           isFrequent: dish.isFrequent !== undefined ? dish.isFrequent : false,
           isOnlineAvailable: dish.isOnlineAvailable !== undefined ? dish.isOnlineAvailable : false,
@@ -386,14 +389,25 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
               </div>
 
               {/* Description */}
-              <div>
-                <label className={labelClass}>Description <span className="normal-case text-dhaba-muted font-normal">(optional)</span></label>
-                <textarea
-                  rows={2}
-                  {...register("description")}
-                  className={`${inputClass} resize-none`}
-                  placeholder="Short description of the dish..."
-                />
+              <div className="space-y-3">
+                <div>
+                  <label className={labelClass}>Description — English <span className="normal-case text-dhaba-muted font-normal">(optional · shown to customers)</span></label>
+                  <textarea
+                    rows={3}
+                    {...register("description")}
+                    className={`${inputClass} resize-none`}
+                    placeholder="e.g. Tender chicken slow-cooked in a bold spiced masala. Rich, hearty and a dhaba favourite."
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Description — हिंदी <span className="normal-case text-dhaba-muted font-normal">(वैकल्पिक · ग्राहकों को दिखाया जाता है)</span></label>
+                  <textarea
+                    rows={3}
+                    {...register("descriptionHi")}
+                    className={`${inputClass} resize-none`}
+                    placeholder="जैसे: मुलायम चिकन मसालेदार ग्रेवी में धीमी आंच पर पकाया जाता है। भरपूर और स्वादिष्ट।"
+                  />
+                </div>
               </div>
 
               {/* Toggles */}

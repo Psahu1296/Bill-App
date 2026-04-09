@@ -104,6 +104,16 @@ function runMigrations(db: Database.Database) {
     db.prepare("ALTER TABLE delivery_areas ADD COLUMN min_order_amount REAL NOT NULL DEFAULT 0").run();
   } catch { /* column already exists */ }
 
+  // description column on dishes — added to support customer-facing dish descriptions
+  try {
+    db.prepare("ALTER TABLE dishes ADD COLUMN description TEXT NOT NULL DEFAULT ''").run();
+  } catch { /* column already exists */ }
+
+  // description_hi column — Hindi description for customer-facing bilingual display
+  try {
+    db.prepare("ALTER TABLE dishes ADD COLUMN description_hi TEXT NOT NULL DEFAULT ''").run();
+  } catch { /* column already exists */ }
+
   // customer_profiles table — public-facing customer identity store (separate from POS ledger)
   db.prepare(`
     CREATE TABLE IF NOT EXISTS customer_profiles (

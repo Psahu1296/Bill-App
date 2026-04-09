@@ -93,6 +93,16 @@ const DishCard: React.FC<DishCardProps> = ({ dish, onEdit, onDelete }) => {
           <h3 className="font-display text-base font-bold text-dhaba-text leading-tight truncate">
             {dish.name}
           </h3>
+          {(dish.description || dish.descriptionHi) && (
+            <div className="mt-0.5 space-y-0.5">
+              {dish.description && (
+                <p className="text-[11px] text-dhaba-muted line-clamp-2 leading-relaxed">{dish.description}</p>
+              )}
+              {dish.descriptionHi && (
+                <p className="text-[11px] text-dhaba-muted/70 line-clamp-2 leading-relaxed">{dish.descriptionHi}</p>
+              )}
+            </div>
+          )}
           <div className="flex items-center gap-2 mt-1">
             <span className="text-[10px] text-dhaba-muted font-bold tracking-wider uppercase">
               {dish.numberOfOrders} orders

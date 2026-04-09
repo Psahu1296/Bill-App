@@ -13,6 +13,7 @@ interface CatalogEntry {
   category: string;
   variants: { size: string; price: number }[];
   description: string;
+  descriptionHi: string;
   isAvailable: boolean;
   isFrequent: boolean;
 }
@@ -39,29 +40,47 @@ interface DishRowProps {
 
 const DishRow: React.FC<DishRowProps> = ({ dish, selected, onToggle, action }) => (
   <div
-    className={`glass-card rounded-xl px-4 py-2.5 flex items-center gap-3 transition-all border cursor-pointer ${
+    className={`glass-card rounded-xl px-4 py-3 flex items-start gap-3 transition-all border cursor-pointer ${
       selected ? "border-dhaba-accent/50 bg-dhaba-accent/5" : "border-transparent hover:border-dhaba-border/30"
     }`}
     onClick={onToggle}
   >
-    <div className={`h-4 w-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${
+    {/* Checkbox */}
+    <div className={`h-4 w-4 rounded border flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${
       selected ? "bg-dhaba-accent border-dhaba-accent" : "border-dhaba-border/40"
     }`}>
       {selected && <div className="h-2 w-2 rounded-sm bg-dhaba-bg" />}
     </div>
-    <div className={`h-2.5 w-2.5 rounded-sm border-2 flex-shrink-0 ${dish.type === "veg" ? "border-green-400" : "border-red-400"}`} />
-    <span className="text-sm text-dhaba-text font-medium flex-1 capitalize">{dish.name}</span>
-    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize hidden sm:inline ${TYPE_COLOR[dish.type] ?? "text-dhaba-muted bg-dhaba-surface"}`}>
-      {dish.type.replace("_", " ")}
-    </span>
-    <div className="flex gap-1">
-      {dish.variants.map((v) => (
-        <span key={v.size} className="text-[11px] text-dhaba-muted bg-dhaba-surface px-2 py-0.5 rounded-lg">
-          {v.size} ₹{v.price}
-        </span>
-      ))}
+
+    {/* Veg/non-veg dot */}
+    <div className={`h-2.5 w-2.5 rounded-sm border-2 flex-shrink-0 mt-1 ${dish.type === "veg" ? "border-green-400" : "border-red-400"}`} />
+
+    {/* Name + descriptions */}
+    <div className="flex-1 min-w-0">
+      <span className="text-sm text-dhaba-text font-medium capitalize">{dish.name}</span>
+      {dish.description && (
+        <p className="text-[11px] text-dhaba-muted mt-0.5 leading-relaxed">{dish.description}</p>
+      )}
+      {dish.descriptionHi && (
+        <p className="text-[11px] text-dhaba-muted/60 mt-0.5 leading-relaxed">{dish.descriptionHi}</p>
+      )}
     </div>
-    {action && <div onClick={(e) => e.stopPropagation()}>{action}</div>}
+
+    {/* Type + variants */}
+    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize hidden sm:inline ${TYPE_COLOR[dish.type] ?? "text-dhaba-muted bg-dhaba-surface"}`}>
+        {dish.type.replace("_", " ")}
+      </span>
+      <div className="flex gap-1 flex-wrap justify-end">
+        {dish.variants.map((v) => (
+          <span key={v.size} className="text-[11px] text-dhaba-muted bg-dhaba-surface px-2 py-0.5 rounded-lg">
+            {v.size} ₹{v.price}
+          </span>
+        ))}
+      </div>
+    </div>
+
+    {action && <div onClick={(e) => e.stopPropagation()} className="flex-shrink-0">{action}</div>}
   </div>
 );
 
@@ -155,6 +174,7 @@ const DefaultDishesTab: React.FC<Props> = ({ existingDishes }) => {
   const dishToEntry = (d: Dish): CatalogEntry => ({
     name: d.name, image: d.image ?? "", type: d.type, category: d.category,
     variants: d.variants ?? [], description: d.description ?? "",
+    descriptionHi: d.descriptionHi ?? "",
     isAvailable: d.isAvailable !== false, isFrequent: d.isFrequent === true,
   });
 
@@ -365,7 +385,7 @@ const DefaultDishesTab: React.FC<Props> = ({ existingDishes }) => {
               {menuNotInCatalog.map((dish) => (
                 <DishRow
                   key={dish.name}
-                  dish={{ name: dish.name, image: dish.image ?? "", type: dish.type, category: dish.category, variants: dish.variants ?? [], description: dish.description ?? "", isAvailable: true, isFrequent: false }}
+                  dish={{ name: dish.name, image: dish.image ?? "", type: dish.type, category: dish.category, variants: dish.variants ?? [], description: dish.description ?? "", descriptionHi: dish.descriptionHi ?? "", isAvailable: true, isFrequent: false }}
                   selected={selectedToAdd.has(dish.name)}
                   onToggle={() => toggleAddSelect(dish.name)}
                 />
