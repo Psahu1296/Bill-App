@@ -16,6 +16,13 @@ export async function sendOtp(req: Request, res: Response, next: NextFunction) {
 
     OtpRepo.cleanup();
 
+    // Phone-based cap: max 5 OTPs per phone per hour — blocks credit exhaustion
+    // regardless of IP rotation
+    const recentSends = OtpRepo.countRecentSends(phone, 60);
+    if (recentSends >= 5) {
+      return next(createHttpError(429, "Too many OTP requests for this number. Try again in an hour."));
+    }
+
     const otp = String(crypto.randomInt(100000, 999999)); // 6-digit random
     OtpRepo.createOtp(phone, otp, config.otpExpirySeconds);
 

@@ -32,6 +32,18 @@ export function verifyOtp(phone: string, otp: string): OtpResult {
   return "verified";
 }
 
+/**
+ * Count how many OTPs have been sent to this phone in the last `windowMinutes`.
+ * Used to enforce a per-phone send cap regardless of IP.
+ */
+export function countRecentSends(phone: string, windowMinutes = 60): number {
+  const since = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
+  const row = getDb().prepare(
+    "SELECT COUNT(*) as cnt FROM customer_otp_sessions WHERE phone = ? AND created_at >= ?"
+  ).get(phone, since) as { cnt: number };
+  return row.cnt;
+}
+
 /** Remove all expired sessions — call on each send to keep the table clean. */
 export function cleanup(): void {
   getDb().prepare("DELETE FROM customer_otp_sessions WHERE expires_at < datetime('now')").run();
