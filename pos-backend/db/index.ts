@@ -126,6 +126,19 @@ function runMigrations(db: Database.Database) {
       updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `).run();
+
+  // idempotency_key on orders — prevents duplicate orders on network retry
+  try {
+    db.prepare("ALTER TABLE orders ADD COLUMN idempotency_key TEXT").run();
+  } catch { /* column already exists */ }
+  db.prepare(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_idempotency_key ON orders(idempotency_key) WHERE idempotency_key IS NOT NULL"
+  ).run();
+
+  // Unique index on payments.payment_id — prevents duplicate payment records from webhook replay
+  db.prepare(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_payment_id ON payments(payment_id) WHERE payment_id IS NOT NULL"
+  ).run();
 }
 
 let _db: Database.Database | null = null;
@@ -139,7 +152,7 @@ export function getDb(): Database.Database {
   _db = new Database(dbPath);
   _db.pragma("journal_mode = WAL");   // better concurrent read performance
   _db.pragma("foreign_keys = ON");    // enforce referential integrity
-  _db.pragma("busy_timeout = 5000");  // wait up to 5s instead of throwing SQLITE_BUSY
+  _db.pragma("busy_timeout = 10000"); // wait up to 10s — handles 5-10 concurrent order writes
 
   initSchema(_db);
   runMigrations(_db);

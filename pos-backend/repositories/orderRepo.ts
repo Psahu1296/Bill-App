@@ -128,17 +128,29 @@ export function create(data: {
   balanceDueOnOrder?: number;
   orderType?: string;
   deliveryAddress?: string;
+  idempotencyKey?: string;
 }) {
   const db = getDb();
+
+  // Idempotency: if the same key is seen again, return the existing order instead of inserting
+  if (data.idempotencyKey) {
+    const existing = db.prepare(
+      "SELECT * FROM orders WHERE idempotency_key = ?"
+    ).get(data.idempotencyKey) as Record<string, unknown> | undefined;
+    if (existing) return rowToApi(existing, true)!;
+  }
+
   const result = db.prepare(
     `INSERT INTO orders (
       customer_details, order_status, order_date, bills, items,
       table_id, payment_method, payment_data, payment_status,
-      amount_paid, balance_due_on_order, order_type, delivery_address
+      amount_paid, balance_due_on_order, order_type, delivery_address,
+      idempotency_key
     ) VALUES (
       @customerDetails, @orderStatus, @orderDate, @bills, @items,
       @tableId, @paymentMethod, @paymentData, @paymentStatus,
-      @amountPaid, @balanceDueOnOrder, @orderType, @deliveryAddress
+      @amountPaid, @balanceDueOnOrder, @orderType, @deliveryAddress,
+      @idempotencyKey
     )`
   ).run({
     customerDetails: JSON.stringify(data.customerDetails),
@@ -154,6 +166,7 @@ export function create(data: {
     balanceDueOnOrder: data.balanceDueOnOrder ?? 0,
     orderType: data.orderType ?? 'dine-in',
     deliveryAddress: data.deliveryAddress ?? '',
+    idempotencyKey: data.idempotencyKey ?? null,
   });
   return findById(result.lastInsertRowid as number, true)!;
 }

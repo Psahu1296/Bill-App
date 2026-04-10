@@ -4,7 +4,7 @@ import { FaTimes, FaMoneyBillWave } from "react-icons/fa";
 import { enqueueSnackbar } from "notistack";
 import type { Order, PaymentMethod } from "../../types";
 
-const PAYMENT_METHODS: PaymentMethod[] = ["Cash", "Online", "PhonePe"];
+const PAYMENT_METHODS: PaymentMethod[] = ["Cash", "Online"];
 
 interface PayModalProps {
   isOpen: boolean;

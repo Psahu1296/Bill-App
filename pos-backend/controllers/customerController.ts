@@ -44,6 +44,7 @@ export async function placeCustomerOrder(req: Request, res: Response, next: Next
       paymentStatus = 'Pending',
       paymentData,
       amountPaid = 0,
+      idempotencyKey,
     } = req.body;
 
     if (!customerDetails || !items || !bills) {
@@ -72,6 +73,7 @@ export async function placeCustomerOrder(req: Request, res: Response, next: Next
       balanceDueOnOrder: bills.totalWithTax ?? 0,
       orderType,
       deliveryAddress,
+      idempotencyKey: idempotencyKey ?? undefined,
     });
 
     // Notify POS admin in real-time

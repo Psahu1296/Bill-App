@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useSelector } from "react-redux";
 import { getTotalPrice } from "../../redux/slices/cartSlice";
-import { addOrder, createOrderRazorpay, updateOrder, verifyPaymentRazorpay, getOrderById, initiatePhonePePayment } from "../../https/index";
+import { addOrder, updateOrder, getOrderById, initiatePhonePePayment, getPhonePePaymentStatus } from "../../https/index";
 import { enqueueSnackbar } from "notistack";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { removeAllItems } from "../../redux/slices/cartSlice";
@@ -15,7 +16,6 @@ import type { Order, AddOrderPayload, PaymentMethod, OrderStatus } from "../../t
 
 declare global {
   interface Window {
-    Razorpay: new (options: Record<string, unknown>) => { open: () => void };
     PhonePeCheckout: {
       transact: (options: { tokenUrl: string; callback: (response: string) => void; type: "IFRAME" | "REDIRECT" }) => void;
       closePage: () => void;
@@ -40,6 +40,7 @@ const Bill: React.FC = () => {
   const queryClient = useQueryClient();
   const orderId = param.get("orderId");
   const navigate = useNavigate();
+
 
   const customerData = useSelector((state: RootState) => state.customer);
   const cartData = useSelector((state: RootState) => state.cart);
@@ -86,6 +87,9 @@ const Bill: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Cash");
   const [showInvoice, setShowInvoice] = useState(false);
   const [orderInfo, setOrderInfo] = useState<Order | undefined>();
+  const [isPhonePeLoading, setIsPhonePeLoading] = useState(false);
+  const [isPhonePeOpen, setIsPhonePeOpen] = useState(false);
+  const [isPhonePePolling, setIsPhonePePolling] = useState(false);
 
   const buildOrderData = () => ({
     customerDetails: { name: customerData.customerName, phone: customerData.customerPhone, guests: customerData.guests },
@@ -101,77 +105,7 @@ const Bill: React.FC = () => {
     paymentMethod,
   });
 
-  const handlePlaceOrder = async () => {
-    if (!paymentMethod) { enqueueSnackbar("Please select a payment method!", { variant: "warning" }); return; }
-
-    if (paymentMethod === "Online") {
-      try {
-        const res = await loadScript("https://checkout.razorpay.com/v1/checkout.js");
-        if (!res) { enqueueSnackbar("Razorpay SDK failed to load.", { variant: "warning" }); return; }
-        const { data } = await createOrderRazorpay({ amount: finalTotal });
-        const options = {
-          key: `${import.meta.env.VITE_RAZORPAY_KEY_ID}`,
-          amount: (data as { order: { amount: number; currency: string; id: string } }).order.amount,
-          currency: (data as { order: { amount: number; currency: string; id: string } }).order.currency,
-          name: "DHABA POS",
-          description: "Secure Payment",
-          order_id: (data as { order: { amount: number; currency: string; id: string } }).order.id,
-          handler: async function (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) {
-            await verifyPaymentRazorpay(response);
-            orderMutation.mutate({ ...buildOrderData(), paymentData: { razorpay_order_id: response.razorpay_order_id, razorpay_payment_id: response.razorpay_payment_id } });
-          },
-          prefill: { name: customerData.customerName, contact: customerData.customerPhone },
-          theme: { color: "#E8A317" },
-        };
-        new window.Razorpay(options).open();
-      } catch { enqueueSnackbar("Payment Failed!", { variant: "error" }); }
-      return;
-    }
-
-    if (paymentMethod === "PhonePe") {
-      try {
-        const scriptUrl = import.meta.env.VITE_PHONEPE_ENV === "PRODUCTION"
-          ? "https://mercury.phonepe.com/web/bundle/checkout.js"
-          : "https://mercury-stg.phonepe.com/web/bundle/checkout.js";
-        const loaded = await loadScript(scriptUrl);
-        if (!loaded) { enqueueSnackbar("PhonePe SDK failed to load.", { variant: "warning" }); return; }
-
-        // Create the order first so the webhook can reference it by ID
-        const orderResp = await addOrder({ ...buildOrderData(), paymentStatus: "Pending" });
-        const newOrder  = (orderResp.data as { data: { _id: string } }).data;
-        const newOrderId = newOrder._id;
-
-        const { data: ppResp } = await initiatePhonePePayment({
-          amount:        finalTotal,
-          orderId:       newOrderId,
-          customerPhone: customerData.customerPhone,
-          redirectUrl:   window.location.href,
-        });
-        const tokenUrl = (ppResp as { data: { redirectUrl: string } }).data.redirectUrl;
-
-        window.PhonePeCheckout.transact({
-          tokenUrl,
-          type: "IFRAME",
-          callback: (response: string) => {
-            if (response === "USER_CANCEL") {
-              enqueueSnackbar("Payment cancelled.", { variant: "warning" });
-              return;
-            }
-            if (response === "CONCLUDED") {
-              dispatch(removeCustomer());
-              dispatch(removeAllItems());
-              queryClient.invalidateQueries({ queryKey: ["earnings"] });
-              queryClient.invalidateQueries({ queryKey: ["orders"] });
-              enqueueSnackbar("Order placed! Payment verification in progress.", { variant: "success" });
-              setIsPayModalOpen(false);
-              navigate("/", { replace: true });
-            }
-          },
-        });
-      } catch { enqueueSnackbar("PhonePe payment failed!", { variant: "error" }); }
-      return;
-    }
-
+  const handlePlaceOrder = () => {
     const orderData = orderId ? { id: orderId, ...buildOrderData() } : buildOrderData();
     orderMutation.mutate(orderData);
   };
@@ -196,7 +130,102 @@ const Bill: React.FC = () => {
     },
   });
 
-  const handlePaymentSubmit = (paidAmount: number, payMethod: PaymentMethod, isFullyPaid: boolean) => {
+  const handlePaymentSubmit = async (paidAmount: number, payMethod: PaymentMethod, isFullyPaid: boolean) => {
+    if (payMethod === "Online") {
+      setIsPhonePeLoading(true);
+      setIsPayModalOpen(false);
+      let targetOrderId: string | null = orderId;
+      try {
+        if (!targetOrderId) {
+          // New order — create it first so the webhook can reference it by ID
+          const orderResp = await addOrder({ ...buildOrderData(), paymentStatus: "Pending" });
+          targetOrderId = (orderResp.data as { data: { _id: string } }).data._id;
+        }
+
+        const { data: ppResp } = await initiatePhonePePayment({
+          amount:        finalTotal,
+          orderId:       targetOrderId,
+          customerPhone: customerData.customerPhone,
+          redirectUrl:   window.location.origin,
+        });
+        const tokenUrl = (ppResp as { data: { redirectUrl: string } }).data.redirectUrl;
+
+        setIsPhonePeLoading(false);
+        const loaded = await loadScript("https://mercury.phonepe.com/web/bundle/checkout.js");
+        if (!loaded) { enqueueSnackbar("PhonePe SDK failed to load.", { variant: "warning" }); return; }
+
+        const confirmedOrderId = targetOrderId;
+        const confirmedAmount  = finalTotal;
+        const merchantTxnId    = (ppResp as { data: { merchantTransactionId: string } }).data.merchantTransactionId;
+
+        setIsPhonePeOpen(true);
+        window.PhonePeCheckout.transact({
+          tokenUrl,
+          type: "IFRAME",
+          callback: (response: string) => {
+            setIsPhonePeOpen(false);
+            if (response === "USER_CANCEL") {
+              enqueueSnackbar("Payment cancelled.", { variant: "warning" });
+              return;
+            }
+            if (response === "CONCLUDED") {
+              // Poll PhonePe status API until COMPLETED/FAILED, then update order
+              setIsPhonePePolling(true);
+              let attempts = 0;
+              const MAX = 15;
+              const poll = setInterval(async () => {
+                attempts++;
+                try {
+                  const res = await getPhonePePaymentStatus(merchantTxnId);
+                  const state = (res.data as { data: { state: string } }).data.state;
+                  if (state === "COMPLETED") {
+                    clearInterval(poll);
+                    setIsPhonePePolling(false);
+                    await updateOrder({
+                      id: confirmedOrderId!,
+                      paymentStatus: "Paid",
+                      paymentMethod: "Online",
+                      amountPaid: confirmedAmount,
+                      orderStatus: "Completed",
+                    });
+                    dispatch(removeCustomer());
+                    dispatch(removeAllItems());
+                    queryClient.invalidateQueries({ queryKey: ["earnings"] });
+                    queryClient.invalidateQueries({ queryKey: ["orders"] });
+                    enqueueSnackbar("Payment successful! Order completed.", { variant: "success" });
+                    navigate("/", { replace: true });
+                    return;
+                  }
+                  if (state === "FAILED") {
+                    clearInterval(poll);
+                    setIsPhonePePolling(false);
+                    enqueueSnackbar("Payment failed. Please try again.", { variant: "error" });
+                    return;
+                  }
+                } catch { /* keep polling on network error */ }
+                if (attempts >= MAX) {
+                  clearInterval(poll);
+                  setIsPhonePePolling(false);
+                  enqueueSnackbar("Could not verify payment. Check order status manually.", { variant: "warning" });
+                  queryClient.invalidateQueries({ queryKey: ["orders"] });
+                  navigate("/", { replace: true });
+                }
+              }, 2000);
+            }
+          },
+        });
+      } catch {
+        setIsPhonePeLoading(false);
+        setIsPhonePeOpen(false);
+        // Cancel a freshly created order if PhonePe initiation failed
+        if (!orderId && targetOrderId) {
+          updateOrder({ id: targetOrderId, orderStatus: "Cancelled" }).catch(() => {});
+        }
+        enqueueSnackbar("PhonePe payment failed!", { variant: "error" });
+      }
+      return;
+    }
+
     if (orderId) {
       // Existing order: never rebake bills — only send payment fields
       const amountAlreadyPaid = existingOrder?.amountPaid ?? orderInfo?.amountPaid ?? 0;
@@ -311,9 +340,8 @@ const Bill: React.FC = () => {
           💵 Cash
         </button>
         <button
-          disabled
           onClick={() => setPaymentMethod("Online")}
-          className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all opacity-50 ${
+          className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${
             paymentMethod === "Online" ? "bg-dhaba-accent/15 text-dhaba-accent border border-dhaba-accent/30" : "glass-input text-dhaba-muted"
           }`}
         >
@@ -322,8 +350,12 @@ const Bill: React.FC = () => {
       </div>
 
       <div className="space-y-2">
-        <button onClick={handlePlaceOrder} className="w-full btn-accent rounded-xl py-3 text-sm">
-          {orderId ? "Update Order" : "Place Order"}
+        <button
+          onClick={handlePlaceOrder}
+          disabled={isPhonePeLoading}
+          className="w-full btn-accent rounded-xl py-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isPhonePeLoading ? "Connecting to PhonePe…" : orderId ? "Update Order" : "Place Order"}
         </button>
         <button
           className="w-full py-2.5 rounded-xl bg-dhaba-success/10 text-dhaba-success font-bold text-sm border border-dhaba-success/20 hover:bg-dhaba-success/20 transition-colors"
@@ -332,6 +364,31 @@ const Bill: React.FC = () => {
           Pay & Complete
         </button>
       </div>
+
+      {/* Close button rendered into body so it sits above the PhonePe iframe */}
+      {isPhonePeOpen && createPortal(
+        <button
+          onClick={() => {
+            window.PhonePeCheckout.closePage();
+            setIsPhonePeOpen(false);
+            enqueueSnackbar("Payment cancelled.", { variant: "warning" });
+          }}
+          style={{ position: "fixed", top: 16, right: 16, zIndex: 2147483647 }}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-dhaba-danger text-white text-sm font-bold shadow-lg hover:bg-dhaba-danger/80 transition-colors"
+        >
+          ✕ Close PhonePe
+        </button>,
+        document.body
+      )}
+
+      {/* Verification overlay shown after payment CONCLUDED while polling status */}
+      {isPhonePePolling && createPortal(
+        <div style={{ position: "fixed", inset: 0, zIndex: 2147483647, background: "rgba(0,0,0,0.7)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
+          <div style={{ width: 40, height: 40, border: "4px solid #E8A317", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+          <p style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>Verifying payment…</p>
+        </div>,
+        document.body
+      )}
 
       {showInvoice && orderInfo && <Invoice orderInfo={orderInfo} setShowInvoice={setShowInvoice} />}
       <PayModal

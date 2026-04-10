@@ -13,7 +13,7 @@ export function create(data: {
 }) {
   const db = getDb();
   const result = db.prepare(
-    `INSERT INTO payments (payment_id, order_id, amount, currency, status, method, email, contact, created_at)
+    `INSERT OR IGNORE INTO payments (payment_id, order_id, amount, currency, status, method, email, contact, created_at)
      VALUES (@paymentId, @orderId, @amount, @currency, @status, @method, @email, @contact, @createdAt)`
   ).run({
     paymentId: data.paymentId ?? null,
@@ -27,7 +27,12 @@ export function create(data: {
     createdAt: data.createdAt ? data.createdAt.toISOString() : new Date().toISOString(),
   });
 
-  const row = db.prepare("SELECT * FROM payments WHERE id = ?").get(result.lastInsertRowid) as Record<string, unknown>;
+  // OR IGNORE skips the insert on duplicate payment_id — fetch by payment_id as fallback
+  const row = (
+    result.lastInsertRowid
+      ? db.prepare("SELECT * FROM payments WHERE id = ?").get(result.lastInsertRowid)
+      : db.prepare("SELECT * FROM payments WHERE payment_id = ?").get(data.paymentId ?? null)
+  ) as Record<string, unknown>;
   return {
     _id: String(row.id),
     paymentId: row.payment_id,

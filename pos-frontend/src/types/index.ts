@@ -66,7 +66,7 @@ export interface OrderBills {
 
 export type OrderStatus = 'Pending' | 'Cooking' | 'In Progress' | 'Ready' | 'Completed' | 'Cancelled';
 export type PaymentStatus = 'Pending' | 'Paid' | 'Refunded';
-export type PaymentMethod = 'Cash' | 'Online' | 'PhonePe';
+export type PaymentMethod = 'Cash' | 'Online';
 
 // Populated table shape returned by GET /api/order (Order.find().populate("table"))
 export interface PopulatedOrderTable {

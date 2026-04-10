@@ -57,6 +57,7 @@ export function initSchema(db: Database.Database): void {
       balance_due_on_order  REAL    NOT NULL DEFAULT 0,
       order_type            TEXT    NOT NULL DEFAULT 'dine-in',  -- 'dine-in' | 'takeaway' | 'delivery'
       delivery_address      TEXT    NOT NULL DEFAULT '',
+      idempotency_key       TEXT,                                -- deduplication key (merchantTransactionId)
       created_at            TEXT    NOT NULL DEFAULT (datetime('now')),
       updated_at            TEXT    NOT NULL DEFAULT (datetime('now'))
     );
@@ -68,7 +69,7 @@ export function initSchema(db: Database.Database): void {
 
     CREATE TABLE IF NOT EXISTS payments (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      payment_id  TEXT,
+      payment_id  TEXT    UNIQUE,   -- deduplication: prevents duplicate webhook records
       order_id    TEXT,
       amount      REAL,
       currency    TEXT,

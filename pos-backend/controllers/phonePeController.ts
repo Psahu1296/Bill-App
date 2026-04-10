@@ -7,6 +7,7 @@
 import { Request, Response, NextFunction } from "express";
 import createHttpError from "http-errors";
 import config from "../config/config";
+import { getDb } from "../db";
 import * as OrderRepo from "../repositories/orderRepo";
 import * as PaymentRepo from "../repositories/paymentRepo";
 
@@ -143,22 +144,27 @@ export async function handleCallback(req: Request, res: Response, next: NextFunc
       const order = OrderRepo.findById(orderId, false);
       if (order) {
         const total = (order.bills as { totalWithTax?: number })?.totalWithTax ?? 0;
-        OrderRepo.update(orderId, {
-          paymentStatus:    "Paid",
-          paymentMethod:    "Online",
-          amountPaid:       total,
-          balanceDueOnOrder: 0,
-          paymentData:      body,
+        // Atomic: order update + payment record succeed or both roll back.
+        // PaymentRepo.create uses INSERT OR IGNORE so webhook replays are silently skipped.
+        const processPayment = getDb().transaction(() => {
+          OrderRepo.update(orderId, {
+            paymentStatus:    "Paid",
+            paymentMethod:    "Online",
+            amountPaid:       total,
+            balanceDueOnOrder: 0,
+            paymentData:      body,
+          });
+          PaymentRepo.create({
+            paymentId: txnId ?? merchantOrderId ?? "",
+            orderId,
+            amount:    total,
+            currency:  "INR",
+            status:    "COMPLETED",
+            method:    "UPI",
+            contact:   (order.customerDetails as { phone?: string })?.phone ?? "",
+          });
         });
-        PaymentRepo.create({
-          paymentId: txnId ?? merchantOrderId ?? "",
-          orderId,
-          amount:    total,
-          currency:  "INR",
-          status:    "COMPLETED",
-          method:    "UPI",
-          contact:   (order.customerDetails as { phone?: string })?.phone ?? "",
-        });
+        processPayment();
       }
     }
 
@@ -187,10 +193,16 @@ export async function checkPaymentStatus(req: Request, res: Response, next: Next
 
     const json = await resp.json() as Record<string, unknown>;
 
+    // If PhonePe returned a non-2xx (e.g. INVALID_MERCHANT_ORDER_ID), treat as FAILED
+    // so the frontend stops polling instead of looping on a fake "PENDING" state.
+    const state = resp.ok
+      ? (json.state ?? "PENDING")
+      : "FAILED";
+
     res.json({
       success: true,
       data: {
-        state:   json.state   ?? "PENDING",
+        state,
         code:    json.code,
         message: json.message,
       },
