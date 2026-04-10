@@ -13,6 +13,7 @@ import {
   upsertCustomerProfile,
   updateCustomerProfile,
 } from "../controllers/customerProfileController";
+import { sendOtp, verifyOtp } from "../controllers/customerOtpController";
 
 const router = Router();
 
@@ -62,5 +63,17 @@ router.patch("/profile/:phone", profileLimiter, updateCustomerProfile);
 
 // Customer order history (public — keyed by phone)
 router.get("/orders/:phone", orderReadLimiter, getCustomerOrders);
+
+// OTP phone verification — rate limited to 3 sends per 10 min per IP
+const otpSendLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Too many OTP requests. Try again in 10 minutes." },
+});
+
+router.post("/otp/send",   otpSendLimiter, sendOtp);
+router.post("/otp/verify", verifyOtp);
 
 export default router;

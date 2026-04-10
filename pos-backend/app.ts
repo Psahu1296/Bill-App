@@ -33,6 +33,18 @@ const app = express();
 // can correctly identify client IPs from X-Forwarded-For.
 app.set("trust proxy", 1);
 
+// ── Request logger ────────────────────────────────────────────────────────────
+app.use((req, res, next) => {
+  const start = Date.now();
+  const origin = req.headers.origin || req.headers.referer || "-";
+  res.on("finish", () => {
+    const ms = Date.now() - start;
+    const level = res.statusCode >= 500 ? "ERROR" : res.statusCode >= 400 ? "WARN" : "INFO";
+    console.log(`[${level}] ${req.method} ${req.path} ${res.statusCode} ${ms}ms | origin=${origin} | ip=${req.ip}`);
+  });
+  next();
+});
+
 cron.schedule(
   "5 0 * * *",
   async () => {
@@ -62,6 +74,7 @@ app.use(cors({
     // Named tunnel domain (root + any subdomain)
     if (origin === "https://users.sahu-dhaba-pos.co.in" || origin.endsWith(".sahu-dhaba-pos.co.in") || origin === "https://sahudhaba.in") return cb(null, true);
     if(origin === "http://localhost:8080" || origin === "http://localhost:5173") return cb(null, true); // for local dev with frontend running on 5173/5174
+    console.warn(`[CORS] Blocked origin: ${origin}`);
     cb(new Error(`CORS: origin ${origin} not allowed`));
   },
   credentials: true,

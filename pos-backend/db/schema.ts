@@ -181,5 +181,18 @@ export function initSchema(db: Database.Database): void {
       created_at TEXT    NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT    NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- Customer OTP sessions for phone verification
+    CREATE TABLE IF NOT EXISTS customer_otp_sessions (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      phone      TEXT    NOT NULL,
+      otp_code   TEXT    NOT NULL,
+      expires_at TEXT    NOT NULL,
+      attempts   INTEGER NOT NULL DEFAULT 0,
+      verified   INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_otp_phone ON customer_otp_sessions(phone);
   `);
 }
