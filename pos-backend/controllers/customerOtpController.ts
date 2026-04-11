@@ -1,59 +1,42 @@
 import { Request, Response, NextFunction } from "express";
 import createHttpError from "http-errors";
-import crypto from "crypto";
+import { verifyIdToken } from "../utils/firebaseAdmin";
 import { normalizePhone } from "../utils/normalizePhone";
-import * as OtpRepo from "../repositories/customerOtpRepo";
-import { sendOtpSms } from "../utils/smsService";
-import config from "../config/config";
 
-// ── POST /api/customer/otp/send  { phone } ───────────────────────────────────
-export async function sendOtp(req: Request, res: Response, next: NextFunction) {
+/**
+ * POST /api/customer/auth/verify-token
+ * Body: { idToken: string }
+ *
+ * Verifies a Firebase Phone Auth ID token issued by the customer app.
+ * Returns the verified phone number so the frontend can proceed with
+ * profile fetch / creation.
+ */
+export async function verifyFirebaseToken(req: Request, res: Response, next: NextFunction) {
   try {
-    const phone = normalizePhone(String(req.body.phone ?? ""));
+    const { idToken } = req.body as { idToken?: string };
+    if (!idToken || typeof idToken !== "string") {
+      return next(createHttpError(400, "idToken is required"));
+    }
+
+    const decoded = await verifyIdToken(idToken);
+
+    if (!decoded.phone_number) {
+      return next(createHttpError(400, "Token does not contain a phone number"));
+    }
+
+    // Normalize to 10-digit local format (strip country code)
+    const phone = normalizePhone(decoded.phone_number);
     if (phone.length !== 10) {
-      return next(createHttpError(400, "Invalid phone number"));
+      return next(createHttpError(400, "Invalid phone number in token"));
     }
 
-    OtpRepo.cleanup();
-
-    // Phone-based cap: max 5 OTPs per phone per hour — blocks credit exhaustion
-    // regardless of IP rotation
-    const recentSends = OtpRepo.countRecentSends(phone, 60);
-    if (recentSends >= 5) {
-      return next(createHttpError(429, "Too many OTP requests for this number. Try again in an hour."));
+    return res.json({ success: true, data: { phone } });
+  } catch (err: unknown) {
+    // Firebase throws with code when token is invalid/expired
+    const code = (err as { code?: string }).code ?? "";
+    if (code.startsWith("auth/")) {
+      return next(createHttpError(401, "Invalid or expired token"));
     }
-
-    const otp = String(crypto.randomInt(100000, 999999)); // 6-digit random
-    OtpRepo.createOtp(phone, otp, config.otpExpirySeconds);
-
-    await sendOtpSms(phone, otp);
-
-    res.json({ success: true, data: {} });
-  } catch (err) {
-    next(err);
-  }
-}
-
-// ── POST /api/customer/otp/verify  { phone, otp } ───────────────────────────
-export function verifyOtp(req: Request, res: Response, next: NextFunction) {
-  try {
-    const phone = normalizePhone(String(req.body.phone ?? ""));
-    const otp   = String(req.body.otp ?? "").trim();
-
-    if (phone.length !== 10) {
-      return next(createHttpError(400, "Invalid phone number"));
-    }
-    if (!/^\d{6}$/.test(otp)) {
-      return next(createHttpError(400, "OTP must be 6 digits"));
-    }
-
-    const result = OtpRepo.verifyOtp(phone, otp);
-
-    if (result === "verified")     return res.json({ success: true, data: { verified: true } });
-    if (result === "expired")      return next(createHttpError(410, "OTP expired. Please request a new one."));
-    if (result === "max_attempts") return next(createHttpError(429, "Too many incorrect attempts. Please request a new OTP."));
-    return next(createHttpError(400, "Invalid OTP"));
-  } catch (err) {
     next(err);
   }
 }

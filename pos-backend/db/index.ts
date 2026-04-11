@@ -140,19 +140,8 @@ function runMigrations(db: Database.Database) {
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_payment_id ON payments(payment_id) WHERE payment_id IS NOT NULL"
   ).run();
 
-  // Customer OTP sessions — phone verification for customer app login
-  db.prepare(`
-    CREATE TABLE IF NOT EXISTS customer_otp_sessions (
-      id         INTEGER PRIMARY KEY AUTOINCREMENT,
-      phone      TEXT    NOT NULL,
-      otp_code   TEXT    NOT NULL,
-      expires_at TEXT    NOT NULL,
-      attempts   INTEGER NOT NULL DEFAULT 0,
-      verified   INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT    NOT NULL DEFAULT (datetime('now'))
-    )
-  `).run();
-  db.prepare("CREATE INDEX IF NOT EXISTS idx_otp_phone ON customer_otp_sessions(phone)").run();
+  // Drop legacy OTP sessions table — phone auth is now handled by Firebase
+  db.prepare("DROP TABLE IF EXISTS customer_otp_sessions").run();
 }
 
 let _db: Database.Database | null = null;

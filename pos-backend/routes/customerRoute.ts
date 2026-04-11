@@ -13,7 +13,7 @@ import {
   upsertCustomerProfile,
   updateCustomerProfile,
 } from "../controllers/customerProfileController";
-import { sendOtp, verifyOtp } from "../controllers/customerOtpController";
+import { verifyFirebaseToken } from "../controllers/customerOtpController";
 
 const router = Router();
 
@@ -64,16 +64,15 @@ router.patch("/profile/:phone", profileLimiter, updateCustomerProfile);
 // Customer order history (public — keyed by phone)
 router.get("/orders/:phone", orderReadLimiter, getCustomerOrders);
 
-// OTP phone verification — rate limited to 3 sends per 10 min per IP
-const otpSendLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  max: 3,
+// Firebase Phone Auth — verify ID token issued by customer app
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, message: "Too many OTP requests. Try again in 10 minutes." },
+  message: { success: false, message: "Too many auth requests. Please slow down." },
 });
 
-router.post("/otp/send",   otpSendLimiter, sendOtp);
-router.post("/otp/verify", verifyOtp);
+router.post("/auth/verify-token", authLimiter, verifyFirebaseToken);
 
 export default router;

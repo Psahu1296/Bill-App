@@ -25,8 +25,9 @@ const config = Object.freeze({
     phonePeClientSecret: process.env.PHONEPE_CLIENT_SECRET || "",
     phonePeClientVersion: Number(process.env.PHONEPE_CLIENT_VERSION ?? 1),
     phonePeEnv: (process.env.PHONEPE_ENV || "UAT") as "UAT" | "PRODUCTION",
-    fast2smsApiKey: process.env.FAST2SMS_API_KEY ?? "",
-    otpExpirySeconds: 600, // 10 minutes
+    firebaseProjectId:   process.env.FIREBASE_PROJECT_ID   ?? "",
+    firebaseClientEmail: process.env.FIREBASE_CLIENT_EMAIL ?? "",
+    firebasePrivateKey:  process.env.FIREBASE_PRIVATE_KEY  ?? "",
 });
 
 export default config;
