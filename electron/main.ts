@@ -1,6 +1,7 @@
-import { app, BrowserWindow, shell, dialog, ipcMain, protocol } from "electron";
+import { app, BrowserWindow, shell, ipcMain } from "electron";
 import path from "path";
 import fs from "fs";
+import http from "http";
 import { CustomAutoUpdater } from "./updater";
 const autoUpdater = new CustomAutoUpdater();
 
@@ -69,8 +70,9 @@ function createWindow(): void {
     autoHideMenuBar: true,
   });
 
-  // In dev, connect to Vite. In production, load the local packaged React build via our custom protocol
-  const url = isDev ? "http://localhost:5173" : "app://-";
+  // Dev → Vite dev server | Production → local HTTP server (started below)
+  const FRONTEND_PORT = 4175;
+  const url = isDev ? "http://localhost:5173" : `http://localhost:${FRONTEND_PORT}`;
   win.loadURL(url);
 
   // Open DevTools once on first load in dev — not on every HMR reload
@@ -106,40 +108,50 @@ function createWindow(): void {
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
-  // Register custom protocol to serve local React frontend (supports BrowserRouter)
-  protocol.handle('app', (request) => {
-    let urlPath = request.url.slice('app://-'.length);
-    if (urlPath.startsWith('/')) urlPath = urlPath.slice(1);
-    if (!urlPath) urlPath = 'index.html';
-    
-    const isPackaged = app.isPackaged;
-    const basePath = isPackaged 
-      ? path.join(process.resourcesPath, "frontend/dist")
-      : path.join(__dirname, "../../pos-frontend/dist");
-      
-    let absolutePath = path.join(basePath, urlPath);
-    // React Router SPA fallback: if file doesn't exist natively, always return index.html
-    if (!fs.existsSync(absolutePath)) {
-      absolutePath = path.join(basePath, "index.html");
-    }
-    
-    // Serve securely via native electron net bridge
-    return import('electron').then(({ net }) => net.fetch('file://' + absolutePath));
-  });
-
+  // In production spin up a tiny Node HTTP server to serve the built React app.
+  // This gives us real HTTP semantics so BrowserRouter works without any hacks.
   if (!isDev) {
-    splash = createSplash();
+    const FRONTEND_PORT = 4175;
+    const distPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'frontend/dist')
+      : path.join(__dirname, '../../pos-frontend/dist');
 
+    const MIME: Record<string, string> = {
+      '.html': 'text/html',
+      '.js':   'application/javascript',
+      '.css':  'text/css',
+      '.svg':  'image/svg+xml',
+      '.png':  'image/png',
+      '.jpg':  'image/jpeg',
+      '.ico':  'image/x-icon',
+      '.json': 'application/json',
+      '.woff2':'font/woff2',
+      '.woff': 'font/woff',
+      '.ttf':  'font/ttf',
+    };
+
+    http.createServer((req, res) => {
+      let urlPath = (req.url ?? '/').split('?')[0];
+      let filePath = path.join(distPath, urlPath === '/' ? 'index.html' : urlPath);
+      // SPA fallback: any route that isn't a real asset → index.html
+      if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+        filePath = path.join(distPath, 'index.html');
+      }
+      const ext = path.extname(filePath).toLowerCase();
+      const mime = MIME[ext] ?? 'application/octet-stream';
+      res.writeHead(200, { 'Content-Type': mime });
+      fs.createReadStream(filePath).pipe(res);
+    }).listen(FRONTEND_PORT, '127.0.0.1');
+
+    splash = createSplash();
     sendToSplash("server-ready", "Loading interface…", 90);
   }
 
   createWindow();
 
-  // App starts without bundled backend
-
   if (!isDev) {
-    autoUpdater.autoDownload    = false; // wait for user to click "Download"
-    autoUpdater.autoInstallOnAppQuit = false; // only install when user triggers it
+    autoUpdater.autoDownload    = false;
+    autoUpdater.autoInstallOnAppQuit = false;
     setTimeout(() => autoUpdater.checkForUpdates(), 3000);
   }
 });
