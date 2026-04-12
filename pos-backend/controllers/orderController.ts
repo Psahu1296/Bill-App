@@ -189,7 +189,7 @@ const getOrderById = async (req: Request, res: Response, next: NextFunction) => 
 
 const getOrders = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { startDate, endDate, tableId, customerPhone, orderStatus, paymentStatus } = req.query;
+    const { startDate, endDate, tableId, customerPhone, orderStatus, paymentStatus, excludeStatus } = req.query;
     const orders = await orderRepo.findAll({
       startDate: startDate as string | undefined,
       endDate:   endDate   as string | undefined,
@@ -197,6 +197,7 @@ const getOrders = async (req: Request, res: Response, next: NextFunction) => {
       customerPhone: customerPhone as string | undefined,
       orderStatus:   orderStatus   as string | undefined,
       paymentStatus: paymentStatus as string | undefined,
+      excludeStatus: excludeStatus as string | undefined,
     });
     res.status(200).json({ success: true, data: orders });
   } catch (error) {

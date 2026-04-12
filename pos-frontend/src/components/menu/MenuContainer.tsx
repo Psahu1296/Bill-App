@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getDishes, seedDefaultDishes } from "../../https";
 import MenuItem from "./MenuItem";
+import Skeleton from "../shared/Skeleton";
 import { FaSearch, FaLeaf, FaDrumstickBite, FaUtensils, FaFire, FaCoffee, FaPlus } from "react-icons/fa";
 import { GiWheat, GiRiceCooker, GiCookingPot } from "react-icons/gi";
 import { MdFastfood, MdLocalDrink } from "react-icons/md";
@@ -132,16 +133,9 @@ const MenuContainer: React.FC = () => {
     return result;
   }, [allDishes, searchTerm, activeType, activeCategory, activeKeyword, availableOnly, frequentOnly]);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-dhaba-muted">
-        <div className="spinner mr-3" />
-        Loading dishes...
-      </div>
-    );
-  }
-
-  if (allDishes.length === 0) {
+  // Don't block the full UI — dish filters render even while loading
+  // The dish grid shows skeletons instead of a spinner
+  if (allDishes.length === 0 && !isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
         <div className="glass-card rounded-3xl p-10 max-w-sm w-full space-y-4">
@@ -326,7 +320,10 @@ const MenuContainer: React.FC = () => {
 
       <div className="h-px bg-dhaba-border/20 mx-6" />
       <div className="flex flex-wrap gap-3 px-6 py-4 overflow-y-auto">
-        {filteredDishes.length === 0 ? (
+        {isLoading ? (
+          // Shimmer dish cards — filters stay interactive immediately
+          <Skeleton className="h-36 w-40" count={12} gap="gap-3" />
+        ) : filteredDishes.length === 0 ? (
           <p className="text-dhaba-muted text-sm py-8 w-full text-center">
             No dishes match your filters.
           </p>

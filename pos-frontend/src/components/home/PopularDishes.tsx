@@ -15,10 +15,21 @@ const PopularDishes: React.FC = () => {
     queryFn: async () => getFrequentDishes(),
   });
 
+  // Reuse the already-cached dishes list (loaded by MenuContainer / DishesList) —
+  // don't fire an extra network request just to check if the menu is empty.
+  const cachedDishes = queryClient.getQueryData<{ data: { data: unknown[] } }>(["dishes"]);
   const { data: allDishesRes } = useQuery({
     queryKey: ["dishes"],
     queryFn: getDishes,
+    // Only fetch if not already in cache
+    enabled: cachedDishes === undefined,
+    staleTime: 10 * 60 * 1000,
   });
+
+  const popDishes: Dish[] = popularDishesRes?.data?.data ?? [];
+  const dishSource = cachedDishes ?? allDishesRes;
+  const allDishes: Dish[] = (dishSource?.data?.data as Dish[]) ?? [];
+  const isEmpty = dishSource !== undefined && allDishes.length === 0;
 
   const seedMutation = useMutation({
     mutationFn: seedDefaultDishes,
@@ -27,10 +38,6 @@ const PopularDishes: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ["popularDishes"] });
     },
   });
-
-  const popDishes: Dish[] = popularDishesRes?.data?.data ?? [];
-  const allDishes: Dish[] = allDishesRes?.data?.data ?? [];
-  const isEmpty = allDishesRes !== undefined && allDishes.length === 0;
 
   return (
     <div className="glass-card rounded-3xl overflow-hidden h-full">

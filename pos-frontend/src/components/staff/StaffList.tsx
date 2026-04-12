@@ -3,6 +3,7 @@ import { MdPeople } from "react-icons/md";
 import { motion, AnimatePresence } from "framer-motion";
 import type { StaffMember } from "../../types";
 import { ROLE_CONFIG } from "./constants";
+import Skeleton from "../shared/Skeleton";
 
 function getTotalPaid(s: StaffMember): number {
   return s.payments.reduce((sum, p) => sum + (p.type === "deduction" ? -p.amount : p.amount), 0);
@@ -24,11 +25,7 @@ const StaffList: React.FC<StaffListProps> = ({
   staff, isLoading, expandedId, onExpand, onEdit, onDelete, onToggleActive, onAddPayment, onDeletePayment,
 }) => {
   if (isLoading) {
-    return (
-      <div className="glass-card rounded-2xl p-12 flex justify-center">
-        <div className="w-6 h-6 border-2 border-dhaba-accent border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <Skeleton className="h-16" count={4} gap="gap-3" />;
   }
 
   if (staff.length === 0) {

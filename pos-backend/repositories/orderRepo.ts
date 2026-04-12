@@ -53,6 +53,7 @@ export interface OrderFilters {
   customerPhone?: string;
   orderStatus?: string;
   paymentStatus?: string;
+  excludeStatus?: string;
 }
 
 export async function findById(id: string, populate = false) {
@@ -86,6 +87,7 @@ export async function findAll(filters: OrderFilters = {}) {
   }
   if (filters.orderStatus) query.orderStatus = filters.orderStatus;
   if (filters.paymentStatus) query.paymentStatus = filters.paymentStatus;
+  if (filters.excludeStatus) query.orderStatus = { $ne: filters.excludeStatus };
 
   const docs = await Order.find(query)
     .sort({ orderDate: -1 })

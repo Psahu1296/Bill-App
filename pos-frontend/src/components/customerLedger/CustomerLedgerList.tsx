@@ -8,6 +8,7 @@ import SettleOrdersModal from "./SettleOrdersModal";
 import LedgerFilters from "./LedgerFilters";
 import LedgerCustomerCard from "./LedgerCustomerCard";
 import BottomNav from "../shared/BottomNav";
+import Skeleton from "../shared/Skeleton";
 import { FaWallet, FaUsers, FaPlus, FaTimes } from "react-icons/fa";
 import type { CustomerLedger } from "../../types";
 import type { PresetKey } from "./LedgerFilters";
@@ -177,15 +178,6 @@ const CustomerLedgerList: React.FC = () => {
     ? preset.charAt(0).toUpperCase() + preset.slice(1)
     : "";
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-dhaba-muted">
-        <div className="h-5 w-5 border-2 border-dhaba-accent border-t-transparent rounded-full animate-spin mr-3" />
-        Loading ledger...
-      </div>
-    );
-  }
-
   if (isError) {
     return (
       <div className="text-center p-8 text-dhaba-danger">
@@ -254,7 +246,9 @@ const CustomerLedgerList: React.FC = () => {
       </div>
 
       {/* Customer list */}
-      {filteredCustomers.length === 0 ? (
+      {isLoading ? (
+        <Skeleton className="h-20" count={5} gap="gap-3" />
+      ) : filteredCustomers.length === 0 ? (
         <div className="text-center py-16 text-dhaba-muted">
           <FaWallet className="text-4xl mx-auto mb-3 opacity-30" />
           <p className="font-semibold">No customers found</p>

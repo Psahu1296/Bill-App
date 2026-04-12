@@ -6,6 +6,7 @@ import DishCard from "./DishesCard";
 import AddDishModal from "../dashboard/AddDishModal";
 import BulkAddDishModal from "./BulkAddDishModal";
 import DefaultDishesTab from "./DefaultDishesTab";
+import Skeleton from "../shared/Skeleton";
 import { FaSearch, FaCloudUploadAlt, FaPlus, FaUtensils, FaBookOpen } from "react-icons/fa";
 import type { Dish } from "../../types";
 
@@ -62,14 +63,6 @@ const DishesList: React.FC = () => {
     const dish = typeof dishOrId === "object" ? dishOrId : dishList.find((d) => d._id === dishOrId);
     if (dish) { setIsUpdateId(dish._id); setSelectedDish(dish); }
   };
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-dhaba-muted">
-        <div className="spinner mr-3" />Loading dishes...
-      </div>
-    );
-  }
 
   if (isError) {
     return (
@@ -145,7 +138,12 @@ const DishesList: React.FC = () => {
       )}
 
       {tab === "menu" && <div>
-        {dishList.length === 0 ? (
+        {isLoading ? (
+          // Show skeleton grid without blocking the whole page layout
+          <div className="flex flex-wrap gap-5">
+            <Skeleton className="h-52 w-52" count={8} gap="gap-5" />
+          </div>
+        ) : dishList.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center space-y-4">
             <div className="h-16 w-16 rounded-2xl bg-dhaba-accent/10 flex items-center justify-center">
               <FaUtensils className="text-dhaba-accent text-2xl" />

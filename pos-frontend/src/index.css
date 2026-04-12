@@ -152,6 +152,11 @@ body {
   100% { transform: rotate(360deg); }
 }
 
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 /* ─── Custom scrollbar for webkit ─── */
 ::-webkit-scrollbar {
   width: 6px;

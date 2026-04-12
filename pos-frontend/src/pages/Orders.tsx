@@ -3,6 +3,7 @@ import BottomNav from "../components/shared/BottomNav";
 import OrderCard from "../components/orders/OrderCard";
 import BackButton from "../components/shared/BackButton";
 import AddPastOrderModal from "../components/orders/AddPastOrderModal";
+import Skeleton from "../components/shared/Skeleton";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { getOrders } from "../https/index";
 import { enqueueSnackbar } from "notistack";
@@ -34,37 +35,17 @@ const Orders: React.FC = () => {
     queryKey: ["orders", selectedDate],
     queryFn: () => getOrders({ startDate: selectedDate, endDate: selectedDate }),
     placeholderData: keepPreviousData,
-    refetchInterval: 30_000,
+    // Only poll when viewing today — past dates are static
+    refetchInterval: isToday ? 30_000 : false,
   });
 
-  // Active orders fetched without date filter so lingering Pending / Cooking / Ready
-  // orders from previous days always show up when viewing today.
-  const { data: activePendingRes } = useQuery({
-    queryKey: ["orders", "active", "pending"],
-    queryFn: () => getOrders({ orderStatus: "Pending" }),
+  // Single query for all non-completed active orders (Pending/Cooking/In Progress/Ready).
+  // Replaces the previous 4 separate polling queries — one round trip every 15s is enough.
+  const { data: activeOrdersRes } = useQuery({
+    queryKey: ["orders", "active"],
+    queryFn: () => getOrders({ excludeStatus: "Completed" }),
     placeholderData: keepPreviousData,
     refetchInterval: 15_000,
-    enabled: isToday,
-  });
-  const { data: activeCookingRes } = useQuery({
-    queryKey: ["orders", "active", "cooking"],
-    queryFn: () => getOrders({ orderStatus: "Cooking" }),
-    placeholderData: keepPreviousData,
-    refetchInterval: 30_000,
-    enabled: isToday,
-  });
-  const { data: activeInProgressRes } = useQuery({
-    queryKey: ["orders", "active", "inprogress"],
-    queryFn: () => getOrders({ orderStatus: "In Progress" }),
-    placeholderData: keepPreviousData,
-    refetchInterval: 30_000,
-    enabled: isToday,
-  });
-  const { data: activeReadyRes } = useQuery({
-    queryKey: ["orders", "active", "ready"],
-    queryFn: () => getOrders({ orderStatus: "Ready" }),
-    placeholderData: keepPreviousData,
-    refetchInterval: 30_000,
     enabled: isToday,
   });
 
@@ -75,17 +56,12 @@ const Orders: React.FC = () => {
   const allOrders = useMemo<Order[]>(() => {
     const dateFiltered: Order[] = resData?.data?.data ?? [];
     if (!isToday) return dateFiltered;
-    // Merge date-filtered + all active orders (dedup by _id)
-    const extra: Order[] = [
-      ...((activePendingRes?.data?.data   as Order[]) ?? []),
-      ...((activeCookingRes?.data?.data   as Order[]) ?? []),
-      ...((activeInProgressRes?.data?.data as Order[]) ?? []),
-      ...((activeReadyRes?.data?.data     as Order[]) ?? []),
-    ];
+    // Merge date-filtered + active orders (dedup by _id)
+    const extra: Order[] = (activeOrdersRes?.data?.data as Order[]) ?? [];
     const map = new Map<string, Order>();
     [...dateFiltered, ...extra].forEach((o) => map.set(o._id, o));
     return Array.from(map.values());
-  }, [resData, activeInProgressRes, activeReadyRes, isToday]);
+  }, [resData, activeOrdersRes, isToday]);
 
   // ── Stats ──────────────────────────────────────────────────────
   const stats = useMemo(() => {
@@ -218,9 +194,9 @@ const Orders: React.FC = () => {
       {/* ── Content ── */}
       <div className="px-6 py-4">
         {isLoading ? (
-          <div className="flex flex-col items-center py-20 text-dhaba-muted">
-            <div className="h-6 w-6 border-2 border-dhaba-accent border-t-transparent rounded-full animate-spin mb-4" />
-            <p>Loading orders…</p>
+          // Skeleton cards — header/filters stay visible, only content shimmers
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <Skeleton className="h-44" count={6} gap="gap-4" />
           </div>
         ) : grouped ? (
           /* Grouped "All" view */
