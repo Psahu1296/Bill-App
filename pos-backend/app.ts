@@ -68,6 +68,8 @@ app.use(cors({
   origin: (origin, cb) => {
     // Allow requests with no origin (server-to-server, curl, Electron)
     if (!origin) return cb(null, true);
+    // Packaged Electron app sends literal "null" as origin (file:// / app:// protocol)
+    if (origin === "null") return cb(null, true);
     // Explicitly configured origins (POS frontend, customer app)
     if (allowedOrigins.includes(origin)) return cb(null, true);
     // Any Cloudflare quick-tunnel subdomain (URL changes on every restart)
