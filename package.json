@@ -10,6 +10,7 @@
     "build:backend": "cd pos-backend && npm run build",
     "build:electron": "tsc -p electron/tsconfig.json",
     "build": "npm run build:frontend && npm run build:backend && npm run build:electron",
+    "start": "cd pos-backend && npm start",
     "test": "node test/smoke-test.js",
     "test:health": "node test/smoke-test.js",
     "dist": "npm run build && electron-builder",
