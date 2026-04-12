@@ -72,7 +72,7 @@ function createWindow(): void {
   // When isDev is true, you can connect to the local dev server.
   // Otherwise, load the live Railway domain.
   // Set your Railway URL or load the built static files via custom protocol if you prefer offline mode.
-  const liveUrl = process.env.VITE_FRONTEND_URL || "https://sahudhaba.in";
+  const liveUrl = process.env.VITE_FRONTEND_URL || "https://api-prod.sahudhaba.in";
   const url = isDev ? "http://localhost:5173" : liveUrl;
   win.loadURL(url);
 
@@ -173,7 +173,7 @@ ipcMain.handle("migrate:run", async () => {
   }
   
   try {
-    const liveUrl = process.env.VITE_FRONTEND_URL || "https://sahudhaba.in";
+    const liveUrl = process.env.VITE_FRONTEND_URL || "https://api-prod.sahudhaba.in";
     const uploadUrl = isDev ? "http://localhost:5001/api/migration/upload" : `${liveUrl}/api/migration/upload`;
     
     const formData = new FormData();

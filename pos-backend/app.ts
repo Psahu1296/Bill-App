@@ -73,8 +73,8 @@ app.use(cors({
     // Any Cloudflare quick-tunnel subdomain (URL changes on every restart)
     if (origin.endsWith(".trycloudflare.com")) return cb(null, true);
     // Named tunnel domain (root + any subdomain)
-    if (origin === "https://users.sahu-dhaba-pos.co.in" || origin.endsWith(".sahu-dhaba-pos.co.in") || origin === "https://sahudhaba.in") return cb(null, true);
-    if(origin === "http://localhost:8080" || origin === "http://localhost:5173") return cb(null, true); // for local dev with frontend running on 5173/5174
+    if (origin === "https://users.sahu-dhaba-pos.co.in" || origin.endsWith(".sahu-dhaba-pos.co.in") || origin === "https://sahudhaba.in" || origin === "https://api-prod.sahudhaba.in") return cb(null, true);
+    if(origin === "http://localhost:8080" || origin === "http://localhost:5173" || origin === "http://localhost:5174") return cb(null, true); // for local dev with frontend running on 5173/5174
     console.warn(`[CORS] Blocked origin: ${origin}`);
     cb(new Error(`CORS: origin ${origin} not allowed`));
   },
