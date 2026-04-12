@@ -9,6 +9,8 @@ import createHttpError from "http-errors";
 import config from "../config/config";
 import * as OrderRepo from "../repositories/orderRepo";
 import * as PaymentRepo from "../repositories/paymentRepo";
+import * as earningRepo from "../repositories/earningRepo";
+import { getZonedStartOfDayUtc } from "./earningController";
 
 // Sandbox shares one base URL; production uses separate hosts for token vs API
 const UAT_BASE       = "https://api-preprod.phonepe.com/apis/pg-sandbox";
@@ -158,6 +160,14 @@ export async function handleCallback(req: Request, res: Response, next: NextFunc
           method:    "UPI",
           contact:   ((order.customerDetails as Record<string, unknown>)?.phone as string) ?? "",
         });
+
+        // Record earnings for this online payment
+        try {
+          const orderDate = new Date((order as Record<string, unknown>).orderDate as Date | string);
+          await earningRepo.incrementEarnings(getZonedStartOfDayUtc(orderDate).toISOString(), total);
+        } catch (e) {
+          console.error("Error updating daily earnings on PhonePe callback:", e);
+        }
       }
     }
 

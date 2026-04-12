@@ -257,25 +257,36 @@ const updateOrderById = async (req: Request, res: Response, next: NextFunction) 
     const updatedOrder = await orderRepo.update(id, updatePayload) as Record<string, unknown> | null;
     if (!updatedOrder) return next(createHttpError(404, "Order not found after update!"));
 
-    // Ledger: record when order JUST completes with outstanding balance
+    // Ledger: record when order JUST completes with outstanding balance.
+    // Delivery / takeaway orders are excluded — cash is collected at the door,
+    // so we add to earnings instead of opening a credit ledger entry.
     if (justCompleted) {
       const finalBalanceDue = (updatedOrder.balanceDueOnOrder as number) ?? 0;
+      const orderType = (updatedOrder.orderType as string) ?? "dine-in";
+      const isDineIn = orderType === "dine-in";
+
       if (finalBalanceDue > 0) {
-        const phone = (updatedOrder.customerDetails as Record<string, unknown>)?.phone as string;
-        const name  = (updatedOrder.customerDetails as Record<string, unknown>)?.name  as string;
-        const alreadyRecorded = await ledgerRepo.getFullPaymentDueForOrder(id);
-        if (!alreadyRecorded && phone) {
-          await ledgerRepo.upsertWithTransaction({
-            customerPhone: phone,
-            customerName: name,
-            balanceDelta: finalBalanceDue,
-            transaction: {
-              orderId: id,
-              transactionType: "full_payment_due",
-              amount: finalBalanceDue,
-              notes: `Order #${id} completed — ₹${finalBalanceDue.toFixed(2)} outstanding`,
-            },
-          });
+        if (isDineIn) {
+          const phone = (updatedOrder.customerDetails as Record<string, unknown>)?.phone as string;
+          const name  = (updatedOrder.customerDetails as Record<string, unknown>)?.name  as string;
+          const alreadyRecorded = await ledgerRepo.getFullPaymentDueForOrder(id);
+          if (!alreadyRecorded && phone) {
+            await ledgerRepo.upsertWithTransaction({
+              customerPhone: phone,
+              customerName: name,
+              balanceDelta: finalBalanceDue,
+              transaction: {
+                orderId: id,
+                transactionType: "full_payment_due",
+                amount: finalBalanceDue,
+                notes: `Order #${id} completed — ₹${finalBalanceDue.toFixed(2)} outstanding`,
+              },
+            });
+          }
+        } else {
+          // Delivery/takeaway: cash collected at door — record as earnings
+          amountChangeForEarnings += finalBalanceDue;
+          await orderRepo.update(id, { paymentStatus: "Paid", amountPaid: orderTotalWithTax, balanceDueOnOrder: 0 });
         }
       }
     }
