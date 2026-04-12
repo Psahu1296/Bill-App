@@ -1,131 +1,121 @@
-import { getDb } from "../db";
+import mongoose from "mongoose";
+import { Consumable } from "../models";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function rowToApi(row: any, populateOrder = false) {
-  if (!row) return null;
-  const { id, price_per_unit, consumer_type, consumer_name, order_id, created_at, updated_at, ...rest } = row;
+function toApi(doc: any, populateOrder = false): Record<string, unknown> | null {
+  if (!doc) return null;
   const result: Record<string, unknown> = {
-    _id: String(id),
-    pricePerUnit: price_per_unit,
-    consumerType: consumer_type,
-    consumerName: consumer_name,
-    orderId: order_id != null ? String(order_id) : null,
-    createdAt: created_at,
-    updatedAt: updated_at,
-    ...rest,
+    _id: String(doc._id),
+    type: doc.type,
+    quantity: doc.quantity,
+    pricePerUnit: doc.pricePerUnit,
+    consumerType: doc.consumerType,
+    consumerName: doc.consumerName,
+    timestamp: doc.timestamp,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
   };
 
-  if (populateOrder && row.order_customer_details) {
-    try {
-      result.orderId = {
-        _id: String(order_id),
-        customerDetails: JSON.parse(row.order_customer_details),
-        orderDate: row.order_date,
-      };
-    } catch { /* ignore */ }
+  const o = doc.orderId;
+  if (populateOrder && o && typeof o === "object" && o.customerDetails) {
+    result.orderId = {
+      _id: String(o._id),
+      customerDetails: o.customerDetails,
+      orderDate: o.orderDate,
+    };
+  } else {
+    result.orderId = o != null ? String(o._id ?? o) : null;
   }
 
   return result;
 }
 
-export function create(data: {
+export async function create(data: {
   type: string; quantity: number; pricePerUnit: number;
   consumerType: string; consumerName: string;
-  orderId?: number | null; timestamp?: string;
+  orderId?: string | null; timestamp?: string;
 }) {
-  const db = getDb();
-  const result = db.prepare(
-    `INSERT INTO consumables (type, quantity, price_per_unit, consumer_type, consumer_name, order_id, timestamp)
-     VALUES (@type, @quantity, @pricePerUnit, @consumerType, @consumerName, @orderId, @timestamp)`
-  ).run({
-    type: data.type,
-    quantity: data.quantity,
-    pricePerUnit: data.pricePerUnit,
-    consumerType: data.consumerType,
-    consumerName: data.consumerName,
+  const doc = await Consumable.create({
+    ...data,
     orderId: data.orderId ?? null,
-    timestamp: data.timestamp ?? new Date().toISOString(),
+    timestamp: data.timestamp ? new Date(data.timestamp) : new Date(),
   });
-  return rowToApi(db.prepare("SELECT * FROM consumables WHERE id = ?").get(result.lastInsertRowid));
+  return toApi(doc.toObject())!;
 }
 
-export function bulkCreate(entries: Parameters<typeof create>[0][]) {
-  const db = getDb();
-  const stmt = db.prepare(
-    `INSERT INTO consumables (type, quantity, price_per_unit, consumer_type, consumer_name, order_id, timestamp)
-     VALUES (@type, @quantity, @pricePerUnit, @consumerType, @consumerName, @orderId, @timestamp)`
+export async function bulkCreate(entries: Parameters<typeof create>[0][]) {
+  if (!entries.length) return;
+  await Consumable.insertMany(
+    entries.map(e => ({
+      ...e,
+      orderId: e.orderId ?? null,
+      timestamp: e.timestamp ? new Date(e.timestamp) : new Date(),
+    }))
   );
-  const insertAll = db.transaction((list: typeof entries) => {
-    for (const e of list) stmt.run({ ...e, orderId: e.orderId ?? null, timestamp: e.timestamp ?? new Date().toISOString(), pricePerUnit: e.pricePerUnit });
-  });
-  insertAll(entries);
 }
 
-export function findAll(filters: {
+export async function findAll(filters: {
   type?: string; consumerType?: string;
   startDate?: Date; endDate?: Date;
 } = {}) {
-  const conditions: string[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const params: any[] = [];
-
-  if (filters.type)         { conditions.push("c.type = ?");          params.push(filters.type); }
-  if (filters.consumerType) { conditions.push("c.consumer_type = ?"); params.push(filters.consumerType); }
-  if (filters.startDate)    { conditions.push("c.timestamp >= ?");    params.push(filters.startDate.toISOString()); }
-  if (filters.endDate)      { conditions.push("c.timestamp <= ?");    params.push(filters.endDate.toISOString()); }
-
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  const rows = getDb().prepare(`
-    SELECT c.*,
-           o.customer_details AS order_customer_details,
-           o.order_date       AS order_date
-    FROM consumables c
-    LEFT JOIN orders o ON o.id = c.order_id
-    ${where}
-    ORDER BY c.timestamp DESC
-  `).all(...params);
-  return rows.map(r => rowToApi(r, true));
-}
-
-export function dailySummary(startDate: Date, endDate: Date) {
-  return getDb().prepare(`
-    SELECT type,
-           consumer_type                          AS consumerType,
-           SUM(quantity)                          AS totalQty,
-           SUM(quantity * price_per_unit)         AS totalRevenue
-    FROM consumables
-    WHERE timestamp >= ? AND timestamp <= ?
-    GROUP BY type, consumer_type
-  `).all(startDate.toISOString(), endDate.toISOString()) as {
-    type: string; consumerType: string; totalQty: number; totalRevenue: number;
-  }[];
-}
-
-export function update(id: string | number, updates: Record<string, unknown>) {
-  const db = getDb();
-  const colMap: Record<string, string> = {
-    type: "type", quantity: "quantity", pricePerUnit: "price_per_unit",
-    consumerType: "consumer_type", consumerName: "consumer_name",
-    orderId: "order_id", timestamp: "timestamp",
-  };
-  const sets: string[] = [];
-  const params: Record<string, unknown> = { id: Number(id) };
-  for (const [js, col] of Object.entries(colMap)) {
-    if (js in updates) { sets.push(`${col} = @${js}`); params[js] = updates[js]; }
+  const query: Record<string, any> = {};
+  if (filters.type) query.type = filters.type;
+  if (filters.consumerType) query.consumerType = filters.consumerType;
+  if (filters.startDate || filters.endDate) {
+    query.timestamp = {};
+    if (filters.startDate) query.timestamp.$gte = filters.startDate;
+    if (filters.endDate) query.timestamp.$lte = filters.endDate;
   }
-  if (!sets.length) return null;
-  sets.push("updated_at = datetime('now')");
-  db.prepare(`UPDATE consumables SET ${sets.join(", ")} WHERE id = @id`).run(params);
-  return rowToApi(db.prepare("SELECT * FROM consumables WHERE id = ?").get(Number(id)));
+
+  const docs = await Consumable.find(query)
+    .sort({ timestamp: -1 })
+    .populate({ path: "orderId", select: "customerDetails orderDate" })
+    .lean();
+  return docs.map(d => toApi(d, true));
 }
 
-export function remove(id: string | number) {
-  const db = getDb();
-  const row = db.prepare("SELECT * FROM consumables WHERE id = ?").get(Number(id));
-  db.prepare("DELETE FROM consumables WHERE id = ?").run(Number(id));
-  return rowToApi(row);
+export async function dailySummary(startDate: Date, endDate: Date) {
+  return Consumable.aggregate([
+    { $match: { timestamp: { $gte: startDate, $lte: endDate } } },
+    {
+      $group: {
+        _id: { type: "$type", consumerType: "$consumerType" },
+        totalQty:     { $sum: "$quantity" },
+        totalRevenue: { $sum: { $multiply: ["$quantity", "$pricePerUnit"] } },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        type:         "$_id.type",
+        consumerType: "$_id.consumerType",
+        totalQty:     1,
+        totalRevenue: 1,
+      },
+    },
+  ]) as Promise<{ type: string; consumerType: string; totalQty: number; totalRevenue: number }[]>;
 }
 
-export function removeByOrderId(orderId: string | number) {
-  getDb().prepare("DELETE FROM consumables WHERE order_id = ?").run(Number(orderId));
+export async function update(id: string, updates: Record<string, unknown>) {
+  if (!mongoose.isValidObjectId(id)) return null;
+  const allowed = ["type", "quantity", "pricePerUnit", "consumerType", "consumerName", "orderId", "timestamp"];
+  const patch: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (key in updates) patch[key] = updates[key];
+  }
+  if (!Object.keys(patch).length) return null;
+  const doc = await Consumable.findByIdAndUpdate(id, { $set: patch }, { new: true }).lean();
+  return toApi(doc);
+}
+
+export async function remove(id: string) {
+  if (!mongoose.isValidObjectId(id)) return null;
+  const doc = await Consumable.findByIdAndDelete(id).lean();
+  return toApi(doc);
+}
+
+export async function removeByOrderId(orderId: string) {
+  if (!mongoose.isValidObjectId(orderId)) return;
+  await Consumable.deleteMany({ orderId });
 }

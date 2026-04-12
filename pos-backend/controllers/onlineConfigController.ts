@@ -1,20 +1,19 @@
 import { Request, Response, NextFunction } from "express";
+import mongoose from "mongoose";
 import * as OnlineConfigRepo from "../repositories/onlineConfigRepo";
 
 // ── Config Flags ──────────────────────────────────────────────────────────────
 
-// GET /api/online-config/flags — PUBLIC (customer app can read these)
-export function getFlags(req: Request, res: Response, next: NextFunction) {
+export async function getFlags(_req: Request, res: Response, next: NextFunction) {
   try {
-    const data = OnlineConfigRepo.getFlags();
+    const data = await OnlineConfigRepo.getFlags();
     res.json({ success: true, data });
   } catch (err) {
     next(err);
   }
 }
 
-// PUT /api/online-config/flags — PROTECTED (admin only)
-export function updateFlags(req: Request, res: Response, next: NextFunction) {
+export async function updateFlags(req: Request, res: Response, next: NextFunction) {
   try {
     const { isOnline, deliveryEnabled, availableTimeStart, availableTimeEnd } = req.body as {
       isOnline?: boolean;
@@ -42,8 +41,8 @@ export function updateFlags(req: Request, res: Response, next: NextFunction) {
       return;
     }
 
-    const data = OnlineConfigRepo.setFlags({ isOnline, deliveryEnabled, availableTimeStart, availableTimeEnd });
-        res.json({ success: true, data });
+    const data = await OnlineConfigRepo.setFlags({ isOnline, deliveryEnabled, availableTimeStart, availableTimeEnd });
+    res.json({ success: true, data });
   } catch (err) {
     next(err);
   }
@@ -51,21 +50,19 @@ export function updateFlags(req: Request, res: Response, next: NextFunction) {
 
 // ── Delivery Areas ────────────────────────────────────────────────────────────
 
-// GET /api/online-config/delivery-areas — PUBLIC
-export function getDeliveryAreas(req: Request, res: Response, next: NextFunction) {
+export async function getDeliveryAreas(req: Request, res: Response, next: NextFunction) {
   try {
     const { all } = req.query;
     const data = all === "true"
-      ? OnlineConfigRepo.getAllAreas()
-      : OnlineConfigRepo.getActiveAreas();
+      ? await OnlineConfigRepo.getAllAreas()
+      : await OnlineConfigRepo.getActiveAreas();
     res.json({ success: true, data });
   } catch (err) {
     next(err);
   }
 }
 
-// POST /api/online-config/delivery-areas — PROTECTED
-export function addDeliveryArea(req: Request, res: Response, next: NextFunction) {
+export async function addDeliveryArea(req: Request, res: Response, next: NextFunction) {
   try {
     const { name, deliveryFee, minOrderAmount } = req.body as {
       name?: string;
@@ -76,11 +73,10 @@ export function addDeliveryArea(req: Request, res: Response, next: NextFunction)
       res.status(400).json({ success: false, message: "name is required" });
       return;
     }
-    const data = OnlineConfigRepo.addArea(name, deliveryFee ?? 0, minOrderAmount ?? 0);
-        res.status(201).json({ success: true, data });
+    const data = await OnlineConfigRepo.addArea(name, deliveryFee ?? 0, minOrderAmount ?? 0);
+    res.status(201).json({ success: true, data });
   } catch (err: unknown) {
-    // SQLite UNIQUE constraint violation
-    if (err instanceof Error && err.message.includes("UNIQUE")) {
+    if (err instanceof Error && (err.message.includes("duplicate key") || err.message.includes("UNIQUE"))) {
       res.status(409).json({ success: false, message: "Area already exists" });
       return;
     }
@@ -88,51 +84,56 @@ export function addDeliveryArea(req: Request, res: Response, next: NextFunction)
   }
 }
 
-// DELETE /api/online-config/delivery-areas/:id — PROTECTED
-export function deleteDeliveryArea(req: Request, res: Response, next: NextFunction) {
+export async function deleteDeliveryArea(req: Request, res: Response, next: NextFunction) {
   try {
     const id = String(req.params["id"]);
-    const deleted = OnlineConfigRepo.deleteArea(id);
+    if (!mongoose.isValidObjectId(id)) {
+      res.status(400).json({ success: false, message: "Invalid ID" });
+      return;
+    }
+    const deleted = await OnlineConfigRepo.deleteArea(id);
     if (!deleted) {
       res.status(404).json({ success: false, message: "Area not found" });
       return;
     }
-        res.json({ success: true, message: "Area deleted" });
+    res.json({ success: true, message: "Area deleted" });
   } catch (err) {
     next(err);
   }
 }
 
-// PATCH /api/online-config/delivery-areas/:id — PROTECTED
-// Handles: isActive toggle, deliveryFee update, minOrderAmount update (any combination)
-export function updateDeliveryArea(req: Request, res: Response, next: NextFunction) {
+export async function updateDeliveryArea(req: Request, res: Response, next: NextFunction) {
   try {
     const id = String(req.params["id"]);
+    if (!mongoose.isValidObjectId(id)) {
+      res.status(400).json({ success: false, message: "Invalid ID" });
+      return;
+    }
     const { isActive, deliveryFee, minOrderAmount } = req.body as {
       isActive?: boolean;
       deliveryFee?: number;
       minOrderAmount?: number;
     };
 
-    let data: ReturnType<typeof OnlineConfigRepo.toggleArea> = null;
+    let data: Awaited<ReturnType<typeof OnlineConfigRepo.toggleArea>> = null;
 
     if (isActive !== undefined) {
       if (typeof isActive !== "boolean") {
         res.status(400).json({ success: false, message: "isActive must be a boolean" });
         return;
       }
-      data = OnlineConfigRepo.toggleArea(id, isActive);
+      data = await OnlineConfigRepo.toggleArea(id, isActive);
     }
 
     if (deliveryFee !== undefined || minOrderAmount !== undefined) {
-      data = OnlineConfigRepo.updateArea(id, { deliveryFee, minOrderAmount });
+      data = await OnlineConfigRepo.updateArea(id, { deliveryFee, minOrderAmount });
     }
 
     if (!data) {
       res.status(404).json({ success: false, message: "Area not found" });
       return;
     }
-        res.json({ success: true, data });
+    res.json({ success: true, data });
   } catch (err) {
     next(err);
   }

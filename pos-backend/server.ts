@@ -2,7 +2,7 @@ import app from "./app";
 import connectDB from "./config/database";
 
 const startServer = async (port: number = Number(process.env.PORT) || 5001): Promise<void> => {
-  connectDB();
+  await connectDB();
   return new Promise((resolve, reject) => {
     const server = app.listen(port, "0.0.0.0", () => {
       console.log(`☑️  POS Server is listening on port ${port}`);
@@ -10,7 +10,7 @@ const startServer = async (port: number = Number(process.env.PORT) || 5001): Pro
       console.log(`[CONFIG] FRONTEND_URL=${process.env.FRONTEND_URL || "(not set)"}`);
       console.log(`[CONFIG] CUSTOMER_APP_URL=${process.env.CUSTOMER_APP_URL || "(not set)"}`);
       console.log(`[CONFIG] PHONEPE_ENV=${process.env.PHONEPE_ENV || "(not set)"}`);
-      console.log(`[CONFIG] DATABASE_PATH=${process.env.DATABASE_PATH || "dhaba-pos.db (default)"}`);
+      console.log(`[CONFIG] MONGODB_URI=${process.env.MONGODB_URI ? "Set successfully" : "(missing)"}`);
       resolve();
     });
     server.on("error", (err) => {

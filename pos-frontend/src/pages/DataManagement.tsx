@@ -382,12 +382,40 @@ const DataManagement: React.FC = () => {
                 />
               )}
 
-              {/* Sync: not available */}
+              {/* Sync (Migrate) panel */}
               {activeTab === "sync" && (
-                <div className="p-4 rounded-xl bg-dhaba-info/10 border border-dhaba-info/20 text-blue-300 text-sm text-center leading-relaxed">
-                  Cloud sync is not configured.
-                  <br />
-                  Use <span className="font-semibold">Download</span> to create a local backup.
+                <div className="space-y-4">
+                  <div className="p-4 rounded-xl bg-dhaba-info/10 border border-dhaba-info/20 text-blue-300 text-sm text-center leading-relaxed">
+                    <strong>One-Click Cloud Migration</strong><br/>
+                    Push your local SQLite database firmly into the cloud.
+                    This will find your old local `dhaba-pos.db` exactly where it is natively and automatically upload it.
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (typeof window === "undefined" || !(window as any).appBridge?.migrateDb) {
+                        setResult({ type: "error", message: "Migration can only be executed tightly within the Desktop wrapper." });
+                        return;
+                      }
+                      setProcessing(true);
+                      setResult(null);
+                      try {
+                        const res = await (window as any).appBridge.migrateDb();
+                        if (res.success) {
+                          setResult({ type: "success", message: res.message });
+                        } else {
+                          setResult({ type: "error", message: res.message || "Cloud migration failed during topology remapping." });
+                        }
+                      } catch (err: any) {
+                        setResult({ type: "error", message: err?.message || "Migration process crashed." });
+                      } finally {
+                        setProcessing(false);
+                      }
+                    }}
+                    disabled={processing}
+                    className="w-full py-3 rounded-2xl bg-blue-500 hover:bg-blue-600 text-white font-bold text-sm transition-all disabled:opacity-50"
+                  >
+                    {processing ? "Uploading & Migrating Please Wait..." : "Migrate Local Database to Cloud Server Now"}
+                  </button>
                 </div>
               )}
 

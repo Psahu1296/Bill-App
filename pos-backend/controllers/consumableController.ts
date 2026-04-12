@@ -1,4 +1,5 @@
 import { Response, NextFunction } from "express";
+import mongoose from "mongoose";
 import createHttpError from "http-errors";
 import * as consumableRepo from "../repositories/consumableRepo";
 import * as earningRepo from "../repositories/earningRepo";
@@ -18,18 +19,17 @@ const addConsumable = async (req: Request, res: Response, next: NextFunction) =>
     const resolvedPrice = pricePerUnit ?? UNIT_PRICES[type] ?? 0;
     const resolvedTimestamp = timestamp ? new Date(timestamp).toISOString() : new Date().toISOString();
 
-    const entry = consumableRepo.create({
+    const entry = await consumableRepo.create({
       type, quantity, consumerType, consumerName,
       pricePerUnit: resolvedPrice,
-      orderId: orderId != null && !isNaN(Number(orderId)) ? Number(orderId) : null,
+      orderId: orderId != null && mongoose.isValidObjectId(orderId) ? orderId : null,
       timestamp: resolvedTimestamp,
     });
 
-    // Customer sales count as revenue
     if (consumerType === "customer") {
       try {
         const dateIso = getZonedStartOfDayUtc(new Date(resolvedTimestamp)).toISOString();
-        earningRepo.incrementEarnings(dateIso, quantity * resolvedPrice);
+        await earningRepo.incrementEarnings(dateIso, quantity * resolvedPrice);
       } catch (e) { console.error("Earnings error on addConsumable:", e); }
     }
 
@@ -56,7 +56,7 @@ const getAllConsumables = async (req: Request, res: Response, next: NextFunction
       if (endDate)   filters.endDate   = getZonedEndOfDayUtc(new Date(endDate));
     }
 
-    res.status(200).json({ success: true, data: consumableRepo.findAll(filters) });
+    res.status(200).json({ success: true, data: await consumableRepo.findAll(filters) });
   } catch (error) {
     next(error);
   }
@@ -68,7 +68,7 @@ const getDailySummary = async (req: Request, res: Response, next: NextFunction) 
     const startDate = getZonedStartOfDayUtc(dateQuery);
     const endDate   = getZonedEndOfDayUtc(dateQuery);
 
-    const raw = consumableRepo.dailySummary(startDate, endDate);
+    const raw = await consumableRepo.dailySummary(startDate, endDate);
 
     const types = ["tea", "gutka", "cigarette"] as const;
     type SummaryEntry = { totalSold: number; totalRevenue: number; staffConsumed: number; ownerConsumed: number; wastedValue: number };
@@ -100,11 +100,11 @@ const getDailySummary = async (req: Request, res: Response, next: NextFunction) 
 const updateConsumable = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-    if (!id || isNaN(Number(id))) {
+    if (!id || !mongoose.isValidObjectId(id)) {
       return next(createHttpError(400, "Invalid Consumable ID format."));
     }
     const { _id, __v, ...updates } = req.body;
-    const entry = consumableRepo.update(id, updates);
+    const entry = await consumableRepo.update(id, updates);
     if (!entry) return next(createHttpError(404, "Consumable entry not found."));
     res.status(200).json({ success: true, message: "Entry updated.", data: entry });
   } catch (error) {
@@ -115,17 +115,16 @@ const updateConsumable = async (req: Request, res: Response, next: NextFunction)
 const deleteConsumable = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-    if (!id || isNaN(Number(id))) {
+    if (!id || !mongoose.isValidObjectId(id)) {
       return next(createHttpError(400, "Invalid Consumable ID format."));
     }
-    const entry = consumableRepo.remove(id) as Record<string, unknown> | null;
+    const entry = await consumableRepo.remove(id) as Record<string, unknown> | null;
     if (!entry) return next(createHttpError(404, "Consumable entry not found."));
 
-    // Reverse the revenue if it was a customer sale
     if (entry.consumerType === "customer") {
       try {
         const dateIso = getZonedStartOfDayUtc(new Date(entry.timestamp as string)).toISOString();
-        earningRepo.incrementEarnings(dateIso, -((entry.quantity as number) * (entry.pricePerUnit as number)));
+        await earningRepo.incrementEarnings(dateIso, -((entry.quantity as number) * (entry.pricePerUnit as number)));
       } catch (e) { console.error("Earnings error on deleteConsumable:", e); }
     }
 

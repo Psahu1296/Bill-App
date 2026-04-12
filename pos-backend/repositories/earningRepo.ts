@@ -1,72 +1,65 @@
-import { getDb } from "../db";
+import { DailyEarning, Order } from "../models";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function rowToApi(row: any) {
-  if (!row) return null;
-  const { id, total_earnings, percentage_change_from_yesterday, created_at, updated_at, ...rest } = row;
+function toApi(doc: any) {
+  if (!doc) return null;
   return {
-    _id: String(id),
-    totalEarnings: total_earnings,
-    percentageChangeFromYesterday: percentage_change_from_yesterday,
-    createdAt: created_at,
-    updatedAt: updated_at,
-    ...rest,
+    _id: String(doc._id),
+    date: doc.date,
+    totalEarnings: doc.totalEarnings,
+    percentageChangeFromYesterday: doc.percentageChangeFromYesterday,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
   };
 }
 
-export function findByDate(dateIso: string) {
-  const row = getDb().prepare("SELECT * FROM daily_earnings WHERE date = ?").get(dateIso);
-  return rowToApi(row);
+export async function findByDate(dateIso: string) {
+  const doc = await DailyEarning.findOne({ date: new Date(dateIso) }).lean();
+  return toApi(doc);
 }
 
-export function findInRange(startIso: string, endIso: string) {
-  return getDb()
-    .prepare("SELECT * FROM daily_earnings WHERE date >= ? AND date <= ? ORDER BY date ASC")
-    .all(startIso, endIso)
-    .map(rowToApi);
+export async function findInRange(startIso: string, endIso: string) {
+  const docs = await DailyEarning.find({
+    date: { $gte: new Date(startIso), $lte: new Date(endIso) },
+  }).sort({ date: 1 }).lean();
+  return docs.map(toApi);
 }
 
-/** Sums total_earnings for a date range — equivalent to Mongoose aggregate $group $sum */
-export function sumInRange(startIso: string, endIso: string): number {
-  const row = getDb().prepare(
-    "SELECT COALESCE(SUM(total_earnings), 0) AS total FROM daily_earnings WHERE date >= ? AND date <= ?"
-  ).get(startIso, endIso) as { total: number };
-  return row.total;
+export async function sumInRange(startIso: string, endIso: string): Promise<number> {
+  const result = await DailyEarning.aggregate([
+    { $match: { date: { $gte: new Date(startIso), $lte: new Date(endIso) } } },
+    { $group: { _id: null, total: { $sum: "$totalEarnings" } } },
+  ]);
+  return result[0]?.total ?? 0;
 }
 
-/** Upsert — replaces findOneAndUpdate(upsert:true) */
-export function upsert(dateIso: string, totalEarnings: number, percentageChange: number) {
-  getDb().prepare(`
-    INSERT INTO daily_earnings (date, total_earnings, percentage_change_from_yesterday)
-    VALUES (@date, @totalEarnings, @percentageChange)
-    ON CONFLICT(date) DO UPDATE SET
-      total_earnings = excluded.total_earnings,
-      percentage_change_from_yesterday = excluded.percentage_change_from_yesterday,
-      updated_at = datetime('now')
-  `).run({ date: dateIso, totalEarnings, percentageChange });
-  return findByDate(dateIso)!;
+export async function upsert(dateIso: string, totalEarnings: number, percentageChange: number) {
+  const doc = await DailyEarning.findOneAndUpdate(
+    { date: new Date(dateIso) },
+    { $set: { totalEarnings, percentageChangeFromYesterday: percentageChange } },
+    { upsert: true, new: true }
+  ).lean();
+  return toApi(doc)!;
 }
 
-/** Atomically increment total_earnings for a date */
-export function incrementEarnings(dateIso: string, delta: number) {
-  getDb().prepare(`
-    INSERT INTO daily_earnings (date, total_earnings, percentage_change_from_yesterday)
-    VALUES (@date, @delta, 0)
-    ON CONFLICT(date) DO UPDATE SET
-      total_earnings = total_earnings + excluded.total_earnings,
-      updated_at = datetime('now')
-  `).run({ date: dateIso, delta });
-  return findByDate(dateIso)!;
+export async function incrementEarnings(dateIso: string, delta: number) {
+  const doc = await DailyEarning.findOneAndUpdate(
+    { date: new Date(dateIso) },
+    { $inc: { totalEarnings: delta } },
+    { upsert: true, new: true }
+  ).lean();
+  return toApi(doc)!;
 }
 
-/** Sum paid orders' totalWithTax for a given date range — used by calculateAndSaveDailyEarnings */
-export function sumPaidOrdersInRange(startIso: string, endIso: string): number {
-  const row = getDb().prepare(`
-    SELECT COALESCE(SUM(json_extract(bills, '$.totalWithTax')), 0) AS total
-    FROM orders
-    WHERE payment_status = 'Paid'
-      AND order_date >= ?
-      AND order_date <= ?
-  `).get(startIso, endIso) as { total: number };
-  return row.total;
+export async function sumPaidOrdersInRange(startIso: string, endIso: string): Promise<number> {
+  const result = await Order.aggregate([
+    {
+      $match: {
+        paymentStatus: "Paid",
+        orderDate: { $gte: new Date(startIso), $lte: new Date(endIso) },
+      },
+    },
+    { $group: { _id: null, total: { $sum: "$bills.totalWithTax" } } },
+  ]);
+  return result[0]?.total ?? 0;
 }

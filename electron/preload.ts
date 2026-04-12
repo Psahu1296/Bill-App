@@ -13,21 +13,6 @@ contextBridge.exposeInMainWorld("appBridge", {
   // ── Platform info ──────────────────────────────────────────────────────────
   platform: process.platform,
 
-  // ── Cloudflare Tunnel ──────────────────────────────────────────────────────
-  /** Returns the current public tunnel URL, or null if the tunnel isn't running. */
-  getTunnelUrl: (): Promise<string | null> =>
-    ipcRenderer.invoke("tunnel:get-url"),
-
-  /**
-   * Called when the tunnel URL becomes available (fires once after startup).
-   * Returns an unsubscribe function.
-   */
-  onTunnelUrl: (callback: (url: string | null) => void) => {
-    const handler = (_: Electron.IpcRendererEvent, url: string | null) => callback(url);
-    ipcRenderer.on("tunnel:url", handler);
-    return () => ipcRenderer.removeListener("tunnel:url", handler);
-  },
-
   // ── Auto-updater controls ──────────────────────────────────────────────────
   /** Ask the main process to start checking for a new release */
   checkForUpdates: () => ipcRenderer.send("updater:check"),
@@ -41,20 +26,12 @@ contextBridge.exposeInMainWorld("appBridge", {
   /** Open a URL in the system default browser */
   openExternal: (url: string) => ipcRenderer.send("shell:open-external", url),
 
-  // ── Server status ───────────────────────────────────────────────────────────
-  /** Returns current port, preferred port, tunnel URL, and tunnel process state */
-  getServerInfo: (): Promise<{
-    resolvedPort: number;
-    preferredPort: number;
-    tunnelUrl: string | null;
-    tunnelRunning: boolean;
-  }> => ipcRenderer.invoke("server:info"),
-
-  /** Kill and restart the Cloudflare tunnel process */
-  restartTunnel: () => ipcRenderer.send("tunnel:restart"),
+  /** Push the local SQLite database to the cloud migration service */
+  migrateDb: (): Promise<{ success: boolean; message: string }> => ipcRenderer.invoke("migrate:run"),
 
   /**
    * Subscribe to update lifecycle events from the main process.
+
    * Returns an unsubscribe function — call it in useEffect cleanup.
    */
   onUpdateStatus: (callback: (status: UpdateStatus) => void) => {

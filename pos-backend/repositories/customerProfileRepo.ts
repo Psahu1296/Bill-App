@@ -1,76 +1,73 @@
-import { getDb } from "../db";
+import { CustomerProfile } from "../models";
 import { normalizePhone } from "../utils/normalizePhone";
 
-interface CustomerProfile {
+interface CustomerProfileData {
   phone: string;
   name: string;
   preferredArea: string;
   totalOrders: number;
-  lastOrderedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
+  lastOrderedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-function rowToProfile(row: Record<string, unknown>): CustomerProfile {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toApi(doc: any): CustomerProfileData | null {
+  if (!doc) return null;
   return {
-    phone: row["phone"] as string,
-    name: row["name"] as string,
-    preferredArea: row["preferred_area"] as string,
-    totalOrders: row["total_orders"] as number,
-    lastOrderedAt: (row["last_ordered_at"] as string) ?? null,
-    createdAt: row["created_at"] as string,
-    updatedAt: row["updated_at"] as string,
+    phone: doc.phone,
+    name: doc.name,
+    preferredArea: doc.preferredArea ?? "",
+    totalOrders: doc.totalOrders ?? 0,
+    lastOrderedAt: doc.lastOrderedAt ?? null,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
   };
 }
 
-export function getProfile(phone: string): CustomerProfile | null {
+export async function getProfile(phone: string): Promise<CustomerProfileData | null> {
   const normalized = normalizePhone(phone);
-  const row = getDb()
-    .prepare("SELECT * FROM customer_profiles WHERE phone = ?")
-    .get(normalized) as Record<string, unknown> | undefined;
-  return row ? rowToProfile(row) : null;
+  const doc = await CustomerProfile.findOne({ phone: normalized }).lean();
+  return toApi(doc);
 }
 
-export function upsertProfile(data: {
+export async function upsertProfile(data: {
   phone: string;
   name: string;
   preferred_area?: string;
-}): CustomerProfile {
-  const db = getDb();
+}): Promise<CustomerProfileData> {
   const normalized = normalizePhone(data.phone);
-  db.prepare(`
-    INSERT INTO customer_profiles (phone, name, preferred_area, total_orders, last_ordered_at, updated_at)
-    VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
-    ON CONFLICT(phone) DO UPDATE SET
-      name            = excluded.name,
-      preferred_area  = CASE WHEN excluded.preferred_area != '' THEN excluded.preferred_area ELSE preferred_area END,
-      total_orders    = total_orders + 1,
-      last_ordered_at = datetime('now'),
-      updated_at      = datetime('now')
-  `).run(normalized, data.name.trim(), (data.preferred_area ?? "").trim());
-  return getProfile(normalized)!;
+  const doc = await CustomerProfile.findOneAndUpdate(
+    { phone: normalized },
+    {
+      $set: {
+        name: data.name.trim(),
+        ...(data.preferred_area?.trim()
+          ? { preferredArea: data.preferred_area.trim() }
+          : {}),
+        lastOrderedAt: new Date(),
+      },
+      $inc: { totalOrders: 1 },
+      $setOnInsert: { phone: normalized },
+    },
+    { upsert: true, new: true }
+  ).lean();
+  return toApi(doc)!;
 }
 
-export function updateProfile(
+export async function updateProfile(
   phone: string,
   updates: { name?: string; preferred_area?: string }
-): CustomerProfile | null {
-  const db = getDb();
+): Promise<CustomerProfileData | null> {
   const normalized = normalizePhone(phone);
-  const sets: string[] = ["updated_at = datetime('now')"];
-  const params: unknown[] = [];
-
-  if (updates.name !== undefined) {
-    sets.push("name = ?");
-    params.push(updates.name.trim());
-  }
-  if (updates.preferred_area !== undefined) {
-    sets.push("preferred_area = ?");
-    params.push(updates.preferred_area.trim());
-  }
-
-  if (sets.length === 1) return getProfile(normalized); // nothing to update
-  params.push(normalized);
-  db.prepare(`UPDATE customer_profiles SET ${sets.join(", ")} WHERE phone = ?`).run(...params);
-  return getProfile(normalized);
+  const patch: Record<string, unknown> = {};
+  if (updates.name !== undefined) patch.name = updates.name.trim();
+  if (updates.preferred_area !== undefined) patch.preferredArea = updates.preferred_area.trim();
+  if (!Object.keys(patch).length) return getProfile(normalized);
+  const doc = await CustomerProfile.findOneAndUpdate(
+    { phone: normalized },
+    { $set: patch },
+    { new: true }
+  ).lean();
+  return toApi(doc);
 }

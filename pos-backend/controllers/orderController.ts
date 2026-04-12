@@ -1,4 +1,5 @@
 import { Response, NextFunction } from "express";
+import mongoose from "mongoose";
 import createHttpError from "http-errors";
 import bcrypt from "bcryptjs";
 import * as orderRepo from "../repositories/orderRepo";
@@ -17,18 +18,14 @@ const GUTKA_KEYWORDS = ["gutka", "pauch", "pan masala", "pouch", "manikchand", "
 
 const getConsumableType = (dishName: string, dishCategory?: string): "tea" | "gutka" | "cigarette" | null => {
   const n = dishName.toLowerCase();
-  // Tea/chai — match by name
   if (n.includes("tea") || n.includes("chai")) return "tea";
-  // Cigarette — match by name
   if (CIGARETTE_KEYWORDS.some(kw => n.includes(kw))) return "cigarette";
-  // Gutka — match by name
   if (GUTKA_KEYWORDS.some(kw => n.includes(kw))) return "gutka";
-  // Tobacco category fallback (for future dishes)
   if (dishCategory === "tobacco") return "gutka";
   return null;
 };
 
-const syncConsumablesFromOrder = (order: Record<string, unknown>) => {
+const syncConsumablesFromOrder = async (order: Record<string, unknown>) => {
   try {
     const items: Record<string, unknown>[] = (order.items as Record<string, unknown>[]) ?? [];
     if (items.length === 0) return;
@@ -36,8 +33,8 @@ const syncConsumablesFromOrder = (order: Record<string, unknown>) => {
     const entries: Parameters<typeof consumableRepo.bulkCreate>[0] = [];
     for (const item of items) {
       const dishId = item.id as string;
-      if (!dishId || isNaN(Number(dishId))) continue;
-      const dish = dishRepo.findById(dishId);
+      if (!dishId || !mongoose.isValidObjectId(dishId)) continue;
+      const dish = await dishRepo.findById(dishId);
       if (!dish) continue;
       const consumableType = getConsumableType(
         (dish as Record<string, unknown>).name as string,
@@ -50,13 +47,15 @@ const syncConsumablesFromOrder = (order: Record<string, unknown>) => {
         pricePerUnit: item.pricePerQuantity as number,
         consumerType: "customer",
         consumerName: ((order.customerDetails as Record<string, unknown>)?.name as string) ?? "Customer",
-        orderId: Number(order._id),
-        timestamp: (order.orderDate as string) ?? new Date().toISOString(),
+        orderId: order._id as string,
+        timestamp: (order.orderDate instanceof Date)
+          ? (order.orderDate as Date).toISOString()
+          : (order.orderDate as string) ?? new Date().toISOString(),
       });
     }
 
     if (entries.length > 0) {
-      consumableRepo.bulkCreate(entries);
+      await consumableRepo.bulkCreate(entries);
       console.log(`✅ Auto-synced ${entries.length} consumable(s) from order ${order._id}`);
     }
   } catch (err) {
@@ -78,10 +77,10 @@ const addOrder = async (req: Request, res: Response, next: NextFunction) => {
     }
 
     const tableId = orderData.table;
-    if (!tableId || isNaN(Number(tableId))) {
+    if (!tableId || !mongoose.isValidObjectId(tableId)) {
       return next(createHttpError(400, "Invalid Table ID in order data!"));
     }
-    const table = tableRepo.findById(tableId);
+    const table = await tableRepo.findById(tableId);
     if (!table) return next(createHttpError(404, "Table not found for order!"));
 
     const totalBill = orderData.bills?.totalWithTax;
@@ -89,96 +88,81 @@ const addOrder = async (req: Request, res: Response, next: NextFunction) => {
 
     // If _id provided — update existing order
     if (_id) {
-      if (isNaN(Number(_id))) return next(createHttpError(400, "Invalid Order ID format in body for update!"));
+      if (!mongoose.isValidObjectId(_id)) return next(createHttpError(400, "Invalid Order ID format in body for update!"));
 
-      // Preserve / assign batch numbers so items added by staff go to the next round
       if (Array.isArray(orderData.items) && orderData.items.length > 0) {
-        const existing = orderRepo.findById(_id, false) as Record<string, unknown> | null;
+        const existing = await orderRepo.findById(_id, false) as Record<string, unknown> | null;
         if (existing) {
           const existingItems = (existing.items as Array<Record<string, unknown>>) ?? [];
-          // map: "id_variantSize" → batch number from DB
           const batchMap = new Map<string, number>();
           let maxBatch = 1;
           for (const item of existingItems) {
-            const key = `${item.id}_${item.variantSize ?? ''}`;
+            const key = `${item.id}_${item.variantSize ?? ""}`;
             const b = Number(item.batch) || 1;
             batchMap.set(key, b);
             if (b > maxBatch) maxBatch = b;
           }
           const nextBatch = maxBatch + 1;
           orderData.items = orderData.items.map((item: Record<string, unknown>) => {
-            const key = `${item.id}_${item.variantSize ?? ''}`;
+            const key = `${item.id}_${item.variantSize ?? ""}`;
             return { ...item, batch: batchMap.has(key) ? batchMap.get(key) : nextBatch };
           });
         }
       }
 
-      const db = require("../db").getDb();
-      let updatedOrder: Record<string, unknown>;
-      try {
-        updatedOrder = db.transaction(() => {
-          const result = orderRepo.update(_id, {
-            ...orderData,
-            tableId: Number(tableId),
-            amountPaid,
-            balanceDueOnOrder,
-          }) as Record<string, unknown> | null;
-          if (!result) throw new Error("Order not found for update");
-          consumableRepo.removeByOrderId(_id);
-          syncConsumablesFromOrder(result);
-          return result;
-        })();
-      } catch (e) {
-        const msg = (e as Error).message;
-        if (msg === "Order not found for update") return next(createHttpError(404, "Order not found for update!"));
-        throw e;
-      }
+      const updatedOrder = await orderRepo.update(_id, {
+        ...orderData,
+        tableId,
+        amountPaid,
+        balanceDueOnOrder,
+      }) as Record<string, unknown> | null;
+
+      if (!updatedOrder) return next(createHttpError(404, "Order not found for update!"));
+
+      await consumableRepo.removeByOrderId(_id);
+      await syncConsumablesFromOrder(updatedOrder);
+
       return res.status(200).json({ success: true, message: "Order updated!", data: updatedOrder });
     }
 
-    // Create new order (wrapped in a SQLite transaction for atomicity)
+    // Create new order
     const isVirtualTable = Boolean((table as Record<string, unknown>).isVirtual);
 
-    const db = require("../db").getDb();
-    const createOrderTx = db.transaction(() => {
-      const newOrder = orderRepo.create({
-        customerDetails: orderData.customerDetails,
-        orderStatus: orderData.orderStatus ?? "Pending",
-        orderDate: orderData.orderDate,
-        bills: orderData.bills,
-        items: orderData.items ?? [],
-        tableId: Number(tableId),
-        paymentMethod: orderData.paymentMethod,
-        paymentData: orderData.paymentData,
-        paymentStatus: orderData.paymentStatus ?? "Pending",
-        amountPaid,
-        balanceDueOnOrder,
-      });
+    const newOrder = await orderRepo.create({
+      customerDetails: orderData.customerDetails,
+      orderStatus: orderData.orderStatus ?? "Pending",
+      orderDate: orderData.orderDate,
+      bills: orderData.bills,
+      items: orderData.items ?? [],
+      tableId,
+      paymentMethod: orderData.paymentMethod,
+      paymentData: orderData.paymentData,
+      paymentStatus: orderData.paymentStatus ?? "Pending",
+      amountPaid,
+      balanceDueOnOrder,
+      orderType: orderData.orderType,
+      deliveryAddress: orderData.deliveryAddress,
+    }) as Record<string, unknown>;
 
-      // Only mark physical tables as Booked — virtual tables support multiple concurrent orders
-      if (!isVirtualTable) {
-        tableRepo.update(tableId, { status: "Booked", currentOrderId: Number(newOrder!._id) });
-      }
+    // Mark physical tables as Booked
+    if (!isVirtualTable) {
+      await tableRepo.update(tableId, { status: "Booked", currentOrderId: newOrder._id as string });
+    }
 
-      return newOrder!;
-    });
-
-    const newOrder = createOrderTx() as Record<string, unknown>;
-
-    // Daily earnings: count amountPaid immediately
+    // Daily earnings
     if (amountPaid > 0) {
       try {
         const dateIso = getZonedStartOfDayUtc(
-          new Date((newOrder.orderDate as string) ?? new Date())
+          new Date((newOrder.orderDate as Date | string | undefined) ?? new Date())
         ).toISOString();
-        earningRepo.incrementEarnings(dateIso, amountPaid);
+        await earningRepo.incrementEarnings(dateIso, amountPaid);
       } catch (e) { console.error("Earnings error on addOrder:", e); }
     }
 
-    // Increment dish order counts for popularity tracking
+    // Increment dish order counts
     try {
       const items = (newOrder.items as { id: string; quantity: number }[]) ?? [];
-      if (items.length > 0) dishRepo.incrementOrderCounts(items);
+      if (items.length > 0) await dishRepo.incrementOrderCounts(items);
     } catch (e) { console.error("Failed to increment dish order counts:", e); }
 
     // Auto-sync consumables (fire-and-forget)
@@ -193,9 +177,9 @@ const addOrder = async (req: Request, res: Response, next: NextFunction) => {
 const getOrderById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-    if (!id || isNaN(Number(id))) return next(createHttpError(400, "Invalid id!"));
+    if (!id || !mongoose.isValidObjectId(id)) return next(createHttpError(400, "Invalid id!"));
 
-    const order = orderRepo.findById(id, true);
+    const order = await orderRepo.findById(id, true);
     if (!order) return next(createHttpError(404, "Order not found!"));
     res.status(200).json({ success: true, data: order });
   } catch (error) {
@@ -206,7 +190,7 @@ const getOrderById = async (req: Request, res: Response, next: NextFunction) => 
 const getOrders = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { startDate, endDate, tableId, customerPhone, orderStatus, paymentStatus } = req.query;
-    const orders = orderRepo.findAll({
+    const orders = await orderRepo.findAll({
       startDate: startDate as string | undefined,
       endDate:   endDate   as string | undefined,
       tableId:   tableId   as string | undefined,
@@ -223,15 +207,15 @@ const getOrders = async (req: Request, res: Response, next: NextFunction) => {
 const updateOrderById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-    if (!id || isNaN(Number(id))) return next(createHttpError(400, "Invalid Order ID format!"));
+    if (!id || !mongoose.isValidObjectId(id)) return next(createHttpError(400, "Invalid Order ID format!"));
 
     const { _id: _bodyId, id: _bodyId2, ...requestBodyUpdates } = req.body;
 
-    const currentOrder = orderRepo.findById(id, false) as Record<string, unknown> | null;
+    const currentOrder = await orderRepo.findById(id, false) as Record<string, unknown> | null;
     if (!currentOrder) return next(createHttpError(404, "Order not found!"));
 
-    const orderTotalWithTax = ((currentOrder.bills as Record<string,unknown>)?.totalWithTax as number) ?? 0;
-    const orderCreationDate = new Date((currentOrder.orderDate as string));
+    const orderTotalWithTax = ((currentOrder.bills as Record<string, unknown>)?.totalWithTax as number) ?? 0;
+    const orderCreationDate = new Date((currentOrder.orderDate as Date | string));
     const oldPaymentStatus  = currentOrder.paymentStatus as string;
     const oldAmountPaid     = currentOrder.amountPaid as number;
 
@@ -242,7 +226,6 @@ const updateOrderById = async (req: Request, res: Response, next: NextFunction) 
       updatePayload.balanceDueOnOrder = Math.max(0, orderTotalWithTax - requestBodyUpdates.amountPaid);
     }
 
-    // Determine earning delta
     let amountChangeForEarnings = 0;
     if (requestBodyUpdates.amountPaid !== undefined) {
       amountChangeForEarnings = (updatePayload.amountPaid as number) - oldAmountPaid;
@@ -259,75 +242,67 @@ const updateOrderById = async (req: Request, res: Response, next: NextFunction) 
       updatePayload.balanceDueOnOrder = orderTotalWithTax;
     }
 
-    // Determine justCompleted before the transaction (pure logic, no DB)
     const justCompleted =
       requestBodyUpdates.orderStatus === "Completed" &&
       (currentOrder.orderStatus as string) !== "Completed";
 
-    const tableId = currentOrder.table as string | null;
+    const tableRef = currentOrder.table;
+    const tableId = tableRef
+      ? typeof tableRef === "object"
+        ? String((tableRef as Record<string, unknown>)._id)
+        : String(tableRef)
+      : null;
 
-    const db = require("../db").getDb();
-    let updatedOrder: Record<string, unknown>;
-    try {
-      updatedOrder = db.transaction(() => {
-        const result = orderRepo.update(id, updatePayload) as Record<string, unknown> | null;
-        if (!result) throw new Error("Order not found after update");
+    const updatedOrder = await orderRepo.update(id, updatePayload) as Record<string, unknown> | null;
+    if (!updatedOrder) return next(createHttpError(404, "Order not found after update!"));
 
-        // Ledger: only record when the order JUST transitions to Completed with outstanding balance
-        if (justCompleted) {
-          const finalBalanceDue = (result.balanceDueOnOrder as number) ?? 0;
-          if (finalBalanceDue > 0) {
-            const phone = (result.customerDetails as Record<string,unknown>)?.phone as string;
-            const name  = (result.customerDetails as Record<string,unknown>)?.name  as string;
-            const alreadyRecorded = ledgerRepo.getFullPaymentDueForOrder(Number(result._id));
-            if (!alreadyRecorded && phone) {
-              ledgerRepo.upsertWithTransaction({
-                customerPhone: phone,
-                customerName: name,
-                balanceDelta: finalBalanceDue,
-                transaction: {
-                  orderId: Number(result._id),
-                  transactionType: "full_payment_due",
-                  amount: finalBalanceDue,
-                  notes: `Order #${result._id} completed — ₹${finalBalanceDue.toFixed(2)} outstanding`,
-                },
-              });
-            }
-          }
+    // Ledger: record when order JUST completes with outstanding balance
+    if (justCompleted) {
+      const finalBalanceDue = (updatedOrder.balanceDueOnOrder as number) ?? 0;
+      if (finalBalanceDue > 0) {
+        const phone = (updatedOrder.customerDetails as Record<string, unknown>)?.phone as string;
+        const name  = (updatedOrder.customerDetails as Record<string, unknown>)?.name  as string;
+        const alreadyRecorded = await ledgerRepo.getFullPaymentDueForOrder(id);
+        if (!alreadyRecorded && phone) {
+          await ledgerRepo.upsertWithTransaction({
+            customerPhone: phone,
+            customerName: name,
+            balanceDelta: finalBalanceDue,
+            transaction: {
+              orderId: id,
+              transactionType: "full_payment_due",
+              amount: finalBalanceDue,
+              notes: `Order #${id} completed — ₹${finalBalanceDue.toFixed(2)} outstanding`,
+            },
+          });
         }
+      }
+    }
 
-        // Earnings delta
-        if (amountChangeForEarnings !== 0) {
-          earningRepo.incrementEarnings(
-            getZonedStartOfDayUtc(orderCreationDate).toISOString(),
-            amountChangeForEarnings
-          );
+    // Earnings delta
+    if (amountChangeForEarnings !== 0) {
+      await earningRepo.incrementEarnings(
+        getZonedStartOfDayUtc(orderCreationDate).toISOString(),
+        amountChangeForEarnings
+      );
+    }
+
+    // Auto table status
+    if (tableId && mongoose.isValidObjectId(tableId)) {
+      const targetTable = await tableRepo.findById(tableId) as Record<string, unknown> | null;
+      if (targetTable && String(targetTable.currentOrder) === id) {
+        const isSettled   = updatedOrder.orderStatus === "Completed" && updatedOrder.paymentStatus === "Paid";
+        const isCancelled = updatedOrder.orderStatus === "Cancelled";
+        if ((isSettled || isCancelled) && targetTable.status !== "Available") {
+          await tableRepo.update(tableId, { status: "Available", currentOrderId: null });
         }
+      }
+    }
 
-        // Auto table status
-        if (tableId) {
-          const targetTable = tableRepo.findById(tableId) as Record<string, unknown> | null;
-          if (targetTable && String(targetTable.currentOrder) === String(currentOrder._id)) {
-            const isSettled   = result.orderStatus === "Completed" && result.paymentStatus === "Paid";
-            const isCancelled = result.orderStatus === "Cancelled";
-            if ((isSettled || isCancelled) && targetTable.status !== "Available") {
-              tableRepo.update(tableId, { status: "Available", currentOrderId: null });
-            }
-          }
-        }
-
-        // Re-sync consumables if items changed
-        if (requestBodyUpdates.items !== undefined) {
-          consumableRepo.removeByOrderId(id);
-          syncConsumablesFromOrder(result);
-        }
-
-        return result;
-      })();
-    } catch (e) {
-      const msg = (e as Error).message;
-      if (msg === "Order not found after update") return next(createHttpError(404, "Order not found after update!"));
-      throw e;
+    // Re-sync consumables if items changed
+    if (requestBodyUpdates.items !== undefined) {
+      await consumableRepo.removeByOrderId(id);
+      await syncConsumablesFromOrder(updatedOrder);
     }
 
     res.status(200).json({ success: true, message: "Order updated successfully!", data: updatedOrder });
@@ -339,67 +314,67 @@ const updateOrderById = async (req: Request, res: Response, next: NextFunction) 
 const deleteOrderById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-    if (!id || isNaN(Number(id))) return next(createHttpError(400, "Invalid Order ID!"));
+    if (!id || !mongoose.isValidObjectId(id)) return next(createHttpError(400, "Invalid Order ID!"));
 
-    // Require the requesting user's password before allowing a destructive delete
     const { password } = req.body as { password?: string };
     if (!password) return next(createHttpError(400, "Password is required to delete an order."));
-    const currentUser = userRepo.findById((req.user as Record<string, unknown>)._id as string) as Record<string, unknown> | null;
+    const currentUser = await userRepo.findById((req.user as Record<string, unknown>)._id as string) as Record<string, unknown> | null;
     if (!currentUser) return next(createHttpError(401, "User not found."));
     const isMatch = await bcrypt.compare(password, currentUser.password as string);
     if (!isMatch) return next(createHttpError(401, "Incorrect password."));
 
-    const order = orderRepo.findById(id, false) as Record<string, unknown> | null;
+    const order = await orderRepo.findById(id, false) as Record<string, unknown> | null;
     if (!order) return next(createHttpError(404, "Order not found!"));
 
     const amountPaid       = (order.amountPaid as number) ?? 0;
-    const orderTotal       = ((order.bills as Record<string, unknown>)?.totalWithTax as number) ?? 0;
-    const balanceDue       = Math.max(0, orderTotal - amountPaid);
-    const orderDate        = new Date(order.orderDate as string);
+    const orderDate        = new Date(order.orderDate as Date | string);
     const customerDetails  = order.customerDetails as Record<string, unknown>;
     const phone            = customerDetails?.phone as string;
     const name             = customerDetails?.name as string;
 
-    // Look up ledger entry before the transaction (read-only, safe outside)
-    const ledgerEntry = phone ? ledgerRepo.getFullPaymentDueForOrder(Number(id)) : null;
-    const tableId = order.table as string | null;
+    const tableRef = order.table;
+    const tableId = tableRef
+      ? typeof tableRef === "object"
+        ? String((tableRef as Record<string, unknown>)._id)
+        : String(tableRef)
+      : null;
 
-    const db = require("../db").getDb();
-    db.transaction(() => {
-      // Reverse ledger — only if a full_payment_due entry was recorded for this order
-      if (phone && ledgerEntry) {
-        ledgerRepo.upsertWithTransaction({
-          customerPhone: phone,
-          customerName: name,
-          balanceDelta: -ledgerEntry.amount,
-          transaction: {
-            orderId: Number(id),
-            transactionType: "balance_decreased",
-            amount: ledgerEntry.amount,
-            notes: `Order #${id} deleted — ₹${ledgerEntry.amount.toFixed(2)} reversed`,
-          },
-        });
+    // Look up ledger entry before deletion
+    const ledgerEntry = phone ? await ledgerRepo.getFullPaymentDueForOrder(id) : null;
+
+    // Reverse ledger
+    if (phone && ledgerEntry) {
+      await ledgerRepo.upsertWithTransaction({
+        customerPhone: phone,
+        customerName: name,
+        balanceDelta: -ledgerEntry.amount,
+        transaction: {
+          orderId: id,
+          transactionType: "balance_decreased",
+          amount: ledgerEntry.amount,
+          notes: `Order #${id} deleted — ₹${ledgerEntry.amount.toFixed(2)} reversed`,
+        },
+      });
+    }
+
+    // Reverse earnings
+    if (amountPaid > 0) {
+      await earningRepo.incrementEarnings(
+        getZonedStartOfDayUtc(orderDate).toISOString(),
+        -amountPaid
+      );
+    }
+
+    // Free the table
+    if (tableId && mongoose.isValidObjectId(tableId)) {
+      const table = await tableRepo.findById(tableId) as Record<string, unknown> | null;
+      if (table && String(table.currentOrder) === id) {
+        await tableRepo.update(tableId, { status: "Available", currentOrderId: null });
       }
+    }
 
-      // Reverse earnings
-      if (amountPaid > 0) {
-        earningRepo.incrementEarnings(
-          getZonedStartOfDayUtc(orderDate).toISOString(),
-          -amountPaid
-        );
-      }
-
-      // Free the table if it was booked for this order
-      if (tableId) {
-        const table = tableRepo.findById(tableId) as Record<string, unknown> | null;
-        if (table && String(table.currentOrder) === String(id)) {
-          tableRepo.update(tableId, { status: "Available", currentOrderId: null });
-        }
-      }
-
-      consumableRepo.removeByOrderId(id);
-      orderRepo.remove(id);
-    })();
+    await consumableRepo.removeByOrderId(id);
+    await orderRepo.remove(id);
 
     res.status(200).json({ success: true, message: "Order deleted successfully!" });
   } catch (error) {

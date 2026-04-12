@@ -3,15 +3,14 @@ import * as ProfileRepo from "../repositories/customerProfileRepo";
 import { normalizePhone } from "../utils/normalizePhone";
 
 // GET /api/customer/profile/:phone — PUBLIC
-// Returns saved profile or { data: null } — never 404
-export function getCustomerProfile(req: Request, res: Response, next: NextFunction) {
+export async function getCustomerProfile(req: Request, res: Response, next: NextFunction) {
   try {
     const phone = normalizePhone(String(req.params["phone"] ?? ""));
     if (phone.length < 10) {
       res.status(400).json({ success: false, message: "Invalid phone number" });
       return;
     }
-    const data = ProfileRepo.getProfile(phone);
+    const data = await ProfileRepo.getProfile(phone);
     res.json({ success: true, data: data ?? null });
   } catch (err) {
     next(err);
@@ -19,8 +18,7 @@ export function getCustomerProfile(req: Request, res: Response, next: NextFuncti
 }
 
 // POST /api/customer/profile — PUBLIC
-// Upserts profile; increments total_orders counter
-export function upsertCustomerProfile(req: Request, res: Response, next: NextFunction) {
+export async function upsertCustomerProfile(req: Request, res: Response, next: NextFunction) {
   try {
     const { phone, name, preferredArea } = req.body as {
       phone?: string;
@@ -37,7 +35,7 @@ export function upsertCustomerProfile(req: Request, res: Response, next: NextFun
       return;
     }
 
-    const data = ProfileRepo.upsertProfile({
+    const data = await ProfileRepo.upsertProfile({
       phone,
       name,
       preferred_area: preferredArea,
@@ -49,8 +47,7 @@ export function upsertCustomerProfile(req: Request, res: Response, next: NextFun
 }
 
 // PATCH /api/customer/profile/:phone — PUBLIC
-// Updates only the fields provided (name and/or preferredArea)
-export function updateCustomerProfile(req: Request, res: Response, next: NextFunction) {
+export async function updateCustomerProfile(req: Request, res: Response, next: NextFunction) {
   try {
     const phone = normalizePhone(String(req.params["phone"] ?? ""));
     if (phone.length < 10) {
@@ -63,7 +60,7 @@ export function updateCustomerProfile(req: Request, res: Response, next: NextFun
       preferredArea?: string;
     };
 
-    const data = ProfileRepo.updateProfile(phone, {
+    const data = await ProfileRepo.updateProfile(phone, {
       name,
       preferred_area: preferredArea,
     });

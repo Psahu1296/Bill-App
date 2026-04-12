@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from "express";
+import mongoose from "mongoose";
 import createHttpError from "http-errors";
 import * as dishRepo from "../repositories/dishRepo";
 import { SEED_DISHES } from "../scripts/dishSeedData";
-import { getDb } from "../db";
+import { Dish } from "../models";
 
 const addDish = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -22,11 +23,11 @@ const addDish = async (req: Request, res: Response, next: NextFunction) => {
       }
     }
 
-    if (dishRepo.findByName(name)) {
+    if (await dishRepo.findByName(name)) {
       return next(createHttpError(409, "Dish with this name already exists!"));
     }
 
-    const dish = dishRepo.create({ image, name, type, category, variants, description, isAvailable, isFrequent, isOnlineAvailable });
+    const dish = await dishRepo.create({ image, name, type, category, variants, description, isAvailable, isFrequent, isOnlineAvailable });
     res.status(201).json({ success: true, message: "Dish added successfully!", data: dish });
   } catch (error) {
     next(error);
@@ -35,7 +36,7 @@ const addDish = async (req: Request, res: Response, next: NextFunction) => {
 
 const getDishes = async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    res.status(200).json({ success: true, data: dishRepo.findAll() });
+    res.status(200).json({ success: true, data: await dishRepo.findAll() });
   } catch (error) {
     next(error);
   }
@@ -43,7 +44,7 @@ const getDishes = async (_req: Request, res: Response, next: NextFunction) => {
 
 const getOnlineDishes = async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    res.status(200).json({ success: true, data: dishRepo.findOnlineAvailable() });
+    res.status(200).json({ success: true, data: await dishRepo.findOnlineAvailable() });
   } catch (error) {
     next(error);
   }
@@ -53,7 +54,7 @@ const getFrequentDishes = async (req: Request, res: Response, next: NextFunction
   try {
     const limit = parseInt(req.query.limit as string) || 10;
     const minOrders = parseInt(req.query.minOrders as string) || 1;
-    res.status(200).json({ success: true, data: dishRepo.findFrequent(minOrders, limit) });
+    res.status(200).json({ success: true, data: await dishRepo.findFrequent(minOrders, limit) });
   } catch (error) {
     next(error);
   }
@@ -62,10 +63,10 @@ const getFrequentDishes = async (req: Request, res: Response, next: NextFunction
 const getDishById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-    if (!id || isNaN(Number(id))) {
+    if (!id || !mongoose.isValidObjectId(id)) {
       return next(createHttpError(400, "Invalid Dish ID format!"));
     }
-    const dish = dishRepo.findById(id);
+    const dish = await dishRepo.findById(id);
     if (!dish) return next(createHttpError(404, "Dish not found!"));
     res.status(200).json({ success: true, data: dish });
   } catch (error) {
@@ -76,7 +77,7 @@ const getDishById = async (req: Request, res: Response, next: NextFunction) => {
 const updateDish = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-    if (!id || isNaN(Number(id))) {
+    if (!id || !mongoose.isValidObjectId(id)) {
       return next(createHttpError(400, "Invalid Dish ID format!"));
     }
 
@@ -98,7 +99,7 @@ const updateDish = async (req: Request, res: Response, next: NextFunction) => {
       }
     }
 
-    const dish = dishRepo.update(id, updates);
+    const dish = await dishRepo.update(id, updates);
     if (!dish) return next(createHttpError(404, "Dish not found!"));
     res.status(200).json({ success: true, message: "Dish updated successfully!", data: dish });
   } catch (error) {
@@ -109,10 +110,10 @@ const updateDish = async (req: Request, res: Response, next: NextFunction) => {
 const deleteDish = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-    if (!id || isNaN(Number(id))) {
+    if (!id || !mongoose.isValidObjectId(id)) {
       return next(createHttpError(400, "Invalid Dish ID format!"));
     }
-    const dish = dishRepo.remove(id);
+    const dish = await dishRepo.remove(id);
     if (!dish) return next(createHttpError(404, "Dish not found!"));
     res.status(200).json({ success: true, message: "Dish deleted successfully!", data: dish });
   } catch (error) {
@@ -144,11 +145,10 @@ const bulkAddDishes = async (req: Request, res: Response, next: NextFunction) =>
     }
 
     try {
-      const saved = dishRepo.bulkCreate(dishes);
-        res.status(201).json({ success: true, message: `${saved.length} dishes added successfully!`, data: saved });
+      const saved = await dishRepo.bulkCreate(dishes);
+      res.status(201).json({ success: true, message: `${saved.length} dishes added successfully!`, data: saved });
     } catch (err: unknown) {
-      // SQLite UNIQUE constraint violation
-      if (err instanceof Error && err.message.includes("UNIQUE constraint failed")) {
+      if (err instanceof Error && (err.message.includes("duplicate key") || err.message.includes("UNIQUE"))) {
         return next(createHttpError(409, "Duplicate value: one of the dish names might already exist."));
       }
       throw err;
@@ -160,33 +160,24 @@ const bulkAddDishes = async (req: Request, res: Response, next: NextFunction) =>
 
 const seedDishes = async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const db = getDb();
-
-    const insert = db.prepare(`
-      INSERT OR IGNORE INTO dishes (image, name, type, category, variants, description, is_available, is_frequent)
-      VALUES (@image, @name, @type, @category, @variants, @description, @isAvailable, @isFrequent)
-    `);
-
     let added = 0;
     let skipped = 0;
 
-    const run = db.transaction(() => {
-      for (const d of SEED_DISHES) {
-        const result = insert.run({
-          image: "",
-          name: d.name,
-          type: d.type,
-          category: d.category,
-          variants: JSON.stringify(d.variants),
-          description: d.description ?? "",
-          isAvailable: 1,
-          isFrequent: 0,
-        }) as { changes: number };
-        result.changes > 0 ? added++ : skipped++;
-      }
-    });
-
-    run();
+    for (const d of SEED_DISHES) {
+      const exists = await Dish.findOne({ name: d.name }).select("_id").lean();
+      if (exists) { skipped++; continue; }
+      await Dish.create({
+        image: "",
+        name: d.name,
+        type: d.type,
+        category: d.category,
+        variants: d.variants,
+        description: d.description ?? "",
+        isAvailable: true,
+        isFrequent: false,
+      });
+      added++;
+    }
 
     res.json({
       success: true,

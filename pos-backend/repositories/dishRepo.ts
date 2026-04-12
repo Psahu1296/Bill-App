@@ -1,134 +1,117 @@
-import { getDb } from "../db";
+import mongoose from "mongoose";
+import { Dish } from "../models";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function rowToApi(row: any) {
-  if (!row) return null;
-  const { id, number_of_orders, is_available, is_frequent, is_online_available, description_hi, created_at, updated_at, variants, ...rest } = row;
+function toApi(doc: any) {
+  if (!doc) return null;
   return {
-    _id: String(id),
-    numberOfOrders: number_of_orders,
-    isAvailable: Boolean(is_available),
-    isFrequent: Boolean(is_frequent),
-    isOnlineAvailable: Boolean(is_online_available),
-    descriptionHi: description_hi ?? '',
-    variants: variants ? JSON.parse(variants) : [],
-    createdAt: created_at,
-    updatedAt: updated_at,
-    ...rest,
+    _id: String(doc._id),
+    image: doc.image ?? "",
+    name: doc.name,
+    type: doc.type,
+    category: doc.category,
+    variants: doc.variants,
+    description: doc.description ?? "",
+    descriptionHi: doc.descriptionHi ?? "",
+    isAvailable: Boolean(doc.isAvailable),
+    isFrequent: Boolean(doc.isFrequent),
+    isOnlineAvailable: Boolean(doc.isOnlineAvailable),
+    numberOfOrders: doc.numberOfOrders ?? 0,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
   };
 }
 
-export function findByName(name: string) {
-  return rowToApi(getDb().prepare("SELECT * FROM dishes WHERE name = ?").get(name));
+export async function findById(id: string) {
+  try {
+    if (!mongoose.isValidObjectId(id)) return null;
+    const doc = await Dish.findById(id).lean();
+    return toApi(doc);
+  } catch { return null; }
 }
 
-export function findById(id: string | number) {
-  return rowToApi(getDb().prepare("SELECT * FROM dishes WHERE id = ?").get(Number(id)));
+export async function findByName(name: string) {
+  const doc = await Dish.findOne({ name }).lean();
+  return toApi(doc);
 }
 
-export function findAll() {
-  return getDb().prepare("SELECT * FROM dishes ORDER BY name ASC").all().map(rowToApi);
+export async function findAll() {
+  const docs = await Dish.find().sort({ name: 1 }).lean();
+  return docs.map(toApi);
 }
 
-export function findOnlineAvailable() {
-  return getDb()
-    .prepare("SELECT * FROM dishes WHERE is_online_available = 1 AND is_available = 1 ORDER BY name ASC")
-    .all()
-    .map(rowToApi);
+export async function findOnlineAvailable() {
+  const docs = await Dish.find({ isOnlineAvailable: true, isAvailable: true }).sort({ name: 1 }).lean();
+  return docs.map(toApi);
 }
 
-export function findFrequent(minOrders: number, limit: number) {
-  return getDb()
-    .prepare("SELECT * FROM dishes WHERE number_of_orders >= ? ORDER BY number_of_orders DESC, name ASC LIMIT ?")
-    .all(minOrders, limit)
-    .map(rowToApi);
+export async function findFrequent(minOrders = 1, limit = 10) {
+  const docs = await Dish.find({ isFrequent: true, numberOfOrders: { $gte: minOrders } })
+    .sort({ numberOfOrders: -1 })
+    .limit(limit)
+    .lean();
+  return docs.map(toApi);
 }
 
-export function create(data: {
-  image: string; name: string; type: string; category: string;
-  variants: object[]; description?: string; descriptionHi?: string; isAvailable?: boolean; isFrequent?: boolean; isOnlineAvailable?: boolean;
+export async function create(data: {
+  image?: string; name: string; type: string; category: string;
+  variants: object[]; description?: string; descriptionHi?: string;
+  isAvailable?: boolean; isFrequent?: boolean; isOnlineAvailable?: boolean;
 }) {
-  const db = getDb();
-  const result = db.prepare(
-    `INSERT INTO dishes (image, name, type, category, variants, description, description_hi, is_available, is_frequent, is_online_available)
-     VALUES (@image, @name, @type, @category, @variants, @description, @descriptionHi, @isAvailable, @isFrequent, @isOnlineAvailable)`
-  ).run({
+  const doc = await Dish.create({
     ...data,
-    variants: JSON.stringify(data.variants),
-    description: data.description ?? '',
-    descriptionHi: data.descriptionHi ?? '',
-    isAvailable: data.isAvailable !== false ? 1 : 0,
-    isFrequent: data.isFrequent ? 1 : 0,
-    isOnlineAvailable: data.isOnlineAvailable ? 1 : 0,
+    image: data.image ?? "",
+    description: data.description ?? "",
+    descriptionHi: data.descriptionHi ?? "",
+    isAvailable: data.isAvailable !== false,
+    isFrequent: Boolean(data.isFrequent),
+    isOnlineAvailable: Boolean(data.isOnlineAvailable),
   });
-  return findById(result.lastInsertRowid as number)!;
+  return toApi(doc.toObject())!;
 }
 
-export function bulkCreate(dishes: Parameters<typeof create>[0][]) {
-  const db = getDb();
-  const stmt = db.prepare(
-    `INSERT INTO dishes (image, name, type, category, variants, description, description_hi, is_available, is_frequent, is_online_available)
-     VALUES (@image, @name, @type, @category, @variants, @description, @descriptionHi, @isAvailable, @isFrequent, @isOnlineAvailable)`
+export async function bulkCreate(dishes: Parameters<typeof create>[0][]) {
+  const docs = await Dish.insertMany(
+    dishes.map(d => ({
+      ...d,
+      image: d.image ?? "",
+      description: d.description ?? "",
+      descriptionHi: (d as { descriptionHi?: string }).descriptionHi ?? "",
+      isAvailable: d.isAvailable !== false,
+      isFrequent: Boolean(d.isFrequent),
+      isOnlineAvailable: Boolean((d as { isOnlineAvailable?: boolean }).isOnlineAvailable),
+    })),
+    { ordered: false } // continue past duplicates
   );
-  const insertMany = db.transaction((list: typeof dishes) => {
-    const saved = [];
-    for (const d of list) {
-      const result = stmt.run({
-        ...d,
-        variants: JSON.stringify(d.variants),
-        description: d.description ?? '',
-        descriptionHi: (d as { descriptionHi?: string }).descriptionHi ?? '',
-        isAvailable: d.isAvailable !== false ? 1 : 0,
-        isFrequent: d.isFrequent ? 1 : 0,
-        isOnlineAvailable: (d as { isOnlineAvailable?: boolean }).isOnlineAvailable ? 1 : 0,
-      });
-      saved.push(findById(result.lastInsertRowid as number)!);
-    }
-    return saved;
-  });
-  return insertMany(dishes);
+  return docs.map(d => toApi(d.toObject())!);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function update(id: string | number, updates: Record<string, any>) {
-  const db = getDb();
-  const allowed = ["image", "name", "type", "category", "variants", "description", "descriptionHi", "isAvailable", "isFrequent", "isOnlineAvailable", "numberOfOrders"];
-  const sets: string[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const params: Record<string, any> = { id: Number(id) };
-
+export async function update(id: string, updates: Record<string, any>) {
+  if (!mongoose.isValidObjectId(id)) return null;
+  const patch: Record<string, unknown> = {};
+  const allowed = ["image", "name", "type", "category", "variants", "description", "descriptionHi",
+                   "isAvailable", "isFrequent", "isOnlineAvailable", "numberOfOrders"];
   for (const key of allowed) {
-    if (key in updates) {
-      const col = key === "isAvailable" ? "is_available"
-                : key === "isFrequent"  ? "is_frequent"
-                : key === "isOnlineAvailable" ? "is_online_available"
-                : key === "numberOfOrders" ? "number_of_orders"
-                : key === "descriptionHi" ? "description_hi"
-                : key;
-      sets.push(`${col} = @${key}`);
-      if (key === "variants") params[key] = JSON.stringify(updates[key]);
-      else if (key === "isAvailable" || key === "isFrequent" || key === "isOnlineAvailable") params[key] = updates[key] ? 1 : 0;
-      else params[key] = updates[key];
-    }
+    if (key in updates) patch[key] = updates[key];
   }
-
-  if (sets.length === 0) return findById(id);
-  sets.push("updated_at = datetime('now')");
-  db.prepare(`UPDATE dishes SET ${sets.join(", ")} WHERE id = @id`).run(params);
-  return findById(id);
+  if (!Object.keys(patch).length) return findById(id);
+  const doc = await Dish.findByIdAndUpdate(id, { $set: patch }, { new: true }).lean();
+  return toApi(doc);
 }
 
-export function remove(id: string | number) {
-  const dish = findById(id);
-  getDb().prepare("DELETE FROM dishes WHERE id = ?").run(Number(id));
-  return dish;
+export async function remove(id: string) {
+  if (!mongoose.isValidObjectId(id)) return null;
+  const doc = await Dish.findByIdAndDelete(id).lean();
+  return toApi(doc);
 }
 
-export function incrementOrderCounts(items: { id: string | number; quantity: number }[]) {
-  const db = getDb();
-  const stmt = db.prepare("UPDATE dishes SET number_of_orders = number_of_orders + ? WHERE id = ?");
-  const runAll = db.transaction((list: typeof items) => {
-    for (const item of list) stmt.run(item.quantity, Number(item.id));
-  });
-  runAll(items);
+export async function incrementOrderCounts(items: { id: string; quantity: number }[]) {
+  await Promise.all(
+    items
+      .filter(item => mongoose.isValidObjectId(item.id))
+      .map(item =>
+        Dish.findByIdAndUpdate(item.id, { $inc: { numberOfOrders: item.quantity } })
+      )
+  );
 }

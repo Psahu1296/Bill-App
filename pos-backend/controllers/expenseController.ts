@@ -1,4 +1,5 @@
 import { Response, NextFunction } from "express";
+import mongoose from "mongoose";
 import createHttpError from "http-errors";
 import * as expenseRepo from "../repositories/expenseRepo";
 import { CustomRequest as Request } from "../types";
@@ -17,7 +18,7 @@ const addExpense = async (req: Request, res: Response, next: NextFunction) => {
       return next(createHttpError(400, "Missing required expense fields (type, name, amount) or amount is invalid."));
     }
 
-    const expense = expenseRepo.create({
+    const expense = await expenseRepo.create({
       type, name, amount,
       description,
       expenseDate: expenseDate ? new Date(expenseDate).toISOString() : new Date().toISOString(),
@@ -55,11 +56,12 @@ const getExpensesByPeriod = async (req: Request, res: Response, next: NextFuncti
         return next(createHttpError(400, "Invalid periodType. Use 'day', 'month', or 'year'."));
     }
 
-    const expenses = expenseRepo.findAll({ startDate, endDate });
-    const expensesSummary = expenseRepo.aggregateByType(startDate, endDate)
-      .map(r => ({ type: r.type, totalAmount: r.totalAmount }));
+    const [expenses, expensesSummary] = await Promise.all([
+      expenseRepo.findAll({ startDate, endDate }),
+      expenseRepo.aggregateByType(startDate, endDate),
+    ]);
 
-    const totalExpenses = expenses.reduce((sum, exp) => sum + ((exp as Record<string,unknown>).amount as number), 0);
+    const totalExpenses = expenses.reduce((sum, exp) => sum + ((exp as Record<string, unknown>).amount as number), 0);
 
     res.status(200).json({
       success: true,
@@ -84,8 +86,8 @@ const getAllExpenses = async (req: Request, res: Response, next: NextFunction) =
     if (endDate)   filters.endDate   = getZonedEndOfDayUtc(new Date(endDate as string));
     if (type)      filters.type      = type as string;
 
-    const expenses = expenseRepo.findAll(filters);
-    const totalExpenses = expenses.reduce((sum, exp) => sum + ((exp as Record<string,unknown>).amount as number), 0);
+    const expenses = await expenseRepo.findAll(filters);
+    const totalExpenses = expenses.reduce((sum, exp) => sum + ((exp as Record<string, unknown>).amount as number), 0);
     res.status(200).json({ success: true, data: expenses, total: totalExpenses });
   } catch (error) {
     next(error);
@@ -95,12 +97,12 @@ const getAllExpenses = async (req: Request, res: Response, next: NextFunction) =
 const updateExpense = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-    if (!id || isNaN(Number(id))) {
+    if (!id || !mongoose.isValidObjectId(id)) {
       return next(createHttpError(400, "Invalid Expense ID format!"));
     }
 
     const { _id, __v, ...updates } = req.body;
-    const expense = expenseRepo.update(id, updates);
+    const expense = await expenseRepo.update(id, updates);
     if (!expense) return next(createHttpError(404, "Expense not found!"));
     res.status(200).json({ success: true, message: "Expense updated successfully!", data: expense });
   } catch (error) {
@@ -111,11 +113,11 @@ const updateExpense = async (req: Request, res: Response, next: NextFunction) =>
 const deleteExpense = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-    if (!id || isNaN(Number(id))) {
+    if (!id || !mongoose.isValidObjectId(id)) {
       return next(createHttpError(400, "Invalid Expense ID format!"));
     }
 
-    const expense = expenseRepo.remove(id);
+    const expense = await expenseRepo.remove(id);
     if (!expense) return next(createHttpError(404, "Expense not found!"));
     res.status(200).json({ success: true, message: "Expense deleted successfully!", data: expense });
   } catch (error) {

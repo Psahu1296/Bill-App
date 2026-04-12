@@ -7,7 +7,6 @@
 import { Request, Response, NextFunction } from "express";
 import createHttpError from "http-errors";
 import config from "../config/config";
-import { getDb } from "../db";
 import * as OrderRepo from "../repositories/orderRepo";
 import * as PaymentRepo from "../repositories/paymentRepo";
 
@@ -44,7 +43,6 @@ async function getAccessToken(): Promise<string> {
     throw new Error(`PhonePe token fetch failed: ${err}`);
   }
 
-  // expires_in can be null — use expires_at (Unix seconds) instead
   const json = await resp.json() as {
     access_token: string;
     expires_in:   number | null;
@@ -86,7 +84,7 @@ export async function initiatePayment(req: Request, res: Response, next: NextFun
         paymentFlow: {
           type:         "PG_CHECKOUT",
           message:      `Payment for order #${orderId}`,
-          merchantUrls: { redirectUrl },        // callbackUrl goes in PhonePe dashboard, not here
+          merchantUrls: { redirectUrl },
         },
         ...(customerPhone ? { metaInfo: { udf1: String(customerPhone) } } : {}),
       }),
@@ -102,7 +100,7 @@ export async function initiatePayment(req: Request, res: Response, next: NextFun
     res.json({
       success: true,
       data: {
-        redirectUrl:          json.redirectUrl,
+        redirectUrl:           json.redirectUrl,
         merchantTransactionId: merchantOrderId,
       },
     });
@@ -112,8 +110,6 @@ export async function initiatePayment(req: Request, res: Response, next: NextFun
 }
 
 // ── POST /api/payment/phonepe/callback ───────────────────────────────────────
-// PhonePe posts JSON with an "O-Bearer" Authorization header.
-// Verify the token, then update order/payment records.
 export async function handleCallback(req: Request, res: Response, next: NextFunction) {
   try {
     const authHeader = req.headers["authorization"] as string | undefined;
@@ -131,7 +127,6 @@ export async function handleCallback(req: Request, res: Response, next: NextFunc
     }
 
     const body    = req.body as Record<string, unknown>;
-    // Webhook shape: { event: "checkout.order.completed", payload: { merchantOrderId, state, orderId, ... } }
     const payload = (body.payload ?? body) as Record<string, unknown>;
     const merchantOrderId = payload.merchantOrderId as string | undefined;
     const state           = payload.state           as string | undefined;
@@ -141,31 +136,28 @@ export async function handleCallback(req: Request, res: Response, next: NextFunc
     const orderId = merchantOrderId?.split("_")[1];
 
     if (orderId && state === "COMPLETED") {
-      const order = OrderRepo.findById(orderId, false);
+      const order = await OrderRepo.findById(orderId, false);
       if (order) {
-        const total = (order.bills as { totalWithTax?: number })?.totalWithTax ?? 0;
-        // Atomic: order update + payment record succeed or both roll back.
-        // PaymentRepo.create uses INSERT OR IGNORE so webhook replays are silently skipped.
-        const processPayment = getDb().transaction(() => {
-          OrderRepo.update(orderId, {
-            paymentStatus:    "Paid",
-            paymentMethod:    "Online",
-            amountPaid:       total,
-            balanceDueOnOrder: 0,
-            paymentData:      body,
-          });
-          PaymentRepo.create({
-            paymentId: txnId ?? merchantOrderId ?? "",
-            orderId,
-            amount:    total,
-            currency:  "INR",
-            status:    "COMPLETED",
-            method:    "UPI",
-            contact:   (order.customerDetails as { phone?: string })?.phone ?? "",
-          });
-        });
-        processPayment();
+        const total = ((order.bills as Record<string, unknown>)?.totalWithTax as number) ?? 0;
 
+        // Sequential (idempotent): order update then payment record
+        await OrderRepo.update(orderId, {
+          paymentStatus:     "Paid",
+          paymentMethod:     "Online",
+          amountPaid:        total,
+          balanceDueOnOrder: 0,
+          paymentData:       body,
+        });
+
+        await PaymentRepo.create({
+          paymentId: txnId ?? merchantOrderId ?? "",
+          orderId,
+          amount:    total,
+          currency:  "INR",
+          status:    "COMPLETED",
+          method:    "UPI",
+          contact:   ((order.customerDetails as Record<string, unknown>)?.phone as string) ?? "",
+        });
       }
     }
 
@@ -194,8 +186,6 @@ export async function checkPaymentStatus(req: Request, res: Response, next: Next
 
     const json = await resp.json() as Record<string, unknown>;
 
-    // If PhonePe returned a non-2xx (e.g. INVALID_MERCHANT_ORDER_ID), treat as FAILED
-    // so the frontend stops polling instead of looping on a fake "PENDING" state.
     const state = resp.ok
       ? (json.state ?? "PENDING")
       : "FAILED";

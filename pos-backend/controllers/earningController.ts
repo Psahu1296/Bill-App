@@ -28,6 +28,7 @@ const calculatePercentageChange = (current: number, previous: number): number =>
   return parseFloat((((current - previous) / previous) * 100).toFixed(2));
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const calculateAndSaveDailyEarnings = async (req: any, res: any = null, next: any = null) => {
   try {
     const targetDate = req.body?.date ? new Date(req.body.date) : subDays(new Date(), 1);
@@ -35,17 +36,17 @@ export const calculateAndSaveDailyEarnings = async (req: any, res: any = null, n
     const endOfTargetDay   = getZonedEndOfDayUtc(targetDate);
     const formattedDate    = format(targetDate, "yyyy-MM-dd");
 
-    const currentDayEarnings = earningRepo.sumPaidOrdersInRange(
+    const currentDayEarnings = await earningRepo.sumPaidOrdersInRange(
       startOfTargetDay.toISOString(), endOfTargetDay.toISOString()
     );
 
-    const previousDayRecord = earningRepo.findByDate(
+    const previousDayRecord = await earningRepo.findByDate(
       getZonedStartOfDayUtc(subDays(targetDate, 1)).toISOString()
     );
-    const previousDayEarnings = previousDayRecord ? (previousDayRecord as Record<string,unknown>).totalEarnings as number : 0;
+    const previousDayEarnings = previousDayRecord ? (previousDayRecord as Record<string, unknown>).totalEarnings as number : 0;
 
     const percentageChange = calculatePercentageChange(currentDayEarnings, previousDayEarnings);
-    const record = earningRepo.upsert(startOfTargetDay.toISOString(), currentDayEarnings, percentageChange);
+    const record = await earningRepo.upsert(startOfTargetDay.toISOString(), currentDayEarnings, percentageChange);
 
     console.log(`[Earning Calculation] Saved for ${formattedDate}: ${currentDayEarnings} (Change: ${percentageChange}%)`);
 
@@ -61,19 +62,21 @@ export const calculateAndSaveDailyEarnings = async (req: any, res: any = null, n
   }
 };
 
-export const getDailyEarnings = async (req: Request, res: Response, next: NextFunction) => {
+export const getDailyEarnings = async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const today     = new Date();
     const todayIso  = getZonedStartOfDayUtc(today).toISOString();
     const yesterIso = getZonedStartOfDayUtc(subDays(today, 1)).toISOString();
 
-    const todayRecord = earningRepo.findByDate(todayIso) as Record<string,unknown> | null;
-    const yesterRecord = earningRepo.findByDate(yesterIso) as Record<string,unknown> | null;
+    const [todayRecord, yesterRecord] = await Promise.all([
+      earningRepo.findByDate(todayIso),
+      earningRepo.findByDate(yesterIso),
+    ]);
 
-    const todayEarning     = todayRecord  ? todayRecord.totalEarnings  as number : 0;
-    const yesterdayEarning = yesterRecord ? yesterRecord.totalEarnings as number : 0;
+    const todayEarning     = todayRecord  ? (todayRecord  as Record<string, unknown>).totalEarnings  as number : 0;
+    const yesterdayEarning = yesterRecord ? (yesterRecord as Record<string, unknown>).totalEarnings as number : 0;
     const percentageChange = todayRecord
-      ? todayRecord.percentageChangeFromYesterday as number
+      ? (todayRecord as Record<string, unknown>).percentageChangeFromYesterday as number
       : calculatePercentageChange(todayEarning, yesterdayEarning);
 
     res.status(200).json({ success: true, data: { todayEarning, yesterdayEarning, percentageChange } });
@@ -119,7 +122,7 @@ export const getPeriodEarnings = async (req: Request, res: Response, next: NextF
     }
 
     const endIso   = getZonedStartOfDayUtc(today).toISOString();
-    const records  = earningRepo.findInRange(startDate.toISOString(), endIso) as Record<string,unknown>[];
+    const records  = await earningRepo.findInRange(startDate.toISOString(), endIso) as Record<string, unknown>[];
 
     const formattedEarnings = [];
     for (let i = 0; i < numPeriods; i++) {
@@ -138,22 +141,31 @@ export const getPeriodEarnings = async (req: Request, res: Response, next: NextF
   }
 };
 
-export const getDashboardEarningsSummary = async (req: Request, res: Response, next: NextFunction) => {
+export const getDashboardEarningsSummary = async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const today = new Date();
 
     const sum = (start: Date, end: Date) =>
       earningRepo.sumInRange(start.toISOString(), end.toISOString());
 
-    const currentDayTotal    = (earningRepo.findByDate(getZonedStartOfDayUtc(today).toISOString()) as Record<string,unknown> | null)?.totalEarnings as number ?? 0;
-    const previousDayTotal   = (earningRepo.findByDate(getZonedStartOfDayUtc(subDays(today, 1)).toISOString()) as Record<string,unknown> | null)?.totalEarnings as number ?? 0;
+    const [
+      todayRecord, previousDayRecord,
+      currentWeekTotal, previousWeekTotal,
+      currentMonthTotal, previousMonthTotal,
+      currentYearTotal, previousYearTotal,
+    ] = await Promise.all([
+      earningRepo.findByDate(getZonedStartOfDayUtc(today).toISOString()),
+      earningRepo.findByDate(getZonedStartOfDayUtc(subDays(today, 1)).toISOString()),
+      sum(getZonedStartOfWeekUtc(today),          getZonedEndOfWeekUtc(today)),
+      sum(getZonedStartOfWeekUtc(subWeeks(today, 1)),  getZonedEndOfWeekUtc(subWeeks(today, 1))),
+      sum(getZonedStartOfMonthUtc(today),         getZonedEndOfMonthUtc(today)),
+      sum(getZonedStartOfMonthUtc(subMonths(today, 1)), getZonedEndOfMonthUtc(subMonths(today, 1))),
+      sum(getZonedStartOfYearUtc(today),          getZonedEndOfYearUtc(today)),
+      sum(getZonedStartOfYearUtc(subYears(today, 1)),  getZonedEndOfYearUtc(subYears(today, 1))),
+    ]);
 
-    const currentWeekTotal   = sum(getZonedStartOfWeekUtc(today),         getZonedEndOfWeekUtc(today));
-    const previousWeekTotal  = sum(getZonedStartOfWeekUtc(subWeeks(today, 1)),  getZonedEndOfWeekUtc(subWeeks(today, 1)));
-    const currentMonthTotal  = sum(getZonedStartOfMonthUtc(today),        getZonedEndOfMonthUtc(today));
-    const previousMonthTotal = sum(getZonedStartOfMonthUtc(subMonths(today, 1)), getZonedEndOfMonthUtc(subMonths(today, 1)));
-    const currentYearTotal   = sum(getZonedStartOfYearUtc(today),         getZonedEndOfYearUtc(today));
-    const previousYearTotal  = sum(getZonedStartOfYearUtc(subYears(today, 1)),  getZonedEndOfYearUtc(subYears(today, 1)));
+    const currentDayTotal  = (todayRecord  as Record<string, unknown> | null)?.totalEarnings  as number ?? 0;
+    const previousDayTotal = (previousDayRecord as Record<string, unknown> | null)?.totalEarnings as number ?? 0;
 
     res.status(200).json({
       success: true,

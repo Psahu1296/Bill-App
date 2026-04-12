@@ -1,22 +1,19 @@
-import { getDb } from "../db";
+import { StoreSetting } from "../models";
 
-export function getSetting(key: string): string | null {
-  const row = getDb()
-    .prepare("SELECT value FROM store_settings WHERE key = ?")
-    .get(key) as { value: string } | undefined;
-  return row?.value ?? null;
+export async function getSetting(key: string): Promise<string | null> {
+  const doc = await StoreSetting.findOne({ key }).lean();
+  return doc ? (doc as Record<string, unknown>).value as string : null;
 }
 
-export function setSetting(key: string, value: string): void {
-  getDb()
-    .prepare(`
-      INSERT INTO store_settings (key, value, updated_at)
-      VALUES (?, ?, datetime('now'))
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-    `)
-    .run(key, value);
+export async function setSetting(key: string, value: string): Promise<void> {
+  await StoreSetting.findOneAndUpdate(
+    { key },
+    { $set: { value } },
+    { upsert: true, new: true }
+  );
 }
 
-export function isOnlineOrdersEnabled(): boolean {
-  return getSetting("online_orders") !== "false";
+export async function isOnlineOrdersEnabled(): Promise<boolean> {
+  const val = await getSetting("online_orders");
+  return val !== "false";
 }

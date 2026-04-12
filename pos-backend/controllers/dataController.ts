@@ -1,61 +1,33 @@
-import fs from "fs";
 import { Response, NextFunction } from "express";
 import * as XLSX from "xlsx";
 import bcrypt from "bcryptjs";
 import { CustomRequest as Request } from "../types";
-import { getDb } from "../db";
+import mongoose from "mongoose";
+import {
+  Order, Staff, Consumable, Table, Dish,
+  CustomerLedger, Payment, Expense, DailyEarning,
+} from "../models";
 import * as earningRepo from "../repositories/earningRepo";
 import * as userRepo from "../repositories/userRepo";
 import { getZonedStartOfDayUtc } from "./earningController";
 
-const TABLE_MAP: Record<string, string> = {
-  orders: "orders",
-  staff: "staff",
-  consumables: "consumables",
-  tables: "tables_tb",
-  dishes: "dishes",
-  ledger: "customer_ledger",
-};
-
-// Column used for date-range filtering per module (null = no filter)
-const DATE_COL: Record<string, string | null> = {
-  orders: "order_date",
-  consumables: "timestamp",
-  staff: null,
-  tables: null,
-  dishes: null,
-  ledger: null,
-};
-
 // ─── Stats ────────────────────────────────────────────────────────────────────
 
-export const getStats = (req: Request, res: Response, next: NextFunction) => {
+export const getStats = async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const db = getDb();
-    let totalRecords = 0;
-    const counts: Record<string, number> = {};
+    const [orders, staff, consumables, tables, dishes, ledger] = await Promise.all([
+      Order.countDocuments(),
+      Staff.countDocuments(),
+      Consumable.countDocuments(),
+      Table.countDocuments(),
+      Dish.countDocuments(),
+      CustomerLedger.countDocuments(),
+    ]);
 
-    for (const [key, table] of Object.entries(TABLE_MAP)) {
-      const row = db.prepare(`SELECT COUNT(*) as cnt FROM ${table}`).get() as { cnt: number };
-      counts[key] = row.cnt;
-      totalRecords += row.cnt;
-    }
+    const counts = { orders, staff, consumables, tables, dishes, ledger };
+    const totalRecords = Object.values(counts).reduce((a, b) => a + b, 0);
 
-    const dbPath = process.env["DATABASE_PATH"] ?? "";
-    let dbSize = "N/A";
-    if (dbPath) {
-      try {
-        const bytes = fs.statSync(dbPath).size;
-        dbSize =
-          bytes > 1_048_576
-            ? `${(bytes / 1_048_576).toFixed(1)} MB`
-            : `${(bytes / 1024).toFixed(1)} KB`;
-      } catch {
-        // file might not exist yet in dev
-      }
-    }
-
-    res.json({ success: true, data: { totalRecords, counts, dbSize } });
+    res.json({ success: true, data: { totalRecords, counts, dbSize: "MongoDB Atlas" } });
   } catch (err) {
     next(err);
   }
@@ -63,52 +35,62 @@ export const getStats = (req: Request, res: Response, next: NextFunction) => {
 
 // ─── Export helper ────────────────────────────────────────────────────────────
 
-function fetchModuleRows(
+async function fetchModuleRows(
   mod: string,
   startDate?: string,
   endDate?: string
-): Record<string, unknown>[] {
-  const db = getDb();
-  const table = TABLE_MAP[mod];
-  const dateCol = DATE_COL[mod];
+): Promise<Record<string, unknown>[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dateRange = (col: string): Record<string, any> | null => {
+    if (!startDate && !endDate) return null;
+    const q: Record<string, unknown> = {};
+    if (startDate) q.$gte = new Date(startDate);
+    if (endDate) { const e = new Date(endDate); e.setUTCHours(23,59,59,999); q.$lte = e; }
+    return { [col]: q };
+  };
 
-  let sql: string;
-  const params: string[] = [];
-
-  if (mod === "staff") {
-    // Include payments as JSON array
-    sql = `
-      SELECT s.*,
-        (SELECT json_group_array(json_object(
-          'id', sp.id, 'amount', sp.amount, 'type', sp.type, 'date', sp.date, 'note', sp.note
-        )) FROM staff_payments sp WHERE sp.staff_id = s.id) AS payments
-      FROM staff s
-    `;
-  } else if (mod === "ledger") {
-    // Include transactions as JSON array
-    sql = `
-      SELECT l.*,
-        (SELECT json_group_array(json_object(
-          'id', t.id, 'transaction_type', t.transaction_type,
-          'amount', t.amount, 'timestamp', t.timestamp, 'notes', t.notes
-        )) FROM customer_ledger_transactions t WHERE t.ledger_id = l.id) AS transactions
-      FROM customer_ledger l
-    `;
-  } else if (dateCol && startDate && endDate) {
-    const endDt = new Date(endDate);
-    endDt.setUTCHours(23, 59, 59, 999);
-    sql = `SELECT * FROM ${table} WHERE ${dateCol} >= ? AND ${dateCol} <= ? ORDER BY ${dateCol} DESC`;
-    params.push(new Date(startDate).toISOString(), endDt.toISOString());
-  } else {
-    sql = `SELECT * FROM ${table}`;
+  if (mod === "orders") {
+    const q = dateRange("orderDate") ?? {};
+    return (await Order.find(q).sort({ orderDate: -1 }).lean()).map(d => ({
+      ...d, _id: String(d._id),
+      table: d.table ? String(d.table) : null,
+    }));
   }
-
-  return db.prepare(sql).all(...params) as Record<string, unknown>[];
+  if (mod === "consumables") {
+    const q = dateRange("timestamp") ?? {};
+    return (await Consumable.find(q).sort({ timestamp: -1 }).lean()).map(d => ({
+      ...d, _id: String(d._id),
+      orderId: d.orderId ? String(d.orderId) : null,
+    }));
+  }
+  if (mod === "staff") {
+    return (await Staff.find().lean()).map(d => ({ ...d, _id: String(d._id) }));
+  }
+  if (mod === "tables") {
+    return (await Table.find().sort({ tableNo: 1 }).lean()).map(d => ({
+      ...d, _id: String(d._id),
+      currentOrderId: d.currentOrderId ? String(d.currentOrderId) : null,
+    }));
+  }
+  if (mod === "dishes") {
+    return (await Dish.find().sort({ name: 1 }).lean()).map(d => ({ ...d, _id: String(d._id) }));
+  }
+  if (mod === "ledger") {
+    return (await CustomerLedger.find().lean()).map(d => ({
+      ...d, _id: String(d._id),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      transactions: (d.transactions ?? []).map((t: any) => ({
+        ...t, _id: String(t._id),
+        orderId: t.orderId ? String(t.orderId) : null,
+      })),
+    }));
+  }
+  return [];
 }
 
 // ─── Export ───────────────────────────────────────────────────────────────────
 
-export const exportData = (req: Request, res: Response, next: NextFunction) => {
+export const exportData = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { modules, startDate, endDate, format } = req.query as Record<string, string>;
 
@@ -117,11 +99,12 @@ export const exportData = (req: Request, res: Response, next: NextFunction) => {
       return;
     }
 
-    const moduleList = modules.split(",").filter((m) => TABLE_MAP[m]);
+    const validMods = ["orders", "staff", "consumables", "tables", "dishes", "ledger"];
+    const moduleList = modules.split(",").filter(m => validMods.includes(m));
     const result: Record<string, Record<string, unknown>[]> = {};
 
     for (const mod of moduleList) {
-      result[mod] = fetchModuleRows(mod, startDate, endDate);
+      result[mod] = await fetchModuleRows(mod, startDate, endDate);
     }
 
     const ts = Date.now();
@@ -129,31 +112,17 @@ export const exportData = (req: Request, res: Response, next: NextFunction) => {
     if (format === "csv") {
       const csvParts: string[] = [];
       for (const [mod, rows] of Object.entries(result)) {
-        if (!rows.length) {
-          csvParts.push(`### ${mod}\n(no data)`);
-          continue;
-        }
+        if (!rows.length) { csvParts.push(`### ${mod}\n(no data)`); continue; }
         const headers = Object.keys(rows[0]).join(",");
-        const body = rows
-          .map((r) =>
-            Object.values(r)
-              .map((v) =>
-                v == null
-                  ? ""
-                  : typeof v === "string"
-                  ? `"${v.replace(/"/g, '""')}"`
-                  : v
-              )
-              .join(",")
-          )
-          .join("\n");
+        const body = rows.map(r =>
+          Object.values(r).map(v =>
+            v == null ? "" : typeof v === "string" ? `"${v.replace(/"/g, '""')}"` : v
+          ).join(",")
+        ).join("\n");
         csvParts.push(`### ${mod}\n${headers}\n${body}`);
       }
       res.setHeader("Content-Type", "text/csv");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="dhaba-export-${ts}.csv"`
-      );
+      res.setHeader("Content-Disposition", `attachment; filename="dhaba-export-${ts}.csv"`);
       res.send(csvParts.join("\n\n"));
       return;
     }
@@ -161,30 +130,15 @@ export const exportData = (req: Request, res: Response, next: NextFunction) => {
     if (format === "xlsx") {
       const wb = XLSX.utils.book_new();
       for (const [mod, rows] of Object.entries(result)) {
-        // Flatten any JSON-string columns so they're readable in the sheet
-        const flatRows = rows.map((r) => {
+        const flatRows = rows.map(r => {
           const out: Record<string, unknown> = {};
           for (const [k, v] of Object.entries(r)) {
-            if (typeof v === "string") {
-              try {
-                const parsed = JSON.parse(v);
-                // Only flatten if it's an object/array (not a plain string that happens to be valid JSON)
-                if (typeof parsed === "object" && parsed !== null) {
-                  out[k] = JSON.stringify(parsed); // keep as compact string in cell
-                } else {
-                  out[k] = v;
-                }
-              } catch {
-                out[k] = v;
-              }
-            } else {
-              out[k] = v;
-            }
+            out[k] = typeof v === "object" && v !== null ? JSON.stringify(v) : v;
           }
           return out;
         });
         const ws = XLSX.utils.json_to_sheet(flatRows.length ? flatRows : [{}]);
-        XLSX.utils.book_append_sheet(wb, ws, mod.slice(0, 31)); // sheet names max 31 chars
+        XLSX.utils.book_append_sheet(wb, ws, mod.slice(0, 31));
       }
       const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -193,12 +147,8 @@ export const exportData = (req: Request, res: Response, next: NextFunction) => {
       return;
     }
 
-    // Default: JSON
     res.setHeader("Content-Type", "application/json");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="dhaba-export-${ts}.json"`
-    );
+    res.setHeader("Content-Disposition", `attachment; filename="dhaba-export-${ts}.json"`);
     res.json({ exportedAt: new Date().toISOString(), data: result });
   } catch (err) {
     next(err);
@@ -207,74 +157,63 @@ export const exportData = (req: Request, res: Response, next: NextFunction) => {
 
 // ─── Delete Preview ───────────────────────────────────────────────────────────
 
-export const deletePreview = (req: Request, res: Response, next: NextFunction) => {
+export const deletePreview = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { modules, startDate, endDate } = req.query as Record<string, string>;
-
     if (!modules) {
       res.status(400).json({ success: false, message: "modules query param is required" });
       return;
     }
 
-    const db = getDb();
-    const moduleList = modules.split(",").filter((m) => TABLE_MAP[m]);
-    // counts: directly selected records
-    // cascaded: auto-deleted due to order cascade (not explicitly selected)
+    const validMods = ["orders", "staff", "consumables", "tables", "dishes", "ledger"];
+    const moduleList = modules.split(",").filter(m => validMods.includes(m));
     const counts: Record<string, number> = {};
     const cascaded: Record<string, number> = {};
 
-    for (const mod of moduleList) {
-      const table = TABLE_MAP[mod];
-      const dateCol = DATE_COL[mod];
+    const dateQuery = (col: string) => {
+      if (!startDate && !endDate) return {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const q: Record<string, any> = {};
+      if (startDate) q.$gte = new Date(startDate);
+      if (endDate) { const e = new Date(endDate); e.setUTCHours(23,59,59,999); q.$lte = e; }
+      return { [col]: q };
+    };
 
-      let row: { cnt: number };
-      if (dateCol && startDate && endDate) {
-        const endDt = new Date(endDate);
-        endDt.setUTCHours(23, 59, 59, 999);
-        row = db.prepare(
-          `SELECT COUNT(*) as cnt FROM ${table} WHERE ${dateCol} >= ? AND ${dateCol} <= ?`
-        ).get(new Date(startDate).toISOString(), endDt.toISOString()) as { cnt: number };
-      } else {
-        row = db.prepare(`SELECT COUNT(*) as cnt FROM ${table}`).get() as { cnt: number };
-      }
-      counts[mod] = row.cnt;
+    const ModelMap: Record<string, typeof mongoose.Model> = {
+      orders: Order, consumables: Consumable, staff: Staff,
+      tables: Table, dishes: Dish, ledger: CustomerLedger,
+    };
+    const DateColMap: Record<string, string | null> = {
+      orders: "orderDate", consumables: "timestamp",
+      staff: null, tables: null, dishes: null, ledger: null,
+    };
+
+    for (const mod of moduleList) {
+      const M = ModelMap[mod] as typeof Order;
+      const dc = DateColMap[mod];
+      const q = dc ? dateQuery(dc) : {};
+      counts[mod] = await M.countDocuments(q);
     }
 
-    // When orders are selected, count cascaded linked records (mirrors deleteData logic)
     if (moduleList.includes("orders")) {
-      let orderIds: number[];
-      if (startDate && endDate) {
-        const endDt = new Date(endDate);
-        endDt.setUTCHours(23, 59, 59, 999);
-        orderIds = (db.prepare(
-          `SELECT id FROM orders WHERE order_date >= ? AND order_date <= ?`
-        ).all(new Date(startDate).toISOString(), endDt.toISOString()) as { id: number }[]).map(r => r.id);
-      } else {
-        orderIds = (db.prepare(`SELECT id FROM orders`).all() as { id: number }[]).map(r => r.id);
-      }
+      const ordQ = dateQuery("orderDate");
+      const orderDocs = await Order.find(ordQ).select("_id").lean();
+      const orderIds = orderDocs.map(o => o._id);
 
       if (orderIds.length > 0) {
-        const ph = orderIds.map(() => "?").join(",");
-
-        // Consumables linked to these orders (not already in selected modules)
         if (!moduleList.includes("consumables")) {
-          const { cnt } = db.prepare(
-            `SELECT COUNT(*) as cnt FROM consumables WHERE order_id IN (${ph})`
-          ).get(...orderIds) as { cnt: number };
-          if (cnt > 0) cascaded["consumables (linked to orders)"] = cnt;
+          const cc = await Consumable.countDocuments({ orderId: { $in: orderIds } });
+          if (cc > 0) cascaded["consumables (linked to orders)"] = cc;
         }
-
-        // Ledger transactions linked to these orders
-        const { cnt: ltCnt } = db.prepare(
-          `SELECT COUNT(*) as cnt FROM customer_ledger_transactions WHERE order_id IN (${ph})`
-        ).get(...orderIds) as { cnt: number };
-        if (ltCnt > 0) cascaded["ledger transactions (linked to orders)"] = ltCnt;
+        const ltc = await CustomerLedger.countDocuments({
+          "transactions.orderId": { $in: orderIds },
+        });
+        if (ltc > 0) cascaded["ledger transactions (linked to orders)"] = ltc;
       }
     }
 
-    const total =
-      Object.values(counts).reduce((a, b) => a + b, 0) +
-      Object.values(cascaded).reduce((a, b) => a + b, 0);
+    const total = Object.values(counts).reduce((a, b) => a + b, 0)
+                + Object.values(cascaded).reduce((a, b) => a + b, 0);
 
     res.json({ success: true, data: { counts, cascaded, total } });
   } catch (err) {
@@ -284,7 +223,7 @@ export const deletePreview = (req: Request, res: Response, next: NextFunction) =
 
 // ─── Delete ───────────────────────────────────────────────────────────────────
 
-export const deleteData = (req: Request, res: Response, next: NextFunction) => {
+export const deleteData = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { modules, startDate, endDate } = req.body as {
       modules: string[];
@@ -297,141 +236,107 @@ export const deleteData = (req: Request, res: Response, next: NextFunction) => {
       return;
     }
 
-    const db = getDb();
     const counts: Record<string, number> = {};
 
-    const deleteTx = db.transaction(() => {
-      // Orders require cascading cleanup of consumables, ledger, and earnings
-      if (modules.includes("orders")) {
-        // 1. Find the order IDs (and data needed for reversals) that will be deleted
-        type OrderRow = { id: number; order_date: string; amount_paid: number };
-        let orderRows: OrderRow[];
-        if (startDate && endDate) {
-          const endDt = new Date(endDate);
-          endDt.setUTCHours(23, 59, 59, 999);
-          orderRows = db.prepare(
-            `SELECT id, order_date, amount_paid FROM orders WHERE order_date >= ? AND order_date <= ?`
-          ).all(new Date(startDate).toISOString(), endDt.toISOString()) as OrderRow[];
-        } else {
-          orderRows = db.prepare(`SELECT id, order_date, amount_paid FROM orders`).all() as OrderRow[];
+    const dateQ = (col: string) => {
+      if (!startDate && !endDate) return {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const q: Record<string, any> = {};
+      if (startDate) q.$gte = new Date(startDate);
+      if (endDate) { const e = new Date(endDate); e.setUTCHours(23,59,59,999); q.$lte = e; }
+      return { [col]: q };
+    };
+
+    if (modules.includes("orders")) {
+      const ordQ = dateQ("orderDate");
+      const orderDocs = await Order.find(ordQ).select("_id orderDate amountPaid").lean();
+      const orderIds = orderDocs.map(o => o._id);
+
+      if (orderIds.length > 0) {
+        // Reverse earnings for consumables linked to orders
+        const custConsumables = await Consumable.find({
+          orderId: { $in: orderIds },
+          consumerType: "customer",
+        }).select("timestamp quantity pricePerUnit").lean();
+        for (const c of custConsumables) {
+          try {
+            const key = getZonedStartOfDayUtc(new Date(c.timestamp as Date)).toISOString();
+            await earningRepo.incrementEarnings(key, -((c.quantity as number) * (c.pricePerUnit as number)));
+          } catch { /* ignore */ }
         }
+        await Consumable.deleteMany({ orderId: { $in: orderIds } });
+        counts["consumables"] = (counts["consumables"] ?? 0) + custConsumables.length;
 
-        const orderIds = orderRows.map(r => r.id);
-
-        if (orderIds.length > 0) {
-          const placeholders = orderIds.map(() => "?").join(",");
-
-          // 2. Reverse daily_earnings for customer consumables linked to these orders,
-          //    then delete those consumable entries.
-          type ConsumableRow = { timestamp: string; quantity: number; price_per_unit: number };
-          const customerConsumables = db.prepare(
-            `SELECT timestamp, quantity, price_per_unit FROM consumables
-             WHERE order_id IN (${placeholders}) AND consumer_type = 'customer'`
-          ).all(...orderIds) as ConsumableRow[];
-
-          for (const c of customerConsumables) {
-            try {
-              const dateIso = getZonedStartOfDayUtc(new Date(c.timestamp)).toISOString();
-              earningRepo.incrementEarnings(dateIso, -(c.quantity * c.price_per_unit));
-            } catch { /* ignore earnings errors */ }
-          }
-
-          const consumableResult = db.prepare(
-            `DELETE FROM consumables WHERE order_id IN (${placeholders})`
-          ).run(...orderIds) as { changes: number };
-          counts["consumables"] = (counts["consumables"] ?? 0) + consumableResult.changes;
-
-          // 3. Reverse customer_ledger balances for transactions linked to these orders,
-          //    then delete those transactions.
-          type LedgerTxRow = { ledger_id: number; transaction_type: string; amount: number };
-          const ledgerTxs = db.prepare(
-            `SELECT ledger_id, transaction_type, amount FROM customer_ledger_transactions
-             WHERE order_id IN (${placeholders})`
-          ).all(...orderIds) as LedgerTxRow[];
-
-          // Compute net balance reversal per ledger entry
-          const balanceReversals = new Map<number, number>();
-          for (const tx of ledgerTxs) {
-            // Determine the original delta direction:
-            //   "full_payment_due" / "balance_increased" → was +amount (customer owed more)
-            //   "balance_decreased" / "payment_received" → was -amount (customer paid / balance reduced)
-            const wasPositive = tx.transaction_type === "full_payment_due" || tx.transaction_type === "balance_increased";
-            const reversalDelta = wasPositive ? -tx.amount : tx.amount;
-            balanceReversals.set(tx.ledger_id, (balanceReversals.get(tx.ledger_id) ?? 0) + reversalDelta);
-          }
-
-          const updateLedger = db.prepare(
-            `UPDATE customer_ledger SET balance_due = MAX(0, balance_due + ?), updated_at = datetime('now') WHERE id = ?`
+        // Reverse ledger balances for transactions tied to these orders
+        const ledgerDocs = await CustomerLedger.find({
+          "transactions.orderId": { $in: orderIds },
+        }).lean();
+        for (const led of ledgerDocs) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const related = (led.transactions as any[]).filter(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (t: any) => t.orderId && orderIds.some(id => String(id) === String(t.orderId))
           );
-          for (const [ledgerId, delta] of balanceReversals) {
-            updateLedger.run(delta, ledgerId);
+          let delta = 0;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          for (const tx of related as any[]) {
+            const wasPos = tx.transactionType === "full_payment_due" || tx.transactionType === "balance_increased";
+            delta += wasPos ? -tx.amount : tx.amount;
           }
-
-          db.prepare(
-            `DELETE FROM customer_ledger_transactions WHERE order_id IN (${placeholders})`
-          ).run(...orderIds);
-
-          // 4. Reverse daily_earnings for each order's amount_paid
-          for (const order of orderRows) {
-            if (order.amount_paid > 0) {
-              try {
-                const dateIso = getZonedStartOfDayUtc(new Date(order.order_date)).toISOString();
-                earningRepo.incrementEarnings(dateIso, -order.amount_paid);
-              } catch { /* ignore */ }
-            }
+          if (delta !== 0) {
+            await CustomerLedger.findByIdAndUpdate(led._id, {
+              $pull: { transactions: { orderId: { $in: orderIds } } },
+              $inc: { balanceDue: delta },
+            });
           }
         }
 
-        // 5. Delete the orders
-        let orderResult: { changes: number };
-        if (startDate && endDate) {
-          const endDt = new Date(endDate);
-          endDt.setUTCHours(23, 59, 59, 999);
-          orderResult = db.prepare(
-            `DELETE FROM orders WHERE order_date >= ? AND order_date <= ?`
-          ).run(new Date(startDate).toISOString(), endDt.toISOString()) as { changes: number };
-        } else {
-          orderResult = db.prepare(`DELETE FROM orders`).run() as { changes: number };
-        }
-        counts["orders"] = orderResult.changes;
-      }
-
-      // Handle all other selected modules normally
-      for (const mod of modules) {
-        if (mod === "orders") continue; // already handled above
-        const table = TABLE_MAP[mod];
-        if (!table) continue;
-
-        const dateCol = DATE_COL[mod];
-        let result: { changes: number };
-
-        if (dateCol && startDate && endDate) {
-          const endDt = new Date(endDate);
-          endDt.setUTCHours(23, 59, 59, 999);
-          result = db
-            .prepare(`DELETE FROM ${table} WHERE ${dateCol} >= ? AND ${dateCol} <= ?`)
-            .run(new Date(startDate).toISOString(), endDt.toISOString()) as { changes: number };
-        } else {
-          result = db.prepare(`DELETE FROM ${table}`).run() as { changes: number };
-        }
-
-        counts[mod] = result.changes;
-
-        // Re-seed virtual takeaway table after tables are deleted
-        if (mod === "tables") {
-          db.prepare("INSERT OR IGNORE INTO tables_tb (table_no, seats, is_virtual) VALUES (0, 0, 1)").run();
+        // Reverse daily_earnings for orders
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const o of orderDocs as any[]) {
+          if (o.amountPaid > 0) {
+            try {
+              const key = getZonedStartOfDayUtc(new Date(o.orderDate)).toISOString();
+              await earningRepo.incrementEarnings(key, -o.amountPaid);
+            } catch { /* ignore */ }
+          }
         }
       }
-    });
 
-    deleteTx();
+      const result = await Order.deleteMany(ordQ);
+      counts["orders"] = result.deletedCount;
+    }
+
+    for (const mod of modules) {
+      if (mod === "orders") continue;
+      if (mod === "consumables") {
+        const q = dateQ("timestamp");
+        const r = await Consumable.deleteMany(q);
+        counts["consumables"] = (counts["consumables"] ?? 0) + r.deletedCount;
+      } else if (mod === "staff") {
+        const r = await Staff.deleteMany({});
+        counts["staff"] = r.deletedCount;
+      } else if (mod === "tables") {
+        await Table.deleteMany({});
+        // Re-seed virtual takeaway table
+        await Table.updateOne(
+          { tableNo: 0 },
+          { $setOnInsert: { tableNo: 0, seats: 0, status: "Available", isVirtual: true } },
+          { upsert: true }
+        );
+        const r2 = await Table.countDocuments();
+        counts["tables"] = r2;
+      } else if (mod === "dishes") {
+        const r = await Dish.deleteMany({});
+        counts["dishes"] = r.deletedCount;
+      } else if (mod === "ledger") {
+        const r = await CustomerLedger.deleteMany({});
+        counts["ledger"] = r.deletedCount;
+      }
+    }
 
     const total = Object.values(counts).reduce((a, b) => a + b, 0);
-    res.json({
-      success: true,
-      message: `Deleted ${total} record(s).`,
-      data: counts,
-    });
+    res.json({ success: true, message: `Deleted ${total} record(s).`, data: counts });
   } catch (err) {
     next(err);
   }
@@ -439,11 +344,9 @@ export const deleteData = (req: Request, res: Response, next: NextFunction) => {
 
 // ─── Import (Restore) ─────────────────────────────────────────────────────────
 
-export const importData = (req: Request, res: Response, next: NextFunction) => {
+export const importData = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = req.body as { exportedAt?: string; data?: Record<string, unknown[]> } | Record<string, unknown[]>;
-
-    // Accept both { exportedAt, data: {...} } and a flat { orders, staff, ... }
     const moduleData: Record<string, unknown[]> =
       (body as { data?: Record<string, unknown[]> }).data ??
       (body as Record<string, unknown[]>);
@@ -453,229 +356,182 @@ export const importData = (req: Request, res: Response, next: NextFunction) => {
       return;
     }
 
-    const db = getDb();
     const counts: Record<string, number> = {};
 
-    const importTx = db.transaction(() => {
-      // ── orders ──────────────────────────────────────────────────────────────
-      if (Array.isArray(moduleData["orders"])) {
-        let cnt = 0;
-        for (const raw of moduleData["orders"] as Record<string, unknown>[]) {
-          const row = { ...raw };
+    if (Array.isArray(moduleData["orders"])) {
+      let cnt = 0;
+      for (const raw of moduleData["orders"] as Record<string, unknown>[]) {
+        const idempKey = raw["idempotencyKey"] as string | undefined;
+        const filter = idempKey ? { idempotencyKey: idempKey } : { _id: new mongoose.Types.ObjectId() };
+        await Order.updateOne(filter, { $setOnInsert: {
+          customerDetails: raw["customerDetails"],
+          orderStatus: raw["orderStatus"],
+          orderDate: raw["orderDate"] ? new Date(raw["orderDate"] as string) : new Date(),
+          bills: raw["bills"],
+          items: raw["items"] ?? [],
+          paymentMethod: raw["paymentMethod"],
+          paymentStatus: raw["paymentStatus"],
+          amountPaid: raw["amountPaid"] ?? 0,
+          balanceDueOnOrder: raw["balanceDueOnOrder"] ?? 0,
+          orderType: raw["orderType"] ?? "dine-in",
+          deliveryAddress: raw["deliveryAddress"] ?? "",
+          idempotencyKey: idempKey ?? null,
+        } }, { upsert: true });
+        const amountPaid = Number(raw["amountPaid"]);
+        if (amountPaid > 0 && raw["orderDate"]) {
+          try {
+            const key = getZonedStartOfDayUtc(new Date(raw["orderDate"] as string)).toISOString();
+            await earningRepo.incrementEarnings(key, amountPaid);
+          } catch { /* ignore */ }
+        }
+        cnt++;
+      }
+      counts["orders"] = cnt;
+    }
 
-          // ── Normalize old bills format { total, roundOff, totalWithTax } ──────
-          // New format: { subtotal, tax, roundoff, total }
-          if (typeof row["bills"] === "string") {
+    if (Array.isArray(moduleData["staff"])) {
+      let cnt = 0;
+      for (const raw of moduleData["staff"] as Record<string, unknown>[]) {
+        const { payments, _id: _sid, ...staffData } = raw;
+        const parsedPayments = Array.isArray(payments)
+          ? payments
+          : typeof payments === "string"
+          ? JSON.parse(payments)
+          : [];
+        await Staff.updateOne(
+          { name: staffData["name"], phone: staffData["phone"] },
+          { $setOnInsert: { ...staffData, payments: parsedPayments } },
+          { upsert: true }
+        );
+        cnt++;
+      }
+      counts["staff"] = cnt;
+    }
+
+    if (Array.isArray(moduleData["consumables"])) {
+      let cnt = 0;
+      for (const raw of moduleData["consumables"] as Record<string, unknown>[]) {
+        const { _id: _cid, ...cData } = raw;
+        await Consumable.create({
+          ...cData,
+          timestamp: cData["timestamp"] ? new Date(cData["timestamp"] as string) : new Date(),
+        }).catch(() => { /* skip duplicates */ });
+        if (cData["consumerType"] === "customer" && cData["orderId"] != null) {
+          const qty = Number(cData["quantity"]);
+          const ppu = Number(cData["pricePerUnit"] ?? cData["price_per_unit"]);
+          if (qty > 0 && ppu > 0 && cData["timestamp"]) {
             try {
-              const b = JSON.parse(row["bills"] as string) as Record<string, number>;
-              if ("totalWithTax" in b && !("subtotal" in b)) {
-                const normalized = {
-                  subtotal: b["total"] ?? b["totalWithTax"] ?? 0,
-                  tax:      b["tax"]   ?? 0,
-                  roundoff: b["roundOff"] ?? 0,
-                  total:    b["totalWithTax"] ?? b["total"] ?? 0,
-                };
-                row["bills"] = JSON.stringify(normalized);
-              }
-            } catch { /* leave as-is if unparseable */ }
+              const key = getZonedStartOfDayUtc(new Date(cData["timestamp"] as string)).toISOString();
+              await earningRepo.incrementEarnings(key, qty * ppu);
+            } catch { /* ignore */ }
           }
-
-          // ── Normalize old items: add missing variantSize ─────────────────────
-          if (typeof row["items"] === "string") {
-            try {
-              const items = JSON.parse(row["items"] as string) as Record<string, unknown>[];
-              const fixed = items.map((it) =>
-                "variantSize" in it ? it : { ...it, variantSize: "Regular" }
-              );
-              row["items"] = JSON.stringify(fixed);
-            } catch { /* leave as-is */ }
-          }
-
-          const cols = Object.keys(row);
-          db.prepare(`INSERT OR REPLACE INTO orders (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`)
-            .run(...cols.map((c) => row[c]));
-          // Re-credit daily_earnings for the order's amount_paid (mirrors deleteData reversal)
-          const amountPaid = Number(row["amount_paid"]);
-          if (amountPaid > 0) {
-            try {
-              const dateIso = getZonedStartOfDayUtc(new Date(row["order_date"] as string)).toISOString();
-              earningRepo.incrementEarnings(dateIso, amountPaid);
-            } catch { /* ignore earnings errors */ }
-          }
-          cnt++;
         }
-        counts["orders"] = cnt;
+        cnt++;
       }
+      counts["consumables"] = cnt;
+    }
 
-      // ── staff (+ nested payments) ────────────────────────────────────────────
-      if (Array.isArray(moduleData["staff"])) {
-        let cnt = 0;
-        for (const raw of moduleData["staff"] as Record<string, unknown>[]) {
-          const { payments: paymentsRaw, ...staffRow } = raw;
-          const cols = Object.keys(staffRow);
-          db.prepare(`INSERT OR REPLACE INTO staff (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`)
-            .run(...cols.map((c) => staffRow[c]));
-
-          const payments: Record<string, unknown>[] =
-            typeof paymentsRaw === "string"
-              ? (JSON.parse(paymentsRaw) as Record<string, unknown>[])
-              : Array.isArray(paymentsRaw)
-              ? (paymentsRaw as Record<string, unknown>[])
-              : [];
-
-          for (const p of payments) {
-            // Ensure staff_id is present (not included in the export JSON object)
-            const payment: Record<string, unknown> = { staff_id: staffRow["id"], ...p };
-            const pcols = Object.keys(payment);
-            db.prepare(`INSERT OR REPLACE INTO staff_payments (${pcols.join(", ")}) VALUES (${pcols.map(() => "?").join(", ")})`)
-              .run(...pcols.map((c) => payment[c]));
-          }
-          cnt++;
-        }
-        counts["staff"] = cnt;
+    if (Array.isArray(moduleData["dishes"])) {
+      let cnt = 0;
+      for (const raw of moduleData["dishes"] as Record<string, unknown>[]) {
+        const { _id: _did, ...dData } = raw;
+        await Dish.updateOne(
+          { name: dData["name"] },
+          { $setOnInsert: dData },
+          { upsert: true }
+        );
+        cnt++;
       }
+      counts["dishes"] = cnt;
+    }
 
-      // ── consumables ───────────────────────────────────────────────────────────
-      if (Array.isArray(moduleData["consumables"])) {
-        let cnt = 0;
-        for (const row of moduleData["consumables"] as Record<string, unknown>[]) {
-          const cols = Object.keys(row);
-          db.prepare(`INSERT OR REPLACE INTO consumables (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`)
-            .run(...cols.map((c) => row[c]));
-          // Re-credit daily_earnings for customer consumables linked to orders (mirrors deleteData reversal)
-          if (row["consumer_type"] === "customer" && row["order_id"] != null) {
-            try {
-              const qty = Number(row["quantity"]);
-              const ppu = Number(row["price_per_unit"]);
-              if (qty > 0 && ppu > 0) {
-                const dateIso = getZonedStartOfDayUtc(new Date(row["timestamp"] as string)).toISOString();
-                earningRepo.incrementEarnings(dateIso, qty * ppu);
-              }
-            } catch { /* ignore earnings errors */ }
-          }
-          cnt++;
-        }
-        counts["consumables"] = cnt;
+    if (Array.isArray(moduleData["tables"])) {
+      let cnt = 0;
+      for (const raw of moduleData["tables"] as Record<string, unknown>[]) {
+        const { _id: _tid, currentOrderId: _co, ...tData } = raw;
+        await Table.updateOne(
+          { tableNo: tData["tableNo"] },
+          { $setOnInsert: { ...tData, currentOrderId: null } },
+          { upsert: true }
+        );
+        cnt++;
       }
+      // Ensure virtual table exists
+      await Table.updateOne(
+        { tableNo: 0 },
+        { $setOnInsert: { tableNo: 0, seats: 0, status: "Available", isVirtual: true } },
+        { upsert: true }
+      );
+      counts["tables"] = cnt;
+    }
 
-      // ── tables ────────────────────────────────────────────────────────────────
-      if (Array.isArray(moduleData["tables"])) {
-        let cnt = 0;
-        for (const row of moduleData["tables"] as Record<string, unknown>[]) {
-          const cols = Object.keys(row);
-          db.prepare(`INSERT OR REPLACE INTO tables_tb (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`)
-            .run(...cols.map((c) => row[c]));
-          cnt++;
-        }
-        counts["tables"] = cnt;
-        // Re-seed virtual takeaway table — old backups won't have it
-        db.prepare("INSERT OR IGNORE INTO tables_tb (table_no, seats, is_virtual) VALUES (0, 0, 1)").run();
+    if (Array.isArray(moduleData["ledger"])) {
+      let cnt = 0;
+      for (const raw of moduleData["ledger"] as Record<string, unknown>[]) {
+        const { transactions: txRaw, _id: _lid, ...ledData } = raw;
+        const parsedTxs = Array.isArray(txRaw)
+          ? txRaw
+          : typeof txRaw === "string"
+          ? JSON.parse(txRaw)
+          : [];
+        let balanceDue = Number(ledData["balanceDue"] ?? ledData["balance_due"] ?? 0);
+        if (balanceDue < 0) balanceDue = 0;
+        await CustomerLedger.updateOne(
+          { customerPhone: ledData["customerPhone"] ?? ledData["customer_phone"] },
+          { $setOnInsert: {
+            customerPhone: ledData["customerPhone"] ?? ledData["customer_phone"],
+            customerName: ledData["customerName"] ?? ledData["customer_name"],
+            balanceDue,
+            lastActivity: ledData["lastActivity"] ? new Date(ledData["lastActivity"] as string) : new Date(),
+            transactions: parsedTxs.map((t: Record<string, unknown>) => ({
+              transactionType: t["transactionType"] ?? t["transaction_type"],
+              amount: t["amount"],
+              timestamp: t["timestamp"] ? new Date(t["timestamp"] as string) : new Date(),
+              notes: t["notes"] ?? "",
+            })),
+          } },
+          { upsert: true }
+        );
+        cnt++;
       }
-
-      // ── dishes ────────────────────────────────────────────────────────────────
-      if (Array.isArray(moduleData["dishes"])) {
-        let cnt = 0;
-        for (const row of moduleData["dishes"] as Record<string, unknown>[]) {
-          const cols = Object.keys(row);
-          db.prepare(`INSERT OR REPLACE INTO dishes (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`)
-            .run(...cols.map((c) => row[c]));
-          cnt++;
-        }
-        counts["dishes"] = cnt;
-      }
-
-      // ── ledger (+ nested transactions) ───────────────────────────────────────
-      if (Array.isArray(moduleData["ledger"])) {
-        let cnt = 0;
-        for (const raw of moduleData["ledger"] as Record<string, unknown>[]) {
-          const { transactions: txRaw, ...ledgerRow } = raw;
-          // Old backups can have negative balance_due (overpaid) — clamp to 0
-          if (typeof ledgerRow["balance_due"] === "number" && ledgerRow["balance_due"] < 0) {
-            ledgerRow["balance_due"] = 0;
-          }
-          const cols = Object.keys(ledgerRow);
-          db.prepare(`INSERT OR REPLACE INTO customer_ledger (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`)
-            .run(...cols.map((c) => ledgerRow[c]));
-
-          const transactions: Record<string, unknown>[] =
-            typeof txRaw === "string"
-              ? (JSON.parse(txRaw) as Record<string, unknown>[])
-              : Array.isArray(txRaw)
-              ? (txRaw as Record<string, unknown>[])
-              : [];
-
-          for (const t of transactions) {
-            // Ensure ledger_id is present (not included in the export JSON object)
-            const tx: Record<string, unknown> = { ledger_id: ledgerRow["id"], ...t };
-            const tcols = Object.keys(tx);
-            db.prepare(`INSERT OR REPLACE INTO customer_ledger_transactions (${tcols.join(", ")}) VALUES (${tcols.map(() => "?").join(", ")})`)
-              .run(...tcols.map((c) => tx[c]));
-          }
-          cnt++;
-        }
-        counts["ledger"] = cnt;
-      }
-    });
-
-    importTx();
+      counts["ledger"] = cnt;
+    }
 
     const total = Object.values(counts).reduce((a, b) => a + b, 0);
-    res.json({
-      success: true,
-      message: `Restored ${total} record(s).`,
-      data: counts,
-    });
+    res.json({ success: true, message: `Restored ${total} record(s).`, data: counts });
   } catch (err) {
     next(err);
   }
 };
 
-// ─── Recalculate daily_earnings from actual orders + consumables ───────────────
+// ─── Recalculate daily_earnings ───────────────────────────────────────────────
 
-export const recalcEarnings = (req: Request, res: Response, next: NextFunction) => {
+export const recalcEarnings = async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const db = getDb();
+    const orders = await Order.find({ amountPaid: { $gt: 0 } })
+      .select("orderDate amountPaid").lean();
+    const consumables = await Consumable.find({ consumerType: "customer", orderId: { $ne: null } })
+      .select("timestamp quantity pricePerUnit").lean();
 
-    type OrderRow = { order_date: string; amount_paid: number };
-    type ConsumableRow = { timestamp: string; quantity: number; price_per_unit: number };
-
-    const orders = db.prepare(
-      `SELECT order_date, amount_paid FROM orders WHERE amount_paid > 0`
-    ).all() as OrderRow[];
-
-    const consumables = db.prepare(
-      `SELECT timestamp, quantity, price_per_unit FROM consumables
-       WHERE consumer_type = 'customer' AND order_id IS NOT NULL`
-    ).all() as ConsumableRow[];
-
-    // Accumulate totals per day-bucket (IST start-of-day stored as UTC ISO)
     const totals = new Map<string, number>();
 
     for (const o of orders) {
       try {
-        const key = getZonedStartOfDayUtc(new Date(o.order_date)).toISOString();
-        totals.set(key, (totals.get(key) ?? 0) + o.amount_paid);
-      } catch { /* skip malformed dates */ }
+        const key = getZonedStartOfDayUtc(new Date(o.orderDate as Date)).toISOString();
+        totals.set(key, (totals.get(key) ?? 0) + (o.amountPaid as number));
+      } catch { /* skip */ }
     }
-
     for (const c of consumables) {
       try {
-        const key = getZonedStartOfDayUtc(new Date(c.timestamp)).toISOString();
-        totals.set(key, (totals.get(key) ?? 0) + c.quantity * c.price_per_unit);
-      } catch { /* skip malformed dates */ }
+        const key = getZonedStartOfDayUtc(new Date(c.timestamp as Date)).toISOString();
+        totals.set(key, (totals.get(key) ?? 0) + (c.quantity as number) * (c.pricePerUnit as number));
+      } catch { /* skip */ }
     }
 
-    const recalcTx = db.transaction(() => {
-      // Wipe existing earnings and rebuild clean
-      db.prepare("DELETE FROM daily_earnings").run();
-      try { db.prepare("DELETE FROM sqlite_sequence WHERE name = 'daily_earnings'").run(); } catch { /* ok */ }
-
-      for (const [dateIso, total] of totals) {
-        earningRepo.incrementEarnings(dateIso, total);
-      }
-    });
-
-    recalcTx();
+    await DailyEarning.deleteMany({});
+    for (const [dateIso, total] of totals) {
+      await earningRepo.incrementEarnings(dateIso, total);
+    }
 
     res.json({
       success: true,
@@ -688,8 +544,6 @@ export const recalcEarnings = (req: Request, res: Response, next: NextFunction) 
 };
 
 // ─── Full DB Reset ─────────────────────────────────────────────────────────────
-// Clears all operational/transactional data.
-// Preserved: users, dishes (menu), tables_tb (structure), staff (profiles).
 
 export const resetDb = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -699,15 +553,13 @@ export const resetDb = async (req: Request, res: Response, next: NextFunction) =
       res.status(400).json({ success: false, message: "Confirmation phrase incorrect." });
       return;
     }
-
     if (!password) {
       res.status(400).json({ success: false, message: "Admin password is required." });
       return;
     }
 
-    // Verify the logged-in admin's password
-    const userId = (req.user as { _id: string | number })?._id;
-    const user = userRepo.findById(userId);
+    const userId = (req.user as { _id: string })?._id;
+    const user = await userRepo.findById(userId);
     if (!user || (user as Record<string, unknown>).role !== "Admin") {
       res.status(403).json({ success: false, message: "Admin access required." });
       return;
@@ -718,33 +570,20 @@ export const resetDb = async (req: Request, res: Response, next: NextFunction) =
       return;
     }
 
-    const db = getDb();
+    await Promise.all([
+      CustomerLedger.deleteMany({}),
+      Consumable.deleteMany({}),
+      Order.deleteMany({}),
+      Payment.deleteMany({}),
+      Expense.deleteMany({}),
+      DailyEarning.deleteMany({}),
+    ]);
 
-    const resetTx = db.transaction(() => {
-      // Transactional / operational data — full wipe
-      db.prepare("DELETE FROM customer_ledger_transactions").run();
-      db.prepare("DELETE FROM customer_ledger").run();
-      db.prepare("DELETE FROM consumables").run();
-      db.prepare("DELETE FROM orders").run();
-      db.prepare("DELETE FROM payments").run();
-      db.prepare("DELETE FROM expenses").run();
-      db.prepare("DELETE FROM daily_earnings").run();
-      db.prepare("DELETE FROM staff_payments").run();
+    // Reset tables to Available, keep layout
+    await Table.updateMany({}, { $set: { status: "Available", currentOrderId: null } });
 
-      // Reset auto-increment sequences for wiped tables
-      const resetSeq = db.prepare("DELETE FROM sqlite_sequence WHERE name = ?");
-      for (const t of ["customer_ledger_transactions", "customer_ledger", "consumables", "orders", "payments", "expenses", "daily_earnings", "staff_payments"]) {
-        try { resetSeq.run(t); } catch { /* sqlite_sequence may not have this row yet */ }
-      }
-
-      // Reset tables to Available (keep table layout / seat config)
-      db.prepare("UPDATE tables_tb SET status = 'Available', current_order_id = NULL, updated_at = datetime('now')").run();
-
-      // Reset dish order counts
-      db.prepare("UPDATE dishes SET number_of_orders = 0, updated_at = datetime('now')").run();
-    });
-
-    resetTx();
+    // Reset dish order counts
+    await Dish.updateMany({}, { $set: { numberOfOrders: 0 } });
 
     res.json({
       success: true,

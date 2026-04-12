@@ -16,12 +16,12 @@ const register = async (req: Request, res: Response, next: NextFunction) => {
       return next(createHttpError(400, "All fields are required!"));
     }
 
-    if (userRepo.findByEmail(email)) {
+    if (await userRepo.findByEmail(email)) {
       return next(createHttpError(400, "User already exists!"));
     }
 
     const hashed = await bcrypt.hash(password, 10);
-    const user = userRepo.create({ name, phone, email, password: hashed, role });
+    const user = await userRepo.create({ name, phone, email, password: hashed, role });
 
     const { password: _, ...userWithoutPassword } = user as Record<string, unknown>;
     res.status(201).json({ success: true, message: "New user created!", data: userWithoutPassword });
@@ -38,7 +38,7 @@ const login = async (req: Request, res: Response, next: NextFunction) => {
       return next(createHttpError(400, "All fields are required!"));
     }
 
-    const user = userRepo.findByEmail(email);
+    const user = await userRepo.findByEmail(email);
     if (!user) {
       return next(createHttpError(401, "Invalid Credentials"));
     }
@@ -67,14 +67,14 @@ const login = async (req: Request, res: Response, next: NextFunction) => {
 
 const getUserData = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const user = userRepo.findByIdWithoutPassword((req.user as jwt.JwtPayload)._id);
+    const user = await userRepo.findByIdWithoutPassword((req.user as jwt.JwtPayload)._id);
     res.status(200).json({ success: true, data: user });
   } catch (error) {
     next(error);
   }
 };
 
-const logout = async (req: Request, res: Response, next: NextFunction) => {
+const logout = async (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.clearCookie("accessToken");
     res.status(200).json({ success: true, message: "User logout successfully!" });

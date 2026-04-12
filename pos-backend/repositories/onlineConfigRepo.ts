@@ -1,74 +1,53 @@
-import { getDb } from "../db";
+import { DeliveryArea } from "../models";
 import * as SettingsRepo from "./settingsRepo";
 
 // ── Delivery Areas ────────────────────────────────────────────────────────────
 
-function rowToArea(row: Record<string, unknown>) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToArea(doc: any) {
   return {
-    _id: String(row["id"]),
-    name: row["name"] as string,
-    isActive: row["is_active"] !== 0,
-    deliveryFee: Number(row["delivery_fee"] ?? 0),
-    minOrderAmount: Number(row["min_order_amount"] ?? 0),
-    createdAt: row["created_at"] as string,
-    updatedAt: row["updated_at"] as string,
+    _id: String(doc._id),
+    name: doc.name as string,
+    isActive: Boolean(doc.isActive),
+    deliveryFee: Number(doc.deliveryFee ?? 0),
+    minOrderAmount: Number(doc.minOrderAmount ?? 0),
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
   };
 }
 
-export function getAllAreas() {
-  const rows = getDb()
-    .prepare("SELECT * FROM delivery_areas ORDER BY name ASC")
-    .all() as Record<string, unknown>[];
-  return rows.map(rowToArea);
+export async function getAllAreas() {
+  const docs = await DeliveryArea.find().sort({ name: 1 }).lean();
+  return docs.map(rowToArea);
 }
 
-export function getActiveAreas() {
-  const rows = getDb()
-    .prepare("SELECT * FROM delivery_areas WHERE is_active = 1 ORDER BY name ASC")
-    .all() as Record<string, unknown>[];
-  return rows.map(rowToArea);
+export async function getActiveAreas() {
+  const docs = await DeliveryArea.find({ isActive: true }).sort({ name: 1 }).lean();
+  return docs.map(rowToArea);
 }
 
-export function addArea(name: string, deliveryFee = 0, minOrderAmount = 0) {
-  const db = getDb();
-  const result = db
-    .prepare("INSERT INTO delivery_areas (name, delivery_fee, min_order_amount) VALUES (?, ?, ?)")
-    .run(name.trim(), deliveryFee, minOrderAmount);
-  const row = db
-    .prepare("SELECT * FROM delivery_areas WHERE id = ?")
-    .get(result.lastInsertRowid) as Record<string, unknown>;
-  return rowToArea(row);
+export async function addArea(name: string, deliveryFee = 0, minOrderAmount = 0) {
+  const doc = await DeliveryArea.create({ name: name.trim(), deliveryFee, minOrderAmount });
+  return rowToArea(doc.toJSON());
 }
 
-export function updateArea(id: string | number, updates: { deliveryFee?: number; minOrderAmount?: number }) {
-  const db = getDb();
-  const sets: string[] = ["updated_at = datetime('now')"];
-  const values: unknown[] = [];
-  if (updates.deliveryFee !== undefined) { sets.push("delivery_fee = ?"); values.push(updates.deliveryFee); }
-  if (updates.minOrderAmount !== undefined) { sets.push("min_order_amount = ?"); values.push(updates.minOrderAmount); }
-  if (sets.length === 1) return null; // nothing to update
-  values.push(Number(id));
-  db.prepare(`UPDATE delivery_areas SET ${sets.join(", ")} WHERE id = ?`).run(...values);
-  const row = db.prepare("SELECT * FROM delivery_areas WHERE id = ?").get(Number(id)) as Record<string, unknown> | undefined;
-  return row ? rowToArea(row) : null;
+export async function updateArea(id: string, updates: { deliveryFee?: number; minOrderAmount?: number }) {
+  const patch: Record<string, unknown> = {};
+  if (updates.deliveryFee !== undefined) patch.deliveryFee = updates.deliveryFee;
+  if (updates.minOrderAmount !== undefined) patch.minOrderAmount = updates.minOrderAmount;
+  if (!Object.keys(patch).length) return null;
+  const doc = await DeliveryArea.findByIdAndUpdate(id, { $set: patch }, { new: true }).lean();
+  return doc ? rowToArea(doc) : null;
 }
 
-export function deleteArea(id: string | number) {
-  const changes = getDb()
-    .prepare("DELETE FROM delivery_areas WHERE id = ?")
-    .run(Number(id)).changes;
-  return changes > 0;
+export async function deleteArea(id: string): Promise<boolean> {
+  const result = await DeliveryArea.findByIdAndDelete(id);
+  return result !== null;
 }
 
-export function toggleArea(id: string | number, isActive: boolean) {
-  const db = getDb();
-  db.prepare(
-    "UPDATE delivery_areas SET is_active = ?, updated_at = datetime('now') WHERE id = ?"
-  ).run(isActive ? 1 : 0, Number(id));
-  const row = db
-    .prepare("SELECT * FROM delivery_areas WHERE id = ?")
-    .get(Number(id)) as Record<string, unknown> | undefined;
-  return row ? rowToArea(row) : null;
+export async function toggleArea(id: string, isActive: boolean) {
+  const doc = await DeliveryArea.findByIdAndUpdate(id, { $set: { isActive } }, { new: true }).lean();
+  return doc ? rowToArea(doc) : null;
 }
 
 // ── Config Flags ──────────────────────────────────────────────────────────────
@@ -80,27 +59,26 @@ export interface OnlineConfigFlags {
   availableTimeEnd: string;
 }
 
-export function getFlags(): OnlineConfigFlags {
-  return {
-    isOnline: SettingsRepo.isOnlineOrdersEnabled(),
-    deliveryEnabled: SettingsRepo.getSetting("delivery_enabled") !== "false",
-    availableTimeStart: SettingsRepo.getSetting("available_time_start") ?? "09:00",
-    availableTimeEnd: SettingsRepo.getSetting("available_time_end") ?? "22:00",
-  };
+export async function getFlags(): Promise<OnlineConfigFlags> {
+  const [isOnline, deliveryEnabled, availableTimeStart, availableTimeEnd] = await Promise.all([
+    SettingsRepo.isOnlineOrdersEnabled(),
+    SettingsRepo.getSetting("delivery_enabled").then(v => v !== "false"),
+    SettingsRepo.getSetting("available_time_start").then(v => v ?? "09:00"),
+    SettingsRepo.getSetting("available_time_end").then(v => v ?? "22:00"),
+  ]);
+  return { isOnline, deliveryEnabled, availableTimeStart, availableTimeEnd };
 }
 
-export function setFlags(updates: Partial<OnlineConfigFlags>): OnlineConfigFlags {
-  if (updates.isOnline !== undefined) {
-    SettingsRepo.setSetting("online_orders", String(updates.isOnline));
-  }
-  if (updates.deliveryEnabled !== undefined) {
-    SettingsRepo.setSetting("delivery_enabled", String(updates.deliveryEnabled));
-  }
-  if (updates.availableTimeStart !== undefined) {
-    SettingsRepo.setSetting("available_time_start", updates.availableTimeStart);
-  }
-  if (updates.availableTimeEnd !== undefined) {
-    SettingsRepo.setSetting("available_time_end", updates.availableTimeEnd);
-  }
+export async function setFlags(updates: Partial<OnlineConfigFlags>): Promise<OnlineConfigFlags> {
+  const tasks: Promise<unknown>[] = [];
+  if (updates.isOnline !== undefined)
+    tasks.push(SettingsRepo.setSetting("online_orders", String(updates.isOnline)));
+  if (updates.deliveryEnabled !== undefined)
+    tasks.push(SettingsRepo.setSetting("delivery_enabled", String(updates.deliveryEnabled)));
+  if (updates.availableTimeStart !== undefined)
+    tasks.push(SettingsRepo.setSetting("available_time_start", updates.availableTimeStart));
+  if (updates.availableTimeEnd !== undefined)
+    tasks.push(SettingsRepo.setSetting("available_time_end", updates.availableTimeEnd));
+  await Promise.all(tasks);
   return getFlags();
 }

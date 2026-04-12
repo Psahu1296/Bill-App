@@ -1,4 +1,5 @@
 import { Response, NextFunction } from "express";
+import mongoose from "mongoose";
 import createHttpError from "http-errors";
 import * as staffRepo from "../repositories/staffRepo";
 import { CustomRequest as Request } from "../types";
@@ -9,7 +10,7 @@ const getAllStaff = async (req: Request, res: Response, next: NextFunction) => {
     const filters: { role?: string; isActive?: boolean } = {};
     if (role) filters.role = role;
     if (isActive !== undefined) filters.isActive = isActive === "true";
-    res.status(200).json({ success: true, data: staffRepo.findAll(filters) });
+    res.status(200).json({ success: true, data: await staffRepo.findAll(filters) });
   } catch (error) {
     next(error);
   }
@@ -21,7 +22,7 @@ const addStaff = async (req: Request, res: Response, next: NextFunction) => {
     if (!name?.trim() || !phone?.trim() || !role) {
       return next(createHttpError(400, "name, phone, and role are required."));
     }
-    const member = staffRepo.create({
+    const member = await staffRepo.create({
       name: name.trim(), phone: phone.trim(), role,
       monthlySalary: Number(monthlySalary) || 0,
       joinDate: joinDate ?? new Date().toISOString().split("T")[0],
@@ -35,11 +36,11 @@ const addStaff = async (req: Request, res: Response, next: NextFunction) => {
 const updateStaff = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-    if (!id || isNaN(Number(id))) {
+    if (!id || !mongoose.isValidObjectId(id)) {
       return next(createHttpError(400, "Invalid staff ID format."));
     }
     const { _id, __v, payments, ...updates } = req.body;
-    const member = staffRepo.update(id, updates);
+    const member = await staffRepo.update(id, updates);
     if (!member) return next(createHttpError(404, "Staff member not found."));
     res.status(200).json({ success: true, message: "Staff member updated.", data: member });
   } catch (error) {
@@ -50,10 +51,10 @@ const updateStaff = async (req: Request, res: Response, next: NextFunction) => {
 const deleteStaff = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-    if (!id || isNaN(Number(id))) {
+    if (!id || !mongoose.isValidObjectId(id)) {
       return next(createHttpError(400, "Invalid staff ID format."));
     }
-    const member = staffRepo.remove(id);
+    const member = await staffRepo.remove(id);
     if (!member) return next(createHttpError(404, "Staff member not found."));
     res.status(200).json({ success: true, message: "Staff member deleted.", data: member });
   } catch (error) {
@@ -64,10 +65,10 @@ const deleteStaff = async (req: Request, res: Response, next: NextFunction) => {
 const toggleActive = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-    if (!id || isNaN(Number(id))) {
+    if (!id || !mongoose.isValidObjectId(id)) {
       return next(createHttpError(400, "Invalid staff ID format."));
     }
-    const member = staffRepo.toggleActive(id);
+    const member = await staffRepo.toggleActive(id);
     if (!member) return next(createHttpError(404, "Staff member not found."));
     const status = (member as Record<string, unknown>).isActive ? "activated" : "deactivated";
     res.status(200).json({ success: true, message: `Staff member ${status}.`, data: member });
@@ -79,16 +80,16 @@ const toggleActive = async (req: Request, res: Response, next: NextFunction) => 
 const addPayment = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-    if (!id || isNaN(Number(id))) {
+    if (!id || !mongoose.isValidObjectId(id)) {
       return next(createHttpError(400, "Invalid staff ID format."));
     }
     const { amount, type, note } = req.body;
     if (!amount || !type) {
       return next(createHttpError(400, "amount and type are required."));
     }
-    const member = staffRepo.findById(id);
+    const member = await staffRepo.findById(id);
     if (!member) return next(createHttpError(404, "Staff member not found."));
-    const updated = staffRepo.addPayment(id, { amount: Number(amount), type, note });
+    const updated = await staffRepo.addPayment(id, { amount: Number(amount), type, note });
     res.status(201).json({ success: true, message: "Payment recorded.", data: updated });
   } catch (error) {
     next(error);
@@ -99,10 +100,10 @@ const deletePayment = async (req: Request, res: Response, next: NextFunction) =>
   try {
     const id = req.params.id as string;
     const paymentId = req.params.paymentId as string;
-    if (!id || isNaN(Number(id)) || !paymentId || isNaN(Number(paymentId))) {
+    if (!id || !mongoose.isValidObjectId(id) || !paymentId || !mongoose.isValidObjectId(paymentId)) {
       return next(createHttpError(400, "Invalid ID format."));
     }
-    const member = staffRepo.deletePayment(id, paymentId);
+    const member = await staffRepo.deletePayment(id, paymentId);
     if (!member) return next(createHttpError(404, "Staff member or payment not found."));
     res.status(200).json({ success: true, message: "Payment deleted.", data: member });
   } catch (error) {

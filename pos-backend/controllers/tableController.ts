@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import mongoose from "mongoose";
 import createHttpError from "http-errors";
 import * as tableRepo from "../repositories/tableRepo";
 
@@ -9,20 +10,20 @@ const addTable = async (req: Request, res: Response, next: NextFunction) => {
       return next(createHttpError(400, "Please provide table number and seats!"));
     }
 
-    if (tableRepo.findByTableNo(Number(tableNo))) {
+    if (await tableRepo.findByTableNo(Number(tableNo))) {
       return next(createHttpError(400, "Table already exist!"));
     }
 
-    const newTable = tableRepo.create({ tableNo: Number(tableNo), seats: Number(seats) });
+    const newTable = await tableRepo.create({ tableNo: Number(tableNo), seats: Number(seats) });
     res.status(201).json({ success: true, message: "Table added!", data: newTable });
   } catch (error) {
     next(error);
   }
 };
 
-const getTables = async (req: Request, res: Response, next: NextFunction) => {
+const getTables = async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const tables = tableRepo.findAll();
+    const tables = await tableRepo.findAll();
     res.status(200).json({ success: true, data: tables });
   } catch (error) {
     next(error);
@@ -34,13 +35,13 @@ const updateTable = async (req: Request, res: Response, next: NextFunction) => {
     const { status, orderId } = req.body;
     const id = req.params.id as string;
 
-    if (!id || isNaN(Number(id))) {
+    if (!id || !mongoose.isValidObjectId(id)) {
       return next(createHttpError(400, "Invalid table ID format!"));
     }
 
-    const table = tableRepo.update(id, {
+    const table = await tableRepo.update(id, {
       status,
-      currentOrderId: orderId != null ? Number(orderId) : null,
+      currentOrderId: orderId != null && mongoose.isValidObjectId(orderId) ? orderId : null,
     });
 
     if (!table) {

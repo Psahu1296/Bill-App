@@ -1,80 +1,74 @@
-import { getDb } from "../db";
+import mongoose from "mongoose";
+import { Expense } from "../models";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function rowToApi(row: any) {
-  if (!row) return null;
-  const { id, expense_date, created_at, updated_at, ...rest } = row;
+function toApi(doc: any) {
+  if (!doc) return null;
   return {
-    _id: String(id),
-    expenseDate: expense_date,
-    createdAt: created_at,
-    updatedAt: updated_at,
-    ...rest,
+    _id: String(doc._id),
+    type: doc.type,
+    name: doc.name,
+    amount: doc.amount,
+    description: doc.description ?? "",
+    expenseDate: doc.expenseDate,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
   };
 }
 
-export function create(data: {
+export async function create(data: {
   type: string; name: string; amount: number;
   description?: string; expenseDate?: string;
 }) {
-  const db = getDb();
-  const result = db.prepare(
-    `INSERT INTO expenses (type, name, amount, description, expense_date)
-     VALUES (@type, @name, @amount, @description, @expenseDate)`
-  ).run({
+  const doc = await Expense.create({
     type: data.type,
     name: data.name,
     amount: data.amount,
-    description: data.description ?? '',
-    expenseDate: data.expenseDate ?? new Date().toISOString(),
+    description: data.description ?? "",
+    expenseDate: data.expenseDate ? new Date(data.expenseDate) : new Date(),
   });
-  return rowToApi(db.prepare("SELECT * FROM expenses WHERE id = ?").get(result.lastInsertRowid));
+  return toApi(doc.toObject())!;
 }
 
-export function findAll(filters: { startDate?: Date; endDate?: Date; type?: string } = {}) {
-  const conditions: string[] = [];
+export async function findAll(filters: { startDate?: Date; endDate?: Date; type?: string } = {}) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const params: any[] = [];
-
-  if (filters.startDate) { conditions.push("expense_date >= ?"); params.push(filters.startDate.toISOString()); }
-  if (filters.endDate)   { conditions.push("expense_date <= ?"); params.push(filters.endDate.toISOString()); }
-  if (filters.type)      { conditions.push("type = ?"); params.push(filters.type); }
-
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  return getDb().prepare(`SELECT * FROM expenses ${where} ORDER BY expense_date DESC`).all(...params).map(rowToApi);
-}
-
-export function aggregateByType(startDate: Date, endDate: Date) {
-  return getDb().prepare(`
-    SELECT type, SUM(amount) AS totalAmount
-    FROM expenses
-    WHERE expense_date >= ? AND expense_date <= ?
-    GROUP BY type
-  `).all(startDate.toISOString(), endDate.toISOString())
-    .map((r: any) => ({ type: r.type, totalAmount: r.totalAmount }));
-}
-
-export function update(id: string | number, updates: Record<string, unknown>) {
-  const db = getDb();
-  const colMap: Record<string, string> = {
-    type: "type", name: "name", amount: "amount",
-    description: "description", expenseDate: "expense_date",
-  };
-  const sets: string[] = [];
-  const params: Record<string, unknown> = { id: Number(id) };
-
-  for (const [js, col] of Object.entries(colMap)) {
-    if (js in updates) { sets.push(`${col} = @${js}`); params[js] = updates[js]; }
+  const query: Record<string, any> = {};
+  if (filters.type) query.type = filters.type;
+  if (filters.startDate || filters.endDate) {
+    query.expenseDate = {};
+    if (filters.startDate) query.expenseDate.$gte = filters.startDate;
+    if (filters.endDate) query.expenseDate.$lte = filters.endDate;
   }
-  if (!sets.length) return findAll();
-  sets.push("updated_at = datetime('now')");
-  db.prepare(`UPDATE expenses SET ${sets.join(", ")} WHERE id = @id`).run(params);
-  return rowToApi(db.prepare("SELECT * FROM expenses WHERE id = ?").get(Number(id)));
+  const docs = await Expense.find(query).sort({ expenseDate: -1 }).lean();
+  return docs.map(toApi);
 }
 
-export function remove(id: string | number) {
-  const db = getDb();
-  const row = db.prepare("SELECT * FROM expenses WHERE id = ?").get(Number(id));
-  db.prepare("DELETE FROM expenses WHERE id = ?").run(Number(id));
-  return rowToApi(row);
+export async function aggregateByType(startDate: Date, endDate: Date) {
+  return Expense.aggregate([
+    { $match: { expenseDate: { $gte: startDate, $lte: endDate } } },
+    { $group: { _id: "$type", totalAmount: { $sum: "$amount" } } },
+    { $project: { _id: 0, type: "$_id", totalAmount: 1 } },
+  ]) as Promise<{ type: string; totalAmount: number }[]>;
+}
+
+export async function update(id: string, updates: Record<string, unknown>) {
+  if (!mongoose.isValidObjectId(id)) return null;
+  const allowed = ["type", "name", "amount", "description", "expenseDate"];
+  const patch: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (key in updates) {
+      patch[key] = key === "expenseDate" && updates[key]
+        ? new Date(updates[key] as string)
+        : updates[key];
+    }
+  }
+  if (!Object.keys(patch).length) return null;
+  const doc = await Expense.findByIdAndUpdate(id, { $set: patch }, { new: true }).lean();
+  return toApi(doc);
+}
+
+export async function remove(id: string) {
+  if (!mongoose.isValidObjectId(id)) return null;
+  const doc = await Expense.findByIdAndDelete(id).lean();
+  return toApi(doc);
 }

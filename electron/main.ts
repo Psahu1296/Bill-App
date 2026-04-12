@@ -1,260 +1,13 @@
 import { app, BrowserWindow, shell, dialog, ipcMain } from "electron";
 import path from "path";
 import fs from "fs";
-import net from "net";
-import http from "http";
-import { execSync, spawn, ChildProcess } from "child_process";
-import crypto from "crypto";
 import { CustomAutoUpdater } from "./updater";
 const autoUpdater = new CustomAutoUpdater();
 
-let resolvedPort = 5002; // updated after .env is loaded — see below
-
-// ── Port utilities ────────────────────────────────────────────────────────────
-
-/** Try binding to the port. Resolves true if free, false if occupied. */
-function isPortFree(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const probe = net.createServer();
-    probe.once("error", () => resolve(false));
-    probe.once("listening", () => probe.close(() => resolve(true)));
-    probe.listen(port, "127.0.0.1");
-  });
-}
-
-/** GET /health and check for our fingerprint. */
-function isOurBackend(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const req = http.get(
-      `http://127.0.0.1:${port}/health`,
-      { timeout: 1500 },
-      (res) => {
-        let body = "";
-        res.on("data", (chunk) => (body += chunk));
-        res.on("end", () => {
-          try { resolve(JSON.parse(body)?.app === "dhaba-pos"); }
-          catch { resolve(false); }
-        });
-      }
-    );
-    req.on("error",   () => resolve(false));
-    req.on("timeout", () => { req.destroy(); resolve(false); });
-  });
-}
-
-/** Kill whatever process is listening on `port` (cross-platform). */
-function killProcessOnPort(port: number): void {
-  try {
-    if (process.platform === "win32") {
-      // netstat output: "  TCP    0.0.0.0:5001    0.0.0.0:0    LISTENING    1234"
-      const raw = execSync("netstat -ano -p TCP", { encoding: "utf-8", timeout: 4000 });
-      const pids = new Set<string>();
-      for (const line of raw.split("\n")) {
-        const parts = line.trim().split(/\s+/);
-        // parts[1] is LocalAddress, parts[4] is PID
-        if (parts.length >= 5 && parts[1]?.endsWith(`:${port}`)) {
-          const pid = parts[parts.length - 1];
-          if (pid && /^\d+$/.test(pid) && pid !== "0") pids.add(pid);
-        }
-      }
-      for (const pid of pids) {
-        execSync(`taskkill /PID ${pid} /F`, { timeout: 3000 });
-        console.log(`[port] Killed PID ${pid} (was on port ${port})`);
-      }
-    } else {
-      execSync(`lsof -ti:${port} | xargs kill -9`, { timeout: 4000 });
-      console.log(`[port] Killed process(es) on port ${port}`);
-    }
-  } catch (err) {
-    console.warn(`[port] killProcessOnPort(${port}) failed:`, err);
-  }
-}
-
-/** Scan upward until we find a free port. */
-async function findFreePort(start: number, max = 30): Promise<number> {
-  for (let p = start; p < start + max; p++) {
-    if (await isPortFree(p)) return p;
-  }
-  throw new Error(`No free port found in range ${start}–${start + max - 1}`);
-}
-
-/**
- * Decide which port to use:
- *  - Preferred is free → use it
- *  - Preferred is ours (leftover process) → kill it, reuse preferred
- *  - Preferred is foreign → find next free port
- */
-async function resolvePort(preferred: number): Promise<number> {
-  if (await isPortFree(preferred)) return preferred;
-
-  if (await isOurBackend(preferred)) {
-    sendToSplash("server", `Port ${preferred} held by previous instance — restarting…`, 28);
-    killProcessOnPort(preferred);
-    // Give OS a moment to release the port
-    await new Promise((r) => setTimeout(r, 900));
-    // If still not free after killing, fall through to next port
-    if (await isPortFree(preferred)) return preferred;
-  }
-
-  const next = await findFreePort(preferred + 1);
-  sendToSplash("server", `Port ${preferred} in use — switching to ${next}…`, 28);
-  return next;
-}
-
 const isDev = !app.isPackaged;
 
-// ── Env loader ────────────────────────────────────────────────────────────────
-
-/**
- * Minimal .env parser — loads key=value pairs without overriding already-set
- * process.env vars (same behaviour as dotenv). Used to read CLOUDFLARE_* vars
- * in both dev (pos-backend/.env) and production (resources/backend/.env).
- */
-function loadEnvFile(): void {
-  const envPath = isDev
-    ? path.resolve(__dirname, "../../pos-backend/.env")
-    : path.join(process.resourcesPath, "backend/.env");
-
-  if (!fs.existsSync(envPath)) return;
-
-  try {
-    const lines = fs.readFileSync(envPath, "utf-8").split("\n");
-    for (const raw of lines) {
-      const line = raw.trim();
-      if (!line || line.startsWith("#")) continue;
-      const eq = line.indexOf("=");
-      if (eq < 1) continue;
-      const key = line.slice(0, eq).trim();
-      const val = line.slice(eq + 1).trim();
-      if (key && !(key in process.env)) {
-        process.env[key] = val;
-      }
-    }
-  } catch (e) {
-    console.warn("[env] Failed to load .env:", e);
-  }
-}
-
-loadEnvFile();
-
 let win: BrowserWindow | null = null;
-let splash: BrowserWindow | null = null;
-let backendStarted = false;
-let tunnelProcess: ChildProcess | null = null;
-let tunnelUrl = "";
-
-// ── Tunnel watchdog state ─────────────────────────────────────────────────────
-let isQuitting = false;
-let tunnelRestartCount = 0;
-let healthTimer: ReturnType<typeof setInterval> | null = null;
-let healthFailures = 0;
-
-app.on("before-quit", () => {
-  isQuitting = true;
-  if (healthTimer) { clearInterval(healthTimer); healthTimer = null; }
-});
-
-// ── Cloudflare Tunnel ─────────────────────────────────────────────────────────
-
-/** Resolve the cloudflared binary: packaged resources first, then system PATH. */
-function cloudflaredBin(): string {
-  if (!isDev) {
-    const ext  = process.platform === "win32" ? ".exe" : "";
-    const candidate = path.join(process.resourcesPath, "cloudflared", `cloudflared${ext}`);
-    if (fs.existsSync(candidate)) return candidate;
-  }
-  // Fall back to system-installed binary (Homebrew / winget / apt)
-  return "cloudflared";
-}
-
-/**
- * Starts the named Cloudflare tunnel using the token from env.
- * URL is fixed (configured in Cloudflare dashboard) — no need to parse stdout.
- * Resolves once cloudflared reports a registered connection, or after 20 s
- * if the process is still alive (assumes tunnel is up but log format changed).
- */
-function startCloudflaredTunnel(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const token = process.env.CLOUDFLARE_TUNNEL_TOKEN || "";
-    const fixedUrl = process.env.CLOUDFLARE_TUNNEL_URL || "";
-
-    if (!token || !fixedUrl) {
-      reject(new Error("CLOUDFLARE_TUNNEL_TOKEN or CLOUDFLARE_TUNNEL_URL not set in .env"));
-      return;
-    }
-
-    const bin = cloudflaredBin();
-    sendToSplash("tunnel", "Starting Cloudflare tunnel…", 85);
-
-    tunnelProcess = spawn(bin, ["tunnel", "--protocol", "http2", "run", "--token", token], {
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    let resolved = false;
-
-    const tryResolve = (data: Buffer) => {
-      if (resolved) return;
-      const text = data.toString();
-      console.log("[cloudflared]", text.trimEnd());
-      // Named tunnel prints this once the connection is live
-      if (
-        text.includes("Registered tunnel connection") ||
-        text.includes("Connection established") ||
-        text.includes("connIndex=0")
-      ) {
-        resolved = true;
-        tunnelUrl = fixedUrl;
-        resolve(fixedUrl);
-      }
-    };
-
-    tunnelProcess.stdout?.on("data", tryResolve);
-    tunnelProcess.stderr?.on("data", tryResolve);
-
-    tunnelProcess.on("error", (err) => {
-      if (!resolved) reject(new Error(`cloudflared not found: ${err.message}`));
-    });
-
-    tunnelProcess.on("exit", (code) => {
-      if (!resolved) reject(new Error(`cloudflared exited with code ${code}`));
-    });
-
-    // Fallback: if process is still running after 20 s, assume tunnel is up
-    setTimeout(() => {
-      if (!resolved && tunnelProcess && !tunnelProcess.killed) {
-        resolved = true;
-        tunnelUrl = fixedUrl;
-        resolve(fixedUrl);
-      } else if (!resolved) {
-        reject(new Error("Cloudflare tunnel timed out after 20 s"));
-      }
-    }, 20_000);
-  });
-}
-
-// ── Tunnel health check ───────────────────────────────────────────────────────
-
-function startTunnelHealthCheck() {
-  if (healthTimer) clearInterval(healthTimer);
-  healthFailures = 0;
-  healthTimer = setInterval(async () => {
-    if (!tunnelUrl || isQuitting) return;
-    try {
-      const res = await fetch(`${tunnelUrl}/health`, { signal: AbortSignal.timeout(5000) });
-      if (res.ok) { healthFailures = 0; return; }
-    } catch { /* network error — fall through */ }
-    healthFailures++;
-    console.warn(`[tunnel] health check failed (${healthFailures}/2)`);
-    if (healthFailures >= 2) {
-      clearInterval(healthTimer!); healthTimer = null;
-      console.warn("[tunnel] health check failed twice — restarting tunnel");
-      if (tunnelProcess && !tunnelProcess.killed) tunnelProcess.kill();
-      // The process exit watchdog in setupTunnel() will handle the restart
-    }
-  }, 45_000);
-}
-
-// ── Updater helper ────────────────────────────────────────────────────────────
+let splash: BrowserWindow | null = null;// ── Updater helper ────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function sendToRenderer(event: string, payload?: any) {
@@ -297,87 +50,7 @@ function createSplash(): BrowserWindow {
   return s;
 }
 
-// ── Backend setup ─────────────────────────────────────────────────────────────
 
-async function setupBackend(): Promise<void> {
-  if (backendStarted) return;
-  backendStarted = true;
-
-  const userDataPath = app.getPath("userData");
-
-  // 1. Persistent JWT secret
-  const secretFile = path.join(userDataPath, "jwt-secret.txt");
-  let jwtSecret: string;
-  if (fs.existsSync(secretFile)) {
-    jwtSecret = fs.readFileSync(secretFile, "utf-8").trim();
-  } else {
-    jwtSecret = crypto.randomBytes(32).toString("hex");
-    fs.writeFileSync(secretFile, jwtSecret, "utf-8");
-  }
-
-  // 2. Resolve port — kill stale own instance or find next free port
-  sendToSplash("server", "Checking port…", 25);
-  // Use the PORT from .env so the backend matches the port the Cloudflare
-  // named tunnel is configured to forward to. Falls back to 5002.
-  const preferredPort = parseInt(process.env.PORT ?? "5002", 10);
-  resolvedPort = await resolvePort(preferredPort);
-
-  // 3. Environment variables — DATABASE_PATH tells better-sqlite3 where to store the file
-  process.env["JWT_SECRET"]          = jwtSecret;
-  process.env["NODE_ENV"]            = "production";
-  process.env["PORT"]                = String(resolvedPort);
-  process.env["FRONTEND_URL"]        = `http://localhost:${resolvedPort}`;
-  process.env["DATABASE_PATH"]       = path.join(userDataPath, "dhaba-pos.db");
-  process.env["FRONTEND_DIST_PATH"]  = path.join(process.resourcesPath, "frontend/dist");
-
-  sendToSplash("server", `Starting server on port ${resolvedPort}…`, 40);
-
-  // 4. Load and start Express (SQLite opens automatically inside the server)
-  // In production, the backend lives in resources/backend/ (extraResources) — NOT inside
-  // the asar — so node_modules/express etc. are accessible as plain files on disk.
-  const serverPath = isDev
-    ? path.resolve(__dirname, "../pos-backend/dist/server.js")
-    : path.join(process.resourcesPath, "backend/dist/server.js");
-
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const startServer: (port: number) => Promise<void> = require(serverPath).default;
-  await startServer(resolvedPort);
-
-  sendToSplash("server-ready", "Server started", 80);
-}
-
-async function setupTunnel(): Promise<void> {
-  try {
-    const url = await startCloudflaredTunnel();
-    // Persist URL so the renderer can read it via IPC
-    const urlFile = path.join(app.getPath("userData"), "tunnel-url.txt");
-    fs.writeFileSync(urlFile, url, "utf-8");
-    tunnelRestartCount = 0; // reset exponential backoff on clean connect
-    // Let the renderer know the URL is ready
-    win?.webContents.send("tunnel:url", url);
-    sendToSplash("tunnel-ready", `Tunnel ready: ${url}`, 95);
-    console.log("[tunnel] URL:", url);
-
-    // ── Layer 1: process exit watchdog ────────────────────────────────────────
-    tunnelProcess?.on("exit", (code) => {
-      if (isQuitting) return; // intentional shutdown — don't restart
-      const delay = Math.min(5_000 * Math.pow(2, tunnelRestartCount), 30_000);
-      tunnelRestartCount++;
-      console.warn(`[tunnel] exited (code ${code}), restart #${tunnelRestartCount} in ${delay}ms`);
-      tunnelUrl = "";
-      if (healthTimer) { clearInterval(healthTimer); healthTimer = null; }
-      win?.webContents.send("tunnel:url", null);
-      setTimeout(() => { if (!isQuitting) setupTunnel(); }, delay);
-    });
-
-    // ── Layer 2: health-check polling (catches zombie tunnel) ─────────────────
-    startTunnelHealthCheck();
-  } catch (err) {
-    // Tunnel failure is non-fatal — POS still works locally
-    console.warn("[tunnel] Could not start:", (err as Error).message);
-    win?.webContents.send("tunnel:url", null);
-  }
-}
 
 // ── Window creation ───────────────────────────────────────────────────────────
 
@@ -396,7 +69,11 @@ function createWindow(): void {
     autoHideMenuBar: true,
   });
 
-  const url = isDev ? "http://localhost:5173" : `http://localhost:${resolvedPort}`;
+  // When isDev is true, you can connect to the local dev server.
+  // Otherwise, load the live Railway domain.
+  // Set your Railway URL or load the built static files via custom protocol if you prefer offline mode.
+  const liveUrl = process.env.VITE_FRONTEND_URL || "https://sahudhaba.in";
+  const url = isDev ? "http://localhost:5173" : liveUrl;
   win.loadURL(url);
 
   // Open DevTools once on first load in dev — not on every HMR reload
@@ -435,28 +112,12 @@ app.whenReady().then(async () => {
   if (!isDev) {
     splash = createSplash();
 
-    try {
-      await setupBackend();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error("Backend startup failed:", message);
-      if (splash && !splash.isDestroyed()) { splash.close(); splash = null; }
-      dialog.showErrorBox(
-        "Startup Error",
-        `The application failed to start:\n\n${message}\n\nPlease reinstall the application or contact support.`
-      );
-      app.quit();
-      return;
-    }
-
     sendToSplash("server-ready", "Loading interface…", 90);
   }
 
   createWindow();
 
-  // Start tunnel after window is created so we can send IPC events to it.
-  // Non-blocking — POS works regardless of tunnel status.
-  if (!isDev) setupTunnel();
+  // App starts without bundled backend
 
   if (!isDev) {
     autoUpdater.autoDownload    = false; // wait for user to click "Download"
@@ -466,11 +127,6 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
-  // Kill the cloudflared tunnel process so it doesn't linger after the app closes
-  if (tunnelProcess && !tunnelProcess.killed) {
-    tunnelProcess.kill();
-    tunnelProcess = null;
-  }
   if (process.platform !== "darwin") app.quit();
 });
 
@@ -508,29 +164,39 @@ ipcMain.on("shell:open-external", (_event, url: string) => {
   shell.openExternal(url).catch(console.error);
 });
 
-// ── IPC: server status ────────────────────────────────────────────────────────
+// ── IPC: migration ────────────────────────────────────────────────────────────
 
-ipcMain.handle("server:info", () => ({
-  resolvedPort,
-  preferredPort: parseInt(process.env.PORT ?? "5002", 10),
-  tunnelUrl:     tunnelUrl || null,
-  tunnelRunning: !!(tunnelProcess && !tunnelProcess.killed),
-}));
-
-ipcMain.on("tunnel:restart", async () => {
-  if (tunnelProcess && !tunnelProcess.killed) {
-    tunnelProcess.kill();
-    tunnelProcess = null;
-    tunnelUrl = "";
-    win?.webContents.send("tunnel:url", null);
+ipcMain.handle("migrate:run", async () => {
+  const dbPath = path.join(app.getPath("userData"), "dhaba-pos.db");
+  if (!fs.existsSync(dbPath)) {
+    return { success: false, message: "No legacy dhaba-pos.db database found on this machine." };
   }
-  if (!isDev) await setupTunnel();
+  
+  try {
+    const liveUrl = process.env.VITE_FRONTEND_URL || "https://sahudhaba.in";
+    const uploadUrl = isDev ? "http://localhost:5001/api/migration/upload" : `${liveUrl}/api/migration/upload`;
+    
+    const formData = new FormData();
+    const fileBuffer = fs.readFileSync(dbPath);
+    // Node.js 18+ Blob polyfill natively supports this
+    const blob = new Blob([fileBuffer], { type: "application/octet-stream" });
+    formData.append("database", blob, "dhaba-pos.db");
+
+    const res = await fetch(uploadUrl, { method: "POST", body: formData });
+    const json = await res.json().catch(() => ({}));
+    
+    if (res.ok && json.success) {
+      // Clean up the local legacy file so it's not repeatedly attempted
+      try { fs.renameSync(dbPath, dbPath + ".migrated"); } catch(e){}
+      return { success: true, message: json.message };
+    } else {
+      return { success: false, message: json.message || "Migration server returned an error." };
+    }
+  } catch (error: any) {
+    console.error("Migration error:", error);
+    return { success: false, message: error.message };
+  }
 });
-
-// Renderer can request current tunnel URL at any time (e.g. on page load)
-ipcMain.handle("tunnel:get-url", () => tunnelUrl || null);
-
-// ── Auto Updater Events ───────────────────────────────────────────────────────
 
 autoUpdater.on("checking-for-update", () => {
   console.log("Checking for update...");

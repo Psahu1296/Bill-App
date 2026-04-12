@@ -1,19 +1,20 @@
 import { Request, Response, NextFunction } from "express";
+import mongoose from "mongoose";
 import createHttpError from "http-errors";
 import * as DishRepo from "../repositories/dishRepo";
 import * as OrderRepo from "../repositories/orderRepo";
 import * as SettingsRepo from "../repositories/settingsRepo";
+import * as TableRepo from "../repositories/tableRepo";
 import { notifEmitter } from "../utils/notificationEmitter";
 import { normalizePhone } from "../utils/normalizePhone";
 
 // ── GET /api/customer/dishes ─────────────────────────────────────────────────
-export async function getPublicDishes(req: Request, res: Response, next: NextFunction) {
+export async function getPublicDishes(_req: Request, res: Response, next: NextFunction) {
   try {
-    const all = DishRepo.findAll();
+    const all = await DishRepo.findAll();
     const available = all
       .filter(d => d && d.isAvailable && d.isOnlineAvailable)
       .map(d => {
-        // strip internal tracking field before sending to public
         if (!d) return d;
         const { numberOfOrders: _n, ...pub } = d as Record<string, unknown> & { numberOfOrders: unknown };
         void _n;
@@ -28,20 +29,20 @@ export async function getPublicDishes(req: Request, res: Response, next: NextFun
 // ── POST /api/customer/order ─────────────────────────────────────────────────
 export async function placeCustomerOrder(req: Request, res: Response, next: NextFunction) {
   try {
-    if (!SettingsRepo.isOnlineOrdersEnabled()) {
+    if (!await SettingsRepo.isOnlineOrdersEnabled()) {
       return next(createHttpError(503, "Online ordering is currently unavailable. Please visit us in person."));
     }
 
     const {
-      orderType = 'dine-in',
+      orderType = "dine-in",
       tableNo,
       customerDetails,
       items,
       bills,
-      deliveryAddress = '',
-      specialInstructions = '',
-      paymentMethod = 'Cash',
-      paymentStatus = 'Pending',
+      deliveryAddress = "",
+      specialInstructions = "",
+      paymentMethod = "Cash",
+      paymentStatus = "Pending",
       paymentData,
       amountPaid = 0,
       idempotencyKey,
@@ -54,18 +55,24 @@ export async function placeCustomerOrder(req: Request, res: Response, next: Next
       return next(createHttpError(400, "items must be a non-empty array"));
     }
 
-    // Merge specialInstructions into customerDetails for storage
+    // Resolve tableNo → ObjectId
+    let tableId: string | null = null;
+    if (tableNo != null) {
+      const tableDoc = await TableRepo.findByTableNo(Number(tableNo));
+      tableId = tableDoc ? String((tableDoc as Record<string, unknown>)._id) : null;
+    }
+
     const enrichedCustomerDetails = {
       ...customerDetails,
       ...(specialInstructions ? { specialInstructions } : {}),
     };
 
-    const order = OrderRepo.create({
+    const order = await OrderRepo.create({
       customerDetails: enrichedCustomerDetails,
       orderStatus: "Pending",
       bills,
       items,
-      tableId: tableNo ? Number(tableNo) : null,
+      tableId,
       paymentMethod,
       paymentStatus,
       paymentData: paymentData ?? {},
@@ -74,7 +81,7 @@ export async function placeCustomerOrder(req: Request, res: Response, next: Next
       orderType,
       deliveryAddress,
       idempotencyKey: idempotencyKey ?? undefined,
-    });
+    }) as Record<string, unknown>;
 
     // Notify POS admin in real-time
     notifEmitter.emit("admin", {
@@ -99,6 +106,8 @@ export async function placeCustomerOrder(req: Request, res: Response, next: Next
 export async function addItemsToOrder(req: Request, res: Response, next: NextFunction) {
   try {
     const orderId = String(req.params.id);
+    if (!mongoose.isValidObjectId(orderId)) return next(createHttpError(400, "Invalid order ID"));
+
     const { newItems, updatedBills } = req.body;
 
     if (!Array.isArray(newItems) || newItems.length === 0) {
@@ -108,7 +117,7 @@ export async function addItemsToOrder(req: Request, res: Response, next: NextFun
       return next(createHttpError(400, "updatedBills is required"));
     }
 
-    const existing = OrderRepo.findById(orderId, false) as Record<string, unknown> | null;
+    const existing = await OrderRepo.findById(orderId, false) as Record<string, unknown> | null;
     if (!existing) return next(createHttpError(404, "Order not found"));
 
     const status = existing.orderStatus as string;
@@ -116,7 +125,7 @@ export async function addItemsToOrder(req: Request, res: Response, next: NextFun
       return next(createHttpError(400, "Cannot add items to a completed or cancelled order"));
     }
 
-    const updated = OrderRepo.appendItems(orderId, newItems, updatedBills);
+    const updated = await OrderRepo.appendItems(orderId, newItems, updatedBills);
     if (!updated) return next(createHttpError(500, "Failed to update order"));
 
     const allItems = (updated.items as Array<Record<string, unknown>>);
@@ -142,10 +151,12 @@ export async function addItemsToOrder(req: Request, res: Response, next: NextFun
 // ── GET /api/customer/order/:id ──────────────────────────────────────────────
 export async function getOrderStatus(req: Request, res: Response, next: NextFunction) {
   try {
-    const order = OrderRepo.findById(String(req.params.id), false);
+    const id = String(req.params.id);
+    if (!mongoose.isValidObjectId(id)) return next(createHttpError(400, "Invalid order ID"));
+
+    const order = await OrderRepo.findById(id, false);
     if (!order) return next(createHttpError(404, "Order not found"));
 
-    // Return only non-sensitive fields
     const {
       _id, orderStatus, paymentStatus, items, bills,
       orderType, createdAt,
@@ -169,7 +180,9 @@ export async function getOrderStatus(req: Request, res: Response, next: NextFunc
 export async function streamOrderStatus(req: Request, res: Response, next: NextFunction) {
   try {
     const id = String(req.params.id);
-    const order = OrderRepo.findById(id, false);
+    if (!mongoose.isValidObjectId(id)) return next(createHttpError(400, "Invalid order ID"));
+
+    const order = await OrderRepo.findById(id, false);
     if (!order) return next(createHttpError(404, "Order not found"));
 
     res.setHeader("Content-Type", "text/event-stream");
@@ -181,14 +194,12 @@ export async function streamOrderStatus(req: Request, res: Response, next: NextF
     const o = order as Record<string, unknown>;
     let lastStatus        = o.orderStatus as string;
     let lastPaymentStatus = o.paymentStatus as string;
-    // Simple hash to detect item additions by POS staff
     const itemsHash = (r: Record<string, unknown>) => {
-      const items = (r.items as unknown[]) ?? [];
-      return `${items.length}_${(r.bills as Record<string, number>)?.totalWithTax ?? 0}`;
+      const its = (r.items as unknown[]) ?? [];
+      return `${its.length}_${(r.bills as Record<string, number>)?.totalWithTax ?? 0}`;
     };
     let lastItemsHash = itemsHash(o);
 
-    // Send initial state immediately
     res.write(`data: ${JSON.stringify({ orderStatus: lastStatus, paymentStatus: lastPaymentStatus })}\n\n`);
 
     if (TERMINAL.has(lastStatus)) {
@@ -196,33 +207,34 @@ export async function streamOrderStatus(req: Request, res: Response, next: NextF
       return;
     }
 
-    const poll = setInterval(() => {
-      const latest = OrderRepo.findById(String(id), false) as Record<string, unknown> | null;
-      if (!latest) { clearInterval(poll); res.end(); return; }
+    const poll = setInterval(async () => {
+      try {
+        const latest = await OrderRepo.findById(id, false) as Record<string, unknown> | null;
+        if (!latest) { clearInterval(poll); res.end(); return; }
 
-      const newStatus  = latest.orderStatus as string;
-      const newPayment = latest.paymentStatus as string;
-      const newHash    = itemsHash(latest);
-      const itemsUpdated = newHash !== lastItemsHash;
+        const newStatus  = latest.orderStatus as string;
+        const newPayment = latest.paymentStatus as string;
+        const newHash    = itemsHash(latest);
+        const itemsUpdated = newHash !== lastItemsHash;
 
-      if (newStatus !== lastStatus || newPayment !== lastPaymentStatus || itemsUpdated) {
-        lastStatus        = newStatus;
-        lastPaymentStatus = newPayment;
-        lastItemsHash     = newHash;
-        res.write(`data: ${JSON.stringify({
-          orderStatus: newStatus,
-          paymentStatus: newPayment,
-          ...(itemsUpdated && { itemsUpdated: true }),
-        })}\n\n`);
-      }
+        if (newStatus !== lastStatus || newPayment !== lastPaymentStatus || itemsUpdated) {
+          lastStatus        = newStatus;
+          lastPaymentStatus = newPayment;
+          lastItemsHash     = newHash;
+          res.write(`data: ${JSON.stringify({
+            orderStatus: newStatus,
+            paymentStatus: newPayment,
+            ...(itemsUpdated && { itemsUpdated: true }),
+          })}\n\n`);
+        }
 
-      if (TERMINAL.has(newStatus)) {
-        clearInterval(poll);
-        res.end();
-      }
+        if (TERMINAL.has(newStatus)) {
+          clearInterval(poll);
+          res.end();
+        }
+      } catch { clearInterval(poll); res.end(); }
     }, 3000);
 
-    // Auto-close after 10 minutes to prevent zombie connections
     const timeout = setTimeout(() => {
       clearInterval(poll);
       res.end();
@@ -238,15 +250,14 @@ export async function streamOrderStatus(req: Request, res: Response, next: NextF
 }
 
 // ── GET /api/customer/orders/:phone ─────────────────────────────────────────
-export function getCustomerOrders(req: Request, res: Response, next: NextFunction) {
+export async function getCustomerOrders(req: Request, res: Response, next: NextFunction) {
   try {
     const phone = normalizePhone(String(req.params["phone"] ?? ""));
     if (phone.length < 10) {
       res.status(400).json({ success: false, message: "Invalid phone number" });
       return;
     }
-    const orders = OrderRepo.findAll({ customerPhone: phone }) as Record<string, unknown>[];
-    // Strip POS-internal fields before sending to customer
+    const orders = await OrderRepo.findAll({ customerPhone: phone }) as Record<string, unknown>[];
     const safe = orders.map((o) => {
       const { paymentData: _pd, amountPaid: _ap, balanceDueOnOrder: _bd, ...pub } = o;
       void _pd; void _ap; void _bd;

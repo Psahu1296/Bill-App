@@ -1,9 +1,8 @@
-import { getDb } from "../db";
+import { connectMongo } from "../db/mongo";
 
-const connectDB = () => {
+const connectDB = async () => {
   try {
-    getDb(); // opens the SQLite file and initialises schema
-    console.log("✅ SQLite database ready");
+    await connectMongo();
   } catch (error) {
     console.error(`Database initialisation failed: ${(error as Error).message}`);
     process.exit(1);

@@ -1,6 +1,6 @@
-import { getDb } from "../db";
+import { Payment } from "../models";
 
-export function create(data: {
+export async function create(data: {
   paymentId?: string;
   orderId?: string;
   amount?: number;
@@ -11,38 +11,50 @@ export function create(data: {
   contact?: string;
   createdAt?: Date;
 }) {
-  const db = getDb();
-  const result = db.prepare(
-    `INSERT OR IGNORE INTO payments (payment_id, order_id, amount, currency, status, method, email, contact, created_at)
-     VALUES (@paymentId, @orderId, @amount, @currency, @status, @method, @email, @contact, @createdAt)`
-  ).run({
-    paymentId: data.paymentId ?? null,
-    orderId: data.orderId ?? null,
-    amount: data.amount ?? null,
-    currency: data.currency ?? null,
-    status: data.status ?? null,
-    method: data.method ?? null,
-    email: data.email ?? null,
-    contact: data.contact ?? null,
-    createdAt: data.createdAt ? data.createdAt.toISOString() : new Date().toISOString(),
-  });
+  // Idempotency: INSERT OR IGNORE equivalent — return existing if paymentId already recorded
+  if (data.paymentId) {
+    const existing = await Payment.findOne({ paymentId: data.paymentId }).lean();
+    if (existing) {
+      return toApi(existing);
+    }
+  }
 
-  // OR IGNORE skips the insert on duplicate payment_id — fetch by payment_id as fallback
-  const row = (
-    result.lastInsertRowid
-      ? db.prepare("SELECT * FROM payments WHERE id = ?").get(result.lastInsertRowid)
-      : db.prepare("SELECT * FROM payments WHERE payment_id = ?").get(data.paymentId ?? null)
-  ) as Record<string, unknown>;
+  try {
+    const doc = await Payment.create({
+      paymentId: data.paymentId ?? null,
+      orderId: data.orderId ?? null,
+      amount: data.amount ?? null,
+      currency: data.currency ?? null,
+      status: data.status ?? null,
+      method: data.method ?? null,
+      email: data.email ?? null,
+      contact: data.contact ?? null,
+      createdAt: data.createdAt ?? new Date(),
+    });
+    return toApi(doc.toObject())!;
+  } catch (err: unknown) {
+    // Duplicate key — return existing
+    if ((err as Record<string, unknown>).code === 11000 && data.paymentId) {
+      const existing = await Payment.findOne({ paymentId: data.paymentId }).lean();
+      return toApi(existing);
+    }
+    throw err;
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toApi(doc: any) {
+  if (!doc) return null;
   return {
-    _id: String(row.id),
-    paymentId: row.payment_id,
-    orderId: row.order_id,
-    amount: row.amount,
-    currency: row.currency,
-    status: row.status,
-    method: row.method,
-    email: row.email,
-    contact: row.contact,
-    createdAt: row.created_at,
+    _id: String(doc._id),
+    paymentId: doc.paymentId,
+    orderId: doc.orderId,
+    amount: doc.amount,
+    currency: doc.currency,
+    status: doc.status,
+    method: doc.method,
+    email: doc.email,
+    contact: doc.contact,
+    createdAt: doc.createdAt,
   };
 }

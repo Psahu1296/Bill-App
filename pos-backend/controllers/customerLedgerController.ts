@@ -1,5 +1,6 @@
 import { Response, NextFunction } from "express";
 import { CustomRequest as Request } from "../types";
+import mongoose from "mongoose";
 import createHttpError from "http-errors";
 import * as ledgerRepo from "../repositories/ledgerRepo";
 import * as earningRepo from "../repositories/earningRepo";
@@ -10,7 +11,7 @@ const getCustomerLedger = async (req: Request, res: Response, next: NextFunction
     const phone = req.params.phone as string;
     if (!phone) return next(createHttpError(400, "Phone number is required."));
 
-    const ledger = ledgerRepo.findByPhone(phone);
+    const ledger = await ledgerRepo.findByPhone(phone);
     if (!ledger) return next(createHttpError(404, "Customer not found in ledger!"));
 
     res.status(200).json({ success: true, data: ledger });
@@ -28,7 +29,7 @@ const recordCustomerPayment = async (req: Request, res: Response, next: NextFunc
       return next(createHttpError(400, "Phone and valid amountPaid are required."));
     }
 
-    const ledger = ledgerRepo.findByPhone(phone);
+    const ledger = await ledgerRepo.findByPhone(phone);
     if (!ledger) return next(createHttpError(404, "Customer not found in ledger to record payment!"));
 
     if (amountPaid > ledger.balanceDue + 0.01) {
@@ -36,15 +37,15 @@ const recordCustomerPayment = async (req: Request, res: Response, next: NextFunc
         `Amount exceeds outstanding balance. Max payable: ₹${ledger.balanceDue.toFixed(2)}`));
     }
 
-    const updated = ledgerRepo.recordPayment({
+    const updated = await ledgerRepo.recordPayment({
       customerPhone: phone,
       amountPaid,
-      orderId: orderId != null && !isNaN(Number(orderId)) ? Number(orderId) : null,
+      orderId: orderId != null && mongoose.isValidObjectId(orderId) ? orderId : null,
       notes: notes || `Payment received for Order #${orderId ?? "N/A"}`,
     });
 
     try {
-      earningRepo.incrementEarnings(getZonedStartOfDayUtc(new Date()).toISOString(), amountPaid);
+      await earningRepo.incrementEarnings(getZonedStartOfDayUtc(new Date()).toISOString(), amountPaid);
     } catch (e) {
       console.error("Error updating daily earnings during manual customer payment:", e);
     }
@@ -64,12 +65,12 @@ const addDebtToLedger = async (req: Request, res: Response, next: NextFunction) 
       return next(createHttpError(400, "Phone and valid amountDue are required."));
     }
 
-    const ledger = ledgerRepo.upsertWithTransaction({
+    const ledger = await ledgerRepo.upsertWithTransaction({
       customerPhone: phone,
       customerName: customerName || phone,
       balanceDelta: amountDue,
       transaction: {
-        orderId: orderId != null && !isNaN(Number(orderId)) ? Number(orderId) : null,
+        orderId: orderId != null && mongoose.isValidObjectId(orderId) ? orderId : null,
         transactionType: "full_payment_due",
         amount: amountDue,
         notes: notes || `Remaining balance for Order #${orderId ?? "N/A"}`,
@@ -85,7 +86,7 @@ const addDebtToLedger = async (req: Request, res: Response, next: NextFunction) 
 const getAllCustomerLedgers = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { name, phone, status, startDate, endDate } = req.query;
-    const ledgers = ledgerRepo.findAll({
+    const ledgers = await ledgerRepo.findAll({
       name: name as string | undefined,
       phone: phone as string | undefined,
       status: status as string | undefined,
@@ -105,14 +106,14 @@ const createLedger = async (req: Request, res: Response, next: NextFunction) => 
       return next(createHttpError(400, "Customer name and phone are required."));
     }
 
-    const existing = ledgerRepo.findByPhone(customerPhone);
+    const existing = await ledgerRepo.findByPhone(customerPhone);
     if (existing) {
       return next(createHttpError(409, `Customer with phone ${customerPhone} already exists in ledger.`));
     }
 
     let ledger;
     if (initialBalance > 0) {
-      ledger = ledgerRepo.upsertWithTransaction({
+      ledger = await ledgerRepo.upsertWithTransaction({
         customerPhone,
         customerName,
         balanceDelta: initialBalance,
@@ -123,7 +124,7 @@ const createLedger = async (req: Request, res: Response, next: NextFunction) => 
         },
       });
     } else {
-      ledger = ledgerRepo.createCustomer({ phone: customerPhone, name: customerName });
+      ledger = await ledgerRepo.createCustomer({ phone: customerPhone, name: customerName });
     }
 
     res.status(201).json({ success: true, message: "Ledger entry created.", data: ledger });
@@ -141,16 +142,15 @@ const updateLedger = async (req: Request, res: Response, next: NextFunction) => 
       return next(createHttpError(400, "Provide customerName or customerPhone to update."));
     }
 
-    const existing = ledgerRepo.findByPhone(phone);
+    const existing = await ledgerRepo.findByPhone(phone);
     if (!existing) return next(createHttpError(404, "Customer not found in ledger."));
 
-    // If changing phone, make sure the new phone isn't already taken
     if (newPhone && newPhone !== phone) {
-      const conflict = ledgerRepo.findByPhone(newPhone);
+      const conflict = await ledgerRepo.findByPhone(newPhone);
       if (conflict) return next(createHttpError(409, `Phone ${newPhone} is already used by another customer.`));
     }
 
-    const updated = ledgerRepo.updateCustomer(phone, {
+    const updated = await ledgerRepo.updateCustomer(phone, {
       name: customerName,
       newPhone: newPhone !== phone ? newPhone : undefined,
     });
@@ -167,10 +167,10 @@ const deleteLedger = async (req: Request, res: Response, next: NextFunction) => 
     const phone = req.params.phone as string;
     if (!phone) return next(createHttpError(400, "Phone number is required."));
 
-    const existing = ledgerRepo.findByPhone(phone);
+    const existing = await ledgerRepo.findByPhone(phone);
     if (!existing) return next(createHttpError(404, "Customer not found in ledger."));
 
-    ledgerRepo.deleteByPhone(phone);
+    await ledgerRepo.deleteByPhone(phone);
     res.status(200).json({ success: true, message: "Ledger entry deleted." });
   } catch (error) {
     next(error);

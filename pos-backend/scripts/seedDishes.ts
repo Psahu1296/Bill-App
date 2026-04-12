@@ -23,42 +23,40 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-if (!process.env["DATABASE_PATH"]) {
-  process.env["DATABASE_PATH"] = path.join(process.cwd(), "dhaba-pos.db");
-}
-
-import { getDb } from "../db";
+import { connectMongo } from "../db/mongo";
+import { Dish } from "../models";
 import { SEED_DISHES } from "./dishSeedData";
 
-function seed() {
-  const db = getDb();
+async function seed() {
+  await connectMongo();
 
-  const insert = db.prepare(`
-    INSERT OR IGNORE INTO dishes (image, name, type, category, variants, description, is_available, is_frequent)
-    VALUES (@image, @name, @type, @category, @variants, @description, @isAvailable, @isFrequent)
-  `);
+  let added = 0;
+  let skipped = 0;
 
-  const run = db.transaction(() => {
-    let added = 0;
-    let skipped = 0;
-    for (const d of SEED_DISHES) {
-      const result = insert.run({
+  for (const d of SEED_DISHES) {
+    const existing = await Dish.findOne({ name: d.name });
+    if (existing) {
+      skipped++;
+    } else {
+      await Dish.create({
         image: "",
         name: d.name,
         type: d.type,
         category: d.category,
-        variants: JSON.stringify(d.variants),
+        variants: d.variants,
         description: d.description ?? "",
-        isAvailable: 1,
-        isFrequent: 0,
-      }) as { changes: number };
-      result.changes > 0 ? added++ : skipped++;
+        isAvailable: true,
+        isFrequent: false,
+      });
+      added++;
     }
-    return { added, skipped };
-  });
+  }
 
-  const { added, skipped } = run();
   console.log(`✅  Seed complete — ${added} added, ${skipped} already existed.`);
+  process.exit(0);
 }
 
-seed();
+seed().catch((err) => {
+  console.error("Seed failed:", err);
+  process.exit(1);
+});

@@ -18,33 +18,22 @@ publish:
 #
 # The backend is placed in extraResources (outside the asar) so that:
 #   1. pos-backend/node_modules is NOT subject to .gitignore filtering
-#   2. better-sqlite3's native .node binary is directly accessible (no asarUnpack needed)
-#   3. require('express') resolves correctly relative to the server file path
+#   2. require('express') resolves correctly relative to the server file path
 #
 # Layout inside the installed app:
 #   resources/app.asar              ← electron main + preload + frontend
 #   resources/backend/dist/         ← compiled Express server JS
-#   resources/backend/node_modules/ ← express, better-sqlite3, etc.
+#   resources/backend/node_modules/ ← express, mongoose, etc.
 
 files:
   - electron/dist/**
   - package.json
 
 extraResources:
-  - from: pos-backend/dist
-    to: backend/dist
-    filter:
-      - "**/*"
-  - from: pos-backend/node_modules
-    to: backend/node_modules
-    filter:
-      - "**/*"
   - from: pos-frontend/dist
     to: frontend/dist
     filter:
       - "**/*"
-  - from: pos-backend/.env
-    to: backend/.env
 
 # ── Windows installer ──────────────────────────────────────────────────────────
 # cloudflared is downloaded by CI into build-resources/bin/ and bundled here so
@@ -53,11 +42,6 @@ extraResources:
 # GitHub Secrets (or env). When absent the build still succeeds but shows the
 # SmartScreen "Unknown Publisher" warning. With an OV/EV cert it is suppressed.
 win:
-  extraResources:
-    - from: build-resources/bin/cloudflared-win32-x64.exe
-      to: cloudflared/cloudflared.exe
-  # artifactName uses dots so the generated latest.yml and the GitHub download
-  # URL always match (GitHub converts spaces → dots in asset filenames).
   artifactName: "Dhaba.POS.Setup.${version}.${ext}"
   target:
     - target: nsis
@@ -84,11 +68,6 @@ nsis:
 
 # ── macOS installer ────────────────────────────────────────────────────────────
 mac:
-  extraResources:
-    - from: build-resources/bin/cloudflared-darwin-universal
-      to: cloudflared/cloudflared
-  # artifactName uses dots — matches the GitHub asset URL after space→dot conversion.
-  # ${arch} is always included so x64 and arm64 have distinct, predictable names.
   artifactName: "Dhaba.POS-${version}-${arch}.${ext}"
   target:
     - target: dmg
@@ -99,9 +78,6 @@ mac:
 
 # ── Linux installer ────────────────────────────────────────────────────────────
 linux:
-  extraResources:
-    - from: build-resources/bin/cloudflared-linux-x64
-      to: cloudflared/cloudflared
   artifactName: "Dhaba.POS-${version}-${arch}.${ext}"
   target:
     - target: AppImage
