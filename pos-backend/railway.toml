@@ -1,0 +1,13 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "node dist/server.js"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+
+[volumes]
+# Mount a Railway persistent volume at /data so SQLite survives redeploys.
+# Create the volume in Railway dashboard → your service → Volumes → Add Volume → mount path: /data

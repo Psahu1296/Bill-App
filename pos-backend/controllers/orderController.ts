@@ -10,7 +10,6 @@ import * as earningRepo from "../repositories/earningRepo";
 import * as userRepo from "../repositories/userRepo";
 import { getZonedStartOfDayUtc } from "./earningController";
 import { CustomRequest as Request } from "../types";
-import { pushOrderStatusToFirestore } from "../utils/firestoreSync";
 
 // ── Consumable sync helper ────────────────────────────────────────────────────
 const CIGARETTE_KEYWORDS = ["gold flake", "classic", "bristol", "four square", "wills", "navy cut", "cigarette"];
@@ -330,16 +329,6 @@ const updateOrderById = async (req: Request, res: Response, next: NextFunction) 
       if (msg === "Order not found after update") return next(createHttpError(404, "Order not found after update!"));
       throw e;
     }
-
-    // Push status to Firestore so customer tracking updates in real-time (fire-and-forget)
-    pushOrderStatusToFirestore(currentOrder.idempotencyKey as string | null, {
-      orderStatus:       updatedOrder.orderStatus       as string | undefined,
-      paymentStatus:     updatedOrder.paymentStatus     as string | undefined,
-      amountPaid:        updatedOrder.amountPaid        as number | undefined,
-      balanceDueOnOrder: updatedOrder.balanceDueOnOrder as number | undefined,
-      items:             updatedOrder.items             as unknown[] | undefined,
-      bills:             updatedOrder.bills,
-    });
 
     res.status(200).json({ success: true, message: "Order updated successfully!", data: updatedOrder });
   } catch (error) {
