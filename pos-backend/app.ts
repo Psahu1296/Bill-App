@@ -62,7 +62,21 @@ cron.schedule(
   }
 );
 
-// CORS — must be before routes
+// ── Global rate limiter ───────────────────────────────────────────────────────
+// Broad defence against floods on any endpoint. 300 req/15 min is generous
+// for any real user but stops bots hammering Railway CPU.
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Too many requests. Please slow down." },
+  // PhonePe webhook and health check are internal/trusted — skip them
+  skip: (req) => req.path === "/health" || req.path.startsWith("/api/payment/webhook"),
+});
+app.use(globalLimiter);
+
+// ── CORS — must be before routes
 const allowedOrigins = [config.frontendUrl, config.customerAppUrl].filter(Boolean);
 app.use(cors({
   origin: (origin, cb) => {
@@ -92,7 +106,7 @@ app.use(
   express.raw({ type: "application/json" })
 );
 
-app.use(express.json());
+app.use(express.json({ limit: "100kb" }));
   app.use(cookieParser());
 
   // Health check endpoint — `app` field is used by the Electron main process
