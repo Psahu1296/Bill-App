@@ -31,15 +31,10 @@ const TableCard: React.FC<TableCardProps> = ({ id, name, status, initials, seats
   const [tunnelUrl, setTunnelUrl] = useState<string | null>(null);
   const qrRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Read tunnel URL from Electron bridge (same pattern as Header)
+  // Read API URL directly from Environment
   useEffect(() => {
-    const bridge = (window as unknown as Record<string, unknown>).appBridge as
-      | { getTunnelUrl: () => Promise<string | null>; onTunnelUrl: (cb: (u: string | null) => void) => () => void }
-      | undefined;
-    if (!bridge) return;
-    bridge.getTunnelUrl().then(setTunnelUrl);
-    const unsub = bridge.onTunnelUrl(setTunnelUrl);
-    return unsub;
+    const apiDomain = import.meta.env.VITE_BACKEND_URL || "https://api-prod.sahudhaba.in";
+    setTunnelUrl(apiDomain);
   }, []);
 
   const customerBase = (import.meta.env.VITE_CUSTOMER_APP_URL as string | undefined) ?? "";

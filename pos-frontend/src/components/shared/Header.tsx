@@ -23,13 +23,8 @@ const Header: React.FC = () => {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const bridge = (window as any).appBridge;
-    if (!bridge) return;
-    // Get current URL (may already be ready)
-    bridge.getTunnelUrl().then((url: string | null) => setTunnelUrl(url));
-    // Listen for URL once tunnel starts
-    const unsub = bridge.onTunnelUrl((url: string | null) => setTunnelUrl(url));
-    return unsub;
+    const apiDomain = import.meta.env.VITE_BACKEND_URL || "https://api-prod.sahudhaba.in";
+    setTunnelUrl(apiDomain);
   }, []);
 
   const handleCopyTunnel = () => {
