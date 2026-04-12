@@ -3,6 +3,7 @@ import createHttpError from "http-errors";
 import * as dishRepo from "../repositories/dishRepo";
 import { SEED_DISHES } from "../scripts/dishSeedData";
 import { getDb } from "../db";
+import { pushConfigToFirestore } from "../utils/firestoreSync";
 
 const addDish = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -27,6 +28,7 @@ const addDish = async (req: Request, res: Response, next: NextFunction) => {
     }
 
     const dish = dishRepo.create({ image, name, type, category, variants, description, isAvailable, isFrequent, isOnlineAvailable });
+    void pushConfigToFirestore();
     res.status(201).json({ success: true, message: "Dish added successfully!", data: dish });
   } catch (error) {
     next(error);
@@ -100,6 +102,7 @@ const updateDish = async (req: Request, res: Response, next: NextFunction) => {
 
     const dish = dishRepo.update(id, updates);
     if (!dish) return next(createHttpError(404, "Dish not found!"));
+    void pushConfigToFirestore();
     res.status(200).json({ success: true, message: "Dish updated successfully!", data: dish });
   } catch (error) {
     next(error);
@@ -114,6 +117,7 @@ const deleteDish = async (req: Request, res: Response, next: NextFunction) => {
     }
     const dish = dishRepo.remove(id);
     if (!dish) return next(createHttpError(404, "Dish not found!"));
+    void pushConfigToFirestore();
     res.status(200).json({ success: true, message: "Dish deleted successfully!", data: dish });
   } catch (error) {
     next(error);
@@ -145,6 +149,7 @@ const bulkAddDishes = async (req: Request, res: Response, next: NextFunction) =>
 
     try {
       const saved = dishRepo.bulkCreate(dishes);
+      void pushConfigToFirestore();
       res.status(201).json({ success: true, message: `${saved.length} dishes added successfully!`, data: saved });
     } catch (err: unknown) {
       // SQLite UNIQUE constraint violation
@@ -188,6 +193,7 @@ const seedDishes = async (_req: Request, res: Response, next: NextFunction) => {
 
     run();
 
+    void pushConfigToFirestore();
     res.json({
       success: true,
       message: `Seeded ${added} dish(es). ${skipped} already existed.`,

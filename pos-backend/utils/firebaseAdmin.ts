@@ -18,6 +18,16 @@ export function getFirebaseAdmin(): admin.app.App {
   return _app;
 }
 
+let _db: admin.firestore.Firestore | null = null;
+
+/** Returns the Firestore instance (singleton). */
+export function getFirestoreDb(): admin.firestore.Firestore {
+  if (_db) return _db;
+  getFirebaseAdmin(); // ensure app is initialised
+  _db = admin.firestore();
+  return _db;
+}
+
 /** Verify a Firebase ID token and return the decoded token. */
 export async function verifyIdToken(idToken: string): Promise<admin.auth.DecodedIdToken> {
   getFirebaseAdmin();

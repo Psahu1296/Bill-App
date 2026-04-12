@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import * as SettingsRepo from "../repositories/settingsRepo";
 import { getDb } from "../db";
+import { pushConfigToFirestore } from "../utils/firestoreSync";
 
 // GET /api/settings/online-orders — PUBLIC (customer app polls this)
 export function getOnlineOrdersStatus(req: Request, res: Response, next: NextFunction) {
@@ -95,6 +96,7 @@ export function setOnlineOrdersStatus(req: Request, res: Response, next: NextFun
       return;
     }
     SettingsRepo.setSetting("online_orders", String(isOnline));
+    void pushConfigToFirestore();
     res.json({ success: true, data: { isOnline } });
   } catch (err) {
     next(err);

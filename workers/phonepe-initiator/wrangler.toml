@@ -1,0 +1,29 @@
+name               = "phonepe-initiator-dev"
+main               = "src/index.js"
+compatibility_date = "2024-09-23"
+
+# ── Dev environment (default — `wrangler deploy`) ──────────────────────────────
+# Uses UAT PhonePe credentials. Safe to test payments without real money.
+# Secrets (set once with `wrangler secret put <NAME>`):
+#   PHONEPE_CLIENT_ID     → UAT client ID
+#   PHONEPE_CLIENT_SECRET → UAT client secret
+#   PHONEPE_CLIENT_VERSION → 1
+#   PHONEPE_ENV           → UAT
+#   ALLOWED_ORIGIN        → http://localhost:5173,https://dev--sahu-dhaba.netlify.app
+routes = [
+  { pattern = "pay-dev.sahudhaba.in", custom_domain = true }
+]
+
+# ── Production environment (`wrangler deploy --env production`) ────────────────
+# Deployed automatically by GitHub Actions on push to main.
+# Secrets (set once with `wrangler secret put <NAME> --env production`):
+#   PHONEPE_CLIENT_ID     → production client ID
+#   PHONEPE_CLIENT_SECRET → production client secret
+#   PHONEPE_CLIENT_VERSION → 1
+#   PHONEPE_ENV           → PRODUCTION
+#   ALLOWED_ORIGIN        → https://sahudhaba.in
+[env.production]
+name = "phonepe-initiator"
+routes = [
+  { pattern = "pay.sahudhaba.in", custom_domain = true }
+]

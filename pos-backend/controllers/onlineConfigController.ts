@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import * as OnlineConfigRepo from "../repositories/onlineConfigRepo";
+import { pushConfigToFirestore } from "../utils/firestoreSync";
 
 // ── Config Flags ──────────────────────────────────────────────────────────────
 
@@ -43,6 +44,7 @@ export function updateFlags(req: Request, res: Response, next: NextFunction) {
     }
 
     const data = OnlineConfigRepo.setFlags({ isOnline, deliveryEnabled, availableTimeStart, availableTimeEnd });
+    void pushConfigToFirestore();
     res.json({ success: true, data });
   } catch (err) {
     next(err);
@@ -77,6 +79,7 @@ export function addDeliveryArea(req: Request, res: Response, next: NextFunction)
       return;
     }
     const data = OnlineConfigRepo.addArea(name, deliveryFee ?? 0, minOrderAmount ?? 0);
+    void pushConfigToFirestore();
     res.status(201).json({ success: true, data });
   } catch (err: unknown) {
     // SQLite UNIQUE constraint violation
@@ -97,6 +100,7 @@ export function deleteDeliveryArea(req: Request, res: Response, next: NextFuncti
       res.status(404).json({ success: false, message: "Area not found" });
       return;
     }
+    void pushConfigToFirestore();
     res.json({ success: true, message: "Area deleted" });
   } catch (err) {
     next(err);
@@ -132,6 +136,7 @@ export function updateDeliveryArea(req: Request, res: Response, next: NextFuncti
       res.status(404).json({ success: false, message: "Area not found" });
       return;
     }
+    void pushConfigToFirestore();
     res.json({ success: true, data });
   } catch (err) {
     next(err);

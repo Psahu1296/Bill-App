@@ -10,6 +10,7 @@ import config from "../config/config";
 import { getDb } from "../db";
 import * as OrderRepo from "../repositories/orderRepo";
 import * as PaymentRepo from "../repositories/paymentRepo";
+import { pushOrderStatusToFirestore } from "../utils/firestoreSync";
 
 // Sandbox shares one base URL; production uses separate hosts for token vs API
 const UAT_BASE       = "https://api-preprod.phonepe.com/apis/pg-sandbox";
@@ -165,6 +166,17 @@ export async function handleCallback(req: Request, res: Response, next: NextFunc
           });
         });
         processPayment();
+
+        // Push payment confirmation to Firestore so customer tracking updates instantly
+        // idempotency_key on the order == the Firestore doc ID (set when order was placed)
+        const updated = OrderRepo.findById(orderId, false);
+        const firestoreId = (updated as Record<string, unknown> | null)?.idempotencyKey as string | null;
+        pushOrderStatusToFirestore(firestoreId, {
+          paymentStatus: "Paid",
+          amountPaid:    total,
+          balanceDueOnOrder: 0,
+          paymentData:   body,
+        });
       }
     }
 

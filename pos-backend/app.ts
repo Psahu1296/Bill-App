@@ -26,6 +26,7 @@ import phonePeRoute from "./routes/phonePeRoute";
 import settingsRoute from "./routes/settingsRoute";
 import adminNotifyRoute from "./routes/adminNotifyRoute";
 import onlineConfigRoute from "./routes/onlineConfigRoute";
+import { startFirestoreSync } from "./utils/firestoreSync";
 
 const app = express();
 
@@ -155,5 +156,8 @@ app.get("*", (req, res) => {
 
 // Global Error Handler (must be last)
 app.use(globalErrorHandler);
+
+// Start Firestore real-time sync (no-op if Firebase Admin credentials not set)
+startFirestoreSync();
 
 export default app;
