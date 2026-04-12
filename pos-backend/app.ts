@@ -75,6 +75,8 @@ app.use(cors({
     // Named tunnel domain (root + any subdomain)
     if (origin === "https://users.sahu-dhaba-pos.co.in" || origin.endsWith(".sahu-dhaba-pos.co.in") || origin === "https://sahudhaba.in" || origin === "https://api-prod.sahudhaba.in") return cb(null, true);
     if(origin === "http://localhost:8080" || origin === "http://localhost:5173" || origin === "http://localhost:5174") return cb(null, true); // for local dev with frontend running on 5173/5174
+    // Allow native electron desktop app custom protocol
+    if(origin === "app://-" || origin === "file://") return cb(null, true);
     console.warn(`[CORS] Blocked origin: ${origin}`);
     cb(new Error(`CORS: origin ${origin} not allowed`));
   },
@@ -144,16 +146,7 @@ app.use("/api/admin/notify", adminNotifyRoute);
 app.use("/api/online-config", onlineConfigRoute);
 app.use("/api/migration", migrationRoutes);
 
-// Serve frontend static files
-// In production FRONTEND_DIST_PATH points to resources/frontend/dist (extraResources).
-// In dev it falls back to the relative path from the build output.
-const frontendBuildPath = process.env["FRONTEND_DIST_PATH"] ?? path.join(__dirname, "../../pos-frontend/dist");
-app.use(express.static(frontendBuildPath));
-
-// Serve index.html for any non-API route (React Router support)
-app.get("*", (req, res) => {
-  res.sendFile(path.join(frontendBuildPath, "index.html"));
-});
+// Deleted frontend static serving — the Frontend is now fully packed directly inside of the Desktop Electron EXE.
 
 // Global Error Handler (must be last)
 app.use(globalErrorHandler);

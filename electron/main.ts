@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, shell, dialog, ipcMain, protocol } from "electron";
 import path from "path";
 import fs from "fs";
 import { CustomAutoUpdater } from "./updater";
@@ -69,11 +69,8 @@ function createWindow(): void {
     autoHideMenuBar: true,
   });
 
-  // When isDev is true, you can connect to the local dev server.
-  // Otherwise, load the live Railway domain.
-  // Set your Railway URL or load the built static files via custom protocol if you prefer offline mode.
-  const liveUrl = process.env.VITE_FRONTEND_URL || "https://api-prod.sahudhaba.in";
-  const url = isDev ? "http://localhost:5173" : liveUrl;
+  // In dev, connect to Vite. In production, load the local packaged React build via our custom protocol
+  const url = isDev ? "http://localhost:5173" : "app://-";
   win.loadURL(url);
 
   // Open DevTools once on first load in dev — not on every HMR reload
@@ -109,6 +106,27 @@ function createWindow(): void {
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  // Register custom protocol to serve local React frontend (supports BrowserRouter)
+  protocol.handle('app', (request) => {
+    let urlPath = request.url.slice('app://-'.length);
+    if (urlPath.startsWith('/')) urlPath = urlPath.slice(1);
+    if (!urlPath) urlPath = 'index.html';
+    
+    const isPackaged = app.isPackaged;
+    const basePath = isPackaged 
+      ? path.join(process.resourcesPath, "frontend/dist")
+      : path.join(__dirname, "../../pos-frontend/dist");
+      
+    let absolutePath = path.join(basePath, urlPath);
+    // React Router SPA fallback: if file doesn't exist natively, always return index.html
+    if (!fs.existsSync(absolutePath)) {
+      absolutePath = path.join(basePath, "index.html");
+    }
+    
+    // Serve securely via native electron net bridge
+    return import('electron').then(({ net }) => net.fetch('file://' + absolutePath));
+  });
+
   if (!isDev) {
     splash = createSplash();
 

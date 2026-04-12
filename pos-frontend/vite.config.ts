@@ -18,7 +18,7 @@ export default defineConfig({
     proxy: {
       // SSE endpoint — needs its own entry to avoid response buffering
       '/api/admin/notify/stream': {
-        target: 'http://localhost:5002',
+        target: 'http://localhost:5001',
         changeOrigin: true,
         secure: false,
         // Disable compression so chunked SSE events are flushed immediately
@@ -29,7 +29,7 @@ export default defineConfig({
         },
       },
       '/api': {
-        target: 'http://localhost:5002',
+        target: 'http://localhost:5001',
         changeOrigin: true,
         secure: false,
       },
