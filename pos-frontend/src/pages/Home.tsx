@@ -128,43 +128,43 @@ const Home: React.FC = () => {
 
   return (
     <section className="bg-dhaba-bg min-h-[calc(100vh-4rem)] pb-24 overflow-y-auto">
-      <div className="px-6 pt-4 space-y-5">
+      <div className="px-8 pt-6 space-y-8 max-w-[1600px] mx-auto">
 
         {/* ── Greeting ── */}
         <Greetings />
 
         {/* ── Stat cards ── */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-4 gap-6">
           {statCards.map(({ label, value, icon, pct, color, iconBg, pulse }) => (
-            <div key={label} className="glass-card rounded-2xl p-4 space-y-3 hover:shadow-glow transition-all duration-300">
+            <div key={label} className="glass-card rounded-[1.5rem] p-5 space-y-3 hover:shadow-glow hover:-translate-y-1 transition-all duration-300 border border-dhaba-border/20">
               <div className="flex items-center justify-between">
-                <p className="text-dhaba-muted text-xs font-bold uppercase tracking-wider">{label}</p>
-                <div className={`h-8 w-8 rounded-xl ${iconBg} ${color} flex items-center justify-center text-sm ${pulse ? "animate-pulse" : ""}`}>
+                <p className="text-dhaba-muted text-[11px] font-bold uppercase tracking-wider">{label}</p>
+                <div className={`h-10 w-10 rounded-xl ${iconBg} ${color} flex items-center justify-center text-lg shadow-sm ${pulse ? "animate-pulse ring-2 ring-current ring-offset-2 ring-offset-dhaba-bg" : ""}`}>
                   {icon}
                 </div>
               </div>
-              <div className="flex justify-between">
-                <p className={`font-display text-3xl font-bold ${color}`}>{value}</p>
-                {label === "Today's Revenue" && (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-dhaba-danger/15 text-dhaba-danger text-[18px] font-bold">
-                      <FaArrowDown className="text-[16px]" />
-                      ₹{todayExpenses.toLocaleString("en-IN")}
-                    </span>
-                    <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${netEarnings >= 0 ? "bg-yellow-400/15 text-yellow-400" : "bg-dhaba-danger/15 text-dhaba-danger"}`}>
-                      Net ₹{netEarnings.toLocaleString("en-IN")}
-                    </span>
-                  </div>
-                )}
+              <div className="flex justify-between items-end">
+                <p className={`font-display text-4xl font-extrabold tracking-tight ${color}`}>{value}</p>
               </div>
-              {pct !== null && (
-                <div className="flex items-center gap-1.5">
-                  <span className={`flex items-center gap-0.5 text-xs font-bold px-2 py-0.5 rounded-full
-                    ${pct >= 0 ? "bg-dhaba-success/15 text-dhaba-success" : "bg-dhaba-danger/15 text-dhaba-danger"}`}>
-                    {pct >= 0 ? <FaArrowUp className="text-[8px]" /> : <FaArrowDown className="text-[8px]" />}
+              {label === "Today's Revenue" && (
+                <div className="flex items-center gap-2 flex-wrap pt-1">
+                  <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-dhaba-danger/15 text-dhaba-danger text-xs font-bold border border-dhaba-danger/20">
+                    <FaArrowDown className="text-[10px]" />
+                    Exp: ₹{todayExpenses.toLocaleString("en-IN")}
+                  </span>
+                  <span className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${netEarnings >= 0 ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/20" : "bg-red-500/15 text-red-500 border-red-500/20"}`}>
+                    Net: ₹{netEarnings.toLocaleString("en-IN")}
+                  </span>
+                </div>
+              )}
+              {pct !== null && label !== "Today's Revenue" && (
+                <div className="flex items-center gap-2 pt-1">
+                  <span className={`flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full border
+                    ${pct >= 0 ? "bg-dhaba-success/15 text-dhaba-success border-dhaba-success/20" : "bg-dhaba-danger/15 text-dhaba-danger border-dhaba-danger/20"}`}>
+                    {pct >= 0 ? <FaArrowUp className="text-[10px]" /> : <FaArrowDown className="text-[10px]" />}
                     {Math.abs(pct)}%
                   </span>
-                  <span className="text-dhaba-muted text-xs">vs yesterday</span>
+                  <span className="text-dhaba-muted text-[11px] font-medium">vs yesterday</span>
                 </div>
               )}
             </div>
@@ -172,45 +172,41 @@ const Home: React.FC = () => {
         </div>
 
         {/* ── Quick actions ── */}
-        <div className="flex gap-3">
-          {/* New Order — opens modal */}
+        <div className="flex gap-4">
           <button
             onClick={() => setShowNewOrder(true)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-2xl font-bold text-sm bg-gradient-warm text-dhaba-bg flex-1 justify-center hover:shadow-glow transition-all"
+            className="flex items-center gap-2.5 px-6 py-4 rounded-2xl font-bold text-sm bg-gradient-to-r from-orange-400 to-orange-600 text-white flex-1 justify-center hover:shadow-lg hover:shadow-orange-500/30 active:scale-[0.98] transition-all border border-orange-400/20"
           >
-            <FaPlus className="text-base" /> New Order
+            <FaPlus className="text-lg" /> New POS Order
           </button>
 
-          {/* Chai / Sutta — opens quick consumable modal */}
           <button
             onClick={() => setShowQuickConsumable(true)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-2xl font-bold text-sm bg-gradient-warm text-dhaba-bg flex-1 justify-center hover:shadow-glow transition-all"
+            className="flex items-center gap-2.5 px-6 py-4 rounded-2xl font-bold text-sm bg-gradient-to-r from-emerald-500 to-teal-600 text-white flex-1 justify-center hover:shadow-lg hover:shadow-emerald-500/30 active:scale-[0.98] transition-all border border-emerald-400/20"
           >
-            <FaPlus className="text-base" /> <FaCoffee className="text-base" /> Chai / Sutta
+            <FaCoffee className="text-lg" /> Quick Chai / Snacks
           </button>
 
           {quickActions.map(({ label, icon, path }) => (
             <button
               key={label}
               onClick={() => navigate(path)}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-2xl font-bold text-sm glass-card text-dhaba-text hover:bg-dhaba-surface-hover flex-1 justify-center hover:shadow-glow transition-all"
+              className="flex items-center gap-2.5 px-6 py-4 rounded-2xl font-bold text-sm glass-card text-dhaba-text hover:bg-dhaba-surface border border-dhaba-border/20 flex-1 justify-center hover:shadow-md active:scale-[0.98] transition-all"
             >
-              <span className="text-base">{icon}</span>
+              <span className="text-lg text-blue-500">{icon}</span>
               {label}
             </button>
           ))}
         </div>
 
         {/* ── Main content ── */}
-        <div className="flex gap-5 pb-2">
-          <div className="flex-[3]">
+        <div className="grid grid-cols-12 gap-8 pb-10">
+          <div className="col-span-12 xl:col-span-7 flex flex-col gap-8">
             <RecentOrders />
-          </div>
-          <div className="flex-[2]">
-            <OnlineOrders />
-          </div>
-          <div className="flex-[2]">
             <PopularDishes />
+          </div>
+          <div className="col-span-12 xl:col-span-5 flex flex-col gap-8">
+            <OnlineOrders />
           </div>
         </div>
 

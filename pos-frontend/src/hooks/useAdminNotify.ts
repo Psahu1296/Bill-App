@@ -3,6 +3,19 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNotifications } from "../context/NotificationContext";
 import { enqueueSnackbar } from "notistack";
 
+// ── Notification sound ────────────────────────────────────────────────────────
+// Drop the file at public/new-order.mp3 to enable audio alerts.
+// Browsers require a prior user gesture before audio can auto-play; Electron
+// has no such restriction. Failures are silently swallowed.
+let cachedAudio: HTMLAudioElement | null = null;
+function playNewOrderSound() {
+  try {
+    if (!cachedAudio) cachedAudio = new Audio("/new-order.mp3");
+    cachedAudio.currentTime = 0;
+    cachedAudio.play().catch(() => {/* autoplay blocked — ignore */});
+  } catch { /* ignore */ }
+}
+
 /**
  * Opens an SSE connection to /api/admin/notify/stream.
  * On every event: refetches orders + adds a notification for card highlight.
@@ -25,8 +38,9 @@ export function useAdminNotify(enabled = true) {
 
         addNotification(data);
 
-        // Toast
+        // Sound + toast
         if (data.type === "new_order") {
+          playNewOrderSound();
           const where = data.tableNo ? `Table ${data.tableNo}` : data.orderType;
           enqueueSnackbar(
             `New order from ${data.customerName || "customer"} · ${where} · ₹${data.totalAmount ?? ""}`,

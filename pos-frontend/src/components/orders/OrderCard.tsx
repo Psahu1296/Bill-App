@@ -14,6 +14,7 @@ import { enqueueSnackbar } from "notistack";
 import PayRemainingModal from "./PayRemainingModal";
 import DeleteOrderModal from "./DeleteOrderModal";
 import OrderStatusSwitcher from "./OrderStatusSwitcher";
+import DeliveryOrderModal from "./DeliveryOrderModal";
 import type { Order, OrderStatus } from "../../types";
 
 interface OrderCardProps {
@@ -87,6 +88,7 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
   const [showPayModal, setShowPayModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
+  const [showDeliveryModal, setShowDeliveryModal] = useState(false);
 
   const notification = notifications.get(order._id);
   const isHighlighted = !!notification;
@@ -139,6 +141,11 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
   };
 
   const onOrderClick = () => {
+    // Delivery orders always open the detail modal regardless of status
+    if (isDelivery) {
+      setShowDeliveryModal(true);
+      return;
+    }
     if (isCompleted) {
       navigate(`/order-summary?orderId=${order._id}`);
       return;
@@ -344,6 +351,13 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
             }}
           />
         </div>
+      )}
+
+      {showDeliveryModal && (
+        <DeliveryOrderModal
+          order={order}
+          onClose={() => setShowDeliveryModal(false)}
+        />
       )}
     </>
   );
