@@ -19,6 +19,12 @@ const GITHUB_OWNER = "Psahu1296";
 const GITHUB_REPO  = "Bill-App";
 const API_URL      = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
 
+// Fine-grained PAT with read-only "Contents" permission on this repo.
+// Set GH_TOKEN in your build environment (GitHub Actions secret) and it gets
+// injected at compile time by electron-builder via extraMetadata/env.
+// For a private repo this is required for both update checks and asset downloads.
+const GH_TOKEN: string = process.env["GH_TOKEN"] ?? "";
+
 interface ReleaseAsset {
   name: string;
   browser_download_url: string;
@@ -79,10 +85,19 @@ function selectAsset(assets: ReleaseAsset[]): ReleaseAsset | undefined {
 
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
 
+function githubHeaders(): Record<string, string> {
+  const h: Record<string, string> = {
+    "User-Agent": `${GITHUB_REPO}-updater`,
+    "Accept":     "application/vnd.github.v3+json",
+  };
+  if (GH_TOKEN) h["Authorization"] = `Bearer ${GH_TOKEN}`;
+  return h;
+}
+
 function getJSON(url: string): Promise<any> {
   return new Promise((resolve, reject) => {
     https
-      .get(url, { headers: { "User-Agent": `${GITHUB_REPO}-updater`, "Accept": "application/vnd.github.v3+json" } }, (res) => {
+      .get(url, { headers: githubHeaders() }, (res) => {
         let raw = "";
         res.on("data", (c) => (raw += c));
         res.on("end", () => {
@@ -104,13 +119,16 @@ function downloadFile(
     const startTime = Date.now();
     let transferred = 0;
 
-    function doGet(reqUrl: string): void {
+    function doGet(reqUrl: string, isRedirect = false): void {
       const mod: typeof https | typeof http = reqUrl.startsWith("https") ? https : http;
+      // Don't forward the GitHub auth token to the S3 redirect target —
+      // S3 pre-signed URLs reject extra Authorization headers.
+      const headers = isRedirect ? {} : githubHeaders();
       mod
-        .get(reqUrl, (res) => {
+        .get(reqUrl, { headers }, (res) => {
           // Follow redirects (GitHub asset downloads redirect to S3)
           if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307) {
-            doGet(res.headers.location as string);
+            doGet(res.headers.location as string, true);
             return;
           }
           if (res.statusCode !== 200) {

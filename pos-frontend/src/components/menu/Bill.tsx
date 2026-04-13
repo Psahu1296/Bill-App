@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
 import { useSelector } from "react-redux";
 import { getTotalPrice } from "../../redux/slices/cartSlice";
-import { addOrder, updateOrder, getOrderById, initiatePhonePePayment, getPhonePePaymentStatus } from "../../https/index";
+import { addOrder, updateOrder, getOrderById } from "../../https/index";
 import { enqueueSnackbar } from "notistack";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { removeAllItems } from "../../redux/slices/cartSlice";
@@ -10,28 +9,10 @@ import { removeCustomer } from "../../redux/slices/customerSlice";
 import Invoice from "../invoice/Invoice";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import PayModal from "./PayModal";
+import UpiQrModal from "./UpiQrModal";
 import { useAppDispatch } from "../../redux/hooks";
 import type { RootState } from "../../redux/store";
 import type { Order, AddOrderPayload, PaymentMethod, OrderStatus } from "../../types";
-
-declare global {
-  interface Window {
-    PhonePeCheckout: {
-      transact: (options: { tokenUrl: string; callback: (response: string) => void; type: "IFRAME" | "REDIRECT" }) => void;
-      closePage: () => void;
-    };
-  }
-}
-
-function loadScript(src: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const script = document.createElement("script");
-    script.src = src;
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
-  });
-}
 
 const Bill: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -40,7 +21,6 @@ const Bill: React.FC = () => {
   const queryClient = useQueryClient();
   const orderId = param.get("orderId");
   const navigate = useNavigate();
-
 
   const customerData = useSelector((state: RootState) => state.customer);
   const cartData = useSelector((state: RootState) => state.cart);
@@ -87,9 +67,12 @@ const Bill: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Cash");
   const [showInvoice, setShowInvoice] = useState(false);
   const [orderInfo, setOrderInfo] = useState<Order | undefined>();
-  const [isPhonePeLoading, setIsPhonePeLoading] = useState(false);
-  const [isPhonePeOpen, setIsPhonePeOpen] = useState(false);
-  const [isPhonePePolling, setIsPhonePePolling] = useState(false);
+
+  // UPI QR modal state
+  const [isUpiModalOpen, setIsUpiModalOpen] = useState(false);
+  const [isUpiConfirming, setIsUpiConfirming] = useState(false);
+  // Pending payment details held while QR modal is open
+  const pendingUpi = useRef<{ paidAmount: number; isFullyPaid: boolean; targetOrderId: string | null } | null>(null);
 
   const buildOrderData = () => ({
     customerDetails: { name: customerData.customerName, phone: customerData.customerPhone, guests: customerData.guests },
@@ -130,124 +113,55 @@ const Bill: React.FC = () => {
     },
   });
 
+  const completeOrder = async (targetId: string, paidAmount: number, payMethod: PaymentMethod, isFullyPaid: boolean) => {
+    const amountAlreadyPaid = existingOrder?.amountPaid ?? orderInfo?.amountPaid ?? 0;
+    return updateOrder({
+      id: targetId,
+      amountPaid: orderId ? amountAlreadyPaid + paidAmount : paidAmount,
+      paymentMethod: payMethod,
+      paymentStatus: isFullyPaid ? "Paid" : "Pending",
+      orderStatus: "Completed",
+    }).then((resData) => {
+      const { data } = (resData as { data: { data: Order } }).data;
+      setOrderInfo(data);
+      dispatch(removeCustomer());
+      dispatch(removeAllItems());
+      queryClient.invalidateQueries({ queryKey: ["earnings"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      enqueueSnackbar("Order Processed!", { variant: "success" });
+      setIsPayModalOpen(false);
+      navigate("/", { replace: true });
+    });
+  };
+
   const handlePaymentSubmit = async (paidAmount: number, payMethod: PaymentMethod, isFullyPaid: boolean) => {
     if (payMethod === "Online") {
-      setIsPhonePeLoading(true);
       setIsPayModalOpen(false);
+
+      // For a new order, create it first so it exists before the QR is shown
       let targetOrderId: string | null = orderId;
-      try {
-        if (!targetOrderId) {
-          // New order — create it first so the webhook can reference it by ID
+      if (!targetOrderId) {
+        try {
           const orderResp = await addOrder({ ...buildOrderData(), paymentStatus: "Pending" });
           targetOrderId = (orderResp.data as { data: { _id: string } }).data._id;
+        } catch {
+          enqueueSnackbar("Failed to create order. Please try again.", { variant: "error" });
+          return;
         }
-
-        const { data: ppResp } = await initiatePhonePePayment({
-          amount:        finalTotal,
-          orderId:       targetOrderId,
-          customerPhone: customerData.customerPhone,
-          redirectUrl:   window.location.origin,
-        });
-        const tokenUrl = (ppResp as { data: { redirectUrl: string } }).data.redirectUrl;
-
-        setIsPhonePeLoading(false);
-        const loaded = await loadScript("https://mercury.phonepe.com/web/bundle/checkout.js");
-        if (!loaded) { enqueueSnackbar("PhonePe SDK failed to load.", { variant: "warning" }); return; }
-
-        const confirmedOrderId = targetOrderId;
-        const confirmedAmount  = finalTotal;
-        const merchantTxnId    = (ppResp as { data: { merchantTransactionId: string } }).data.merchantTransactionId;
-
-        setIsPhonePeOpen(true);
-        window.PhonePeCheckout.transact({
-          tokenUrl,
-          type: "IFRAME",
-          callback: (response: string) => {
-            setIsPhonePeOpen(false);
-            if (response === "USER_CANCEL") {
-              enqueueSnackbar("Payment cancelled.", { variant: "warning" });
-              return;
-            }
-            if (response === "CONCLUDED") {
-              // Poll PhonePe status API until COMPLETED/FAILED, then update order
-              setIsPhonePePolling(true);
-              let attempts = 0;
-              const MAX = 15;
-              const poll = setInterval(async () => {
-                attempts++;
-                try {
-                  const res = await getPhonePePaymentStatus(merchantTxnId);
-                  const state = (res.data as { data: { state: string } }).data.state;
-                  if (state === "COMPLETED") {
-                    clearInterval(poll);
-                    setIsPhonePePolling(false);
-                    await updateOrder({
-                      id: confirmedOrderId!,
-                      paymentStatus: "Paid",
-                      paymentMethod: "Online",
-                      amountPaid: confirmedAmount,
-                      orderStatus: "Completed",
-                    });
-                    dispatch(removeCustomer());
-                    dispatch(removeAllItems());
-                    queryClient.invalidateQueries({ queryKey: ["earnings"] });
-                    queryClient.invalidateQueries({ queryKey: ["orders"] });
-                    enqueueSnackbar("Payment successful! Order completed.", { variant: "success" });
-                    navigate("/", { replace: true });
-                    return;
-                  }
-                  if (state === "FAILED") {
-                    clearInterval(poll);
-                    setIsPhonePePolling(false);
-                    enqueueSnackbar("Payment failed. Please try again.", { variant: "error" });
-                    return;
-                  }
-                } catch { /* keep polling on network error */ }
-                if (attempts >= MAX) {
-                  clearInterval(poll);
-                  setIsPhonePePolling(false);
-                  enqueueSnackbar("Could not verify payment. Check order status manually.", { variant: "warning" });
-                  queryClient.invalidateQueries({ queryKey: ["orders"] });
-                  navigate("/", { replace: true });
-                }
-              }, 2000);
-            }
-          },
-        });
-      } catch {
-        setIsPhonePeLoading(false);
-        setIsPhonePeOpen(false);
-        // Cancel a freshly created order if PhonePe initiation failed
-        if (!orderId && targetOrderId) {
-          updateOrder({ id: targetOrderId, orderStatus: "Cancelled" }).catch(() => {});
-        }
-        enqueueSnackbar("PhonePe payment failed!", { variant: "error" });
       }
+
+      pendingUpi.current = { paidAmount, isFullyPaid, targetOrderId };
+      setIsUpiModalOpen(true);
       return;
     }
 
     if (orderId) {
       // Existing order: never rebake bills — only send payment fields
-      const amountAlreadyPaid = existingOrder?.amountPaid ?? orderInfo?.amountPaid ?? 0;
-      updateOrder({
-        id: orderId,
-        amountPaid: amountAlreadyPaid + paidAmount,
-        paymentMethod: payMethod,
-        paymentStatus: isFullyPaid ? "Paid" : "Pending",
-        orderStatus: "Completed",
-      }).then((resData) => {
-        const { data } = (resData as { data: { data: Order } }).data;
-        setOrderInfo(data);
-        dispatch(removeCustomer());
-        dispatch(removeAllItems());
-        queryClient.invalidateQueries({ queryKey: ["earnings"] });
-        queryClient.invalidateQueries({ queryKey: ["orders"] });
-        enqueueSnackbar("Order Processed!", { variant: "success" });
-        setIsPayModalOpen(false);
-        navigate("/", { replace: true });
-      }).catch((error: { response?: { data?: { message?: string } } }) => {
-        enqueueSnackbar(error.response?.data?.message || "Failed to process payment.", { variant: "error" });
-      });
+      completeOrder(orderId, paidAmount, payMethod, isFullyPaid).catch(
+        (error: { response?: { data?: { message?: string } } }) => {
+          enqueueSnackbar(error.response?.data?.message || "Failed to process payment.", { variant: "error" });
+        }
+      );
     } else {
       // New order: bake in current bills (discount/roundoff) + payment
       const orderData = buildOrderData();
@@ -259,6 +173,34 @@ const Bill: React.FC = () => {
         orderStatus: isFullyPaid ? "Completed" : "In Progress",
       } as unknown as OrderMutationData);
     }
+  };
+
+  const handleUpiConfirm = async () => {
+    if (!pendingUpi.current) return;
+    const { paidAmount, isFullyPaid, targetOrderId } = pendingUpi.current;
+    if (!targetOrderId) return;
+
+    setIsUpiConfirming(true);
+    try {
+      await completeOrder(targetOrderId, paidAmount, "Online", isFullyPaid);
+      setIsUpiModalOpen(false);
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      enqueueSnackbar(err.response?.data?.message || "Failed to record payment.", { variant: "error" });
+    } finally {
+      setIsUpiConfirming(false);
+      pendingUpi.current = null;
+    }
+  };
+
+  const handleUpiClose = () => {
+    if (isUpiConfirming) return;
+    // If we created a new order just for the QR, cancel it
+    if (!orderId && pendingUpi.current?.targetOrderId) {
+      updateOrder({ id: pendingUpi.current.targetOrderId, orderStatus: "Cancelled" }).catch(() => {});
+    }
+    pendingUpi.current = null;
+    setIsUpiModalOpen(false);
   };
 
   // For PayModal: use DB data for existing orders but always override bills with
@@ -273,6 +215,10 @@ const Bill: React.FC = () => {
         },
       }
     : buildOrderData();
+
+  const upiOrderRef = orderId
+    ? orderId.slice(-6)
+    : pendingUpi.current?.targetOrderId?.slice(-6) ?? "NEW";
 
   return (
     <div className="px-4 py-3 space-y-3">
@@ -352,10 +298,9 @@ const Bill: React.FC = () => {
       <div className="space-y-2">
         <button
           onClick={handlePlaceOrder}
-          disabled={isPhonePeLoading}
-          className="w-full btn-accent rounded-xl py-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full btn-accent rounded-xl py-3 text-sm"
         >
-          {isPhonePeLoading ? "Connecting to PhonePe…" : orderId ? "Update Order" : "Place Order"}
+          {orderId ? "Update Order" : "Place Order"}
         </button>
         <button
           className="w-full py-2.5 rounded-xl bg-dhaba-success/10 text-dhaba-success font-bold text-sm border border-dhaba-success/20 hover:bg-dhaba-success/20 transition-colors"
@@ -365,38 +310,23 @@ const Bill: React.FC = () => {
         </button>
       </div>
 
-      {/* Close button rendered into body so it sits above the PhonePe iframe */}
-      {isPhonePeOpen && createPortal(
-        <button
-          onClick={() => {
-            window.PhonePeCheckout.closePage();
-            setIsPhonePeOpen(false);
-            enqueueSnackbar("Payment cancelled.", { variant: "warning" });
-          }}
-          style={{ position: "fixed", top: 16, right: 16, zIndex: 2147483647 }}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-dhaba-danger text-white text-sm font-bold shadow-lg hover:bg-dhaba-danger/80 transition-colors"
-        >
-          ✕ Close PhonePe
-        </button>,
-        document.body
-      )}
-
-      {/* Verification overlay shown after payment CONCLUDED while polling status */}
-      {isPhonePePolling && createPortal(
-        <div style={{ position: "fixed", inset: 0, zIndex: 2147483647, background: "rgba(0,0,0,0.7)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
-          <div style={{ width: 40, height: 40, border: "4px solid #E8A317", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-          <p style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>Verifying payment…</p>
-        </div>,
-        document.body
-      )}
-
       {showInvoice && orderInfo && <Invoice orderInfo={orderInfo} setShowInvoice={setShowInvoice} />}
+
       <PayModal
         isOpen={isPayModalOpen}
         onClose={() => setIsPayModalOpen(false)}
         order={{ _id: orderId ?? "", ...currentOrderData } as Partial<Order> & { _id: string }}
         customerData={customerData}
         onSubmitPayment={handlePaymentSubmit}
+      />
+
+      <UpiQrModal
+        isOpen={isUpiModalOpen}
+        onClose={handleUpiClose}
+        onConfirm={handleUpiConfirm}
+        amount={finalTotal}
+        orderRef={upiOrderRef}
+        isConfirming={isUpiConfirming}
       />
     </div>
   );
