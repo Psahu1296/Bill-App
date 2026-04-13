@@ -6,5 +6,10 @@
  *   "9876543210"      → "9876543210"
  */
 export function normalizePhone(phone: string): string {
-  return phone.replace(/\D/g, "").replace(/^91/, "").slice(-10);
+  return phone.replace(/\D/g, "").slice(-10);
+}
+
+export function isValidIndianPhone(phone: string): boolean {
+  const normalized = phone.replace(/\D/g, "").slice(-10);
+  return /^[6-9]\d{9}$/.test(normalized);
 }

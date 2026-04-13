@@ -6,7 +6,7 @@ import * as OrderRepo from "../repositories/orderRepo";
 import * as SettingsRepo from "../repositories/settingsRepo";
 import * as TableRepo from "../repositories/tableRepo";
 import { notifEmitter } from "../utils/notificationEmitter";
-import { normalizePhone } from "../utils/normalizePhone";
+import { isValidIndianPhone, normalizePhone } from "../utils/normalizePhone";
 
 // ── GET /api/customer/dishes ─────────────────────────────────────────────────
 export async function getPublicDishes(_req: Request, res: Response, next: NextFunction) {
@@ -253,7 +253,7 @@ export async function streamOrderStatus(req: Request, res: Response, next: NextF
 export async function getCustomerOrders(req: Request, res: Response, next: NextFunction) {
   try {
     const phone = normalizePhone(String(req.params["phone"] ?? ""));
-    if (phone.length < 10) {
+    if (!isValidIndianPhone(phone)) {
       res.status(400).json({ success: false, message: "Invalid phone number" });
       return;
     }
