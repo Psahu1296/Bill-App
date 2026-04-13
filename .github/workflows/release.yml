@@ -109,21 +109,24 @@ jobs:
         run: |
           mkdir -p build-resources/bin
           BASE="https://github.com/cloudflare/cloudflared/releases/latest/download"
+          CURL="curl -fsSL --retry 5 --retry-delay 10 --retry-max-time 180"
           if [ "$RUNNER_OS" = "Windows" ]; then
-            curl -fsSL -o build-resources/bin/cloudflared-win32-x64.exe \
+            $CURL -o build-resources/bin/cloudflared-win32-x64.exe \
               "$BASE/cloudflared-windows-amd64.exe"
           elif [ "$RUNNER_OS" = "macOS" ]; then
-            # macOS assets are .tgz archives — extract the binary from each
-            curl -fsSL "$BASE/cloudflared-darwin-amd64.tgz" | tar -xz -C build-resources/bin --strip-components=0
+            # Download to temp files first so --retry works (piping to tar prevents retries)
+            $CURL -o /tmp/cloudflared-amd64.tgz "$BASE/cloudflared-darwin-amd64.tgz"
+            tar -xz -C build-resources/bin -f /tmp/cloudflared-amd64.tgz
             mv build-resources/bin/cloudflared build-resources/bin/cloudflared-amd64
-            curl -fsSL "$BASE/cloudflared-darwin-arm64.tgz" | tar -xz -C build-resources/bin --strip-components=0
+            $CURL -o /tmp/cloudflared-arm64.tgz "$BASE/cloudflared-darwin-arm64.tgz"
+            tar -xz -C build-resources/bin -f /tmp/cloudflared-arm64.tgz
             mv build-resources/bin/cloudflared build-resources/bin/cloudflared-arm64
             lipo -create -output build-resources/bin/cloudflared-darwin-universal \
               build-resources/bin/cloudflared-amd64 build-resources/bin/cloudflared-arm64
             chmod +x build-resources/bin/cloudflared-darwin-universal
             rm build-resources/bin/cloudflared-amd64 build-resources/bin/cloudflared-arm64
           else
-            curl -fsSL -o build-resources/bin/cloudflared-linux-x64 \
+            $CURL -o build-resources/bin/cloudflared-linux-x64 \
               "$BASE/cloudflared-linux-amd64"
             chmod +x build-resources/bin/cloudflared-linux-x64
           fi
