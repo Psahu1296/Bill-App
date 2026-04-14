@@ -27,7 +27,7 @@ const RecentOrders: React.FC = () => {
   const totalActive      = inProgressOrders.length + readyOrders.length;
 
   return (
-    <div className="glass-card rounded-3xl overflow-hidden">
+    <div className="glass-card rounded-3xl overflow-hidden min-h-[320px] flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-dhaba-border/20">
         <div className="flex items-center gap-2">
