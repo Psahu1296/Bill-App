@@ -53,6 +53,9 @@ export default {
           '100%': { backgroundPosition: '200% 0' },
         },
       },
+      transitionProperty: {
+        'card': 'transform, box-shadow, border-color, background-color, opacity, color',
+      },
     },
   },
   plugins: [
