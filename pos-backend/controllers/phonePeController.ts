@@ -10,6 +10,7 @@ import config from "../config/config";
 import * as OrderRepo from "../repositories/orderRepo";
 import * as PaymentRepo from "../repositories/paymentRepo";
 import * as earningRepo from "../repositories/earningRepo";
+import * as PreOrderRepo from "../repositories/preOrderRepo";
 import { getZonedStartOfDayUtc } from "./earningController";
 
 // Sandbox shares one base URL; production uses separate hosts for token vs API
@@ -134,40 +135,55 @@ export async function handleCallback(req: Request, res: Response, next: NextFunc
     const state           = payload.state           as string | undefined;
     const txnId           = payload.orderId         as string | undefined;
 
-    // Extract internal orderId from merchantOrderId: "TXN_{orderId}_{ts}"
-    const orderId = merchantOrderId?.split("_")[1];
+    // Determine prefix: "TXN" = regular order, "DEP" = pre-order deposit
+    const parts    = merchantOrderId?.split("_") ?? [];
+    const prefix   = parts[0];       // "TXN" | "DEP"
+    const internalId = parts[1];     // orderId or preOrderId
 
-    if (orderId && state === "COMPLETED") {
-      const order = await OrderRepo.findById(orderId, false);
-      if (order) {
-        const total = ((order.bills as Record<string, unknown>)?.totalWithTax as number) ?? 0;
+    if (internalId && state === "COMPLETED") {
+      if (prefix === "TXN") {
+        // ── Existing order payment logic ──────────────────────────────────────
+        const orderId = internalId;
+        const order = await OrderRepo.findById(orderId, false);
+        if (order) {
+          const total = ((order.bills as Record<string, unknown>)?.totalWithTax as number) ?? 0;
 
-        // Sequential (idempotent): order update then payment record
-        await OrderRepo.update(orderId, {
-          paymentStatus:     "Paid",
-          paymentMethod:     "Online",
-          amountPaid:        total,
-          balanceDueOnOrder: 0,
-          paymentData:       body,
-        });
+          // Sequential (idempotent): order update then payment record
+          await OrderRepo.update(orderId, {
+            paymentStatus:     "Paid",
+            paymentMethod:     "Online",
+            amountPaid:        total,
+            balanceDueOnOrder: 0,
+            paymentData:       body,
+          });
 
-        await PaymentRepo.create({
-          paymentId: txnId ?? merchantOrderId ?? "",
-          orderId,
-          amount:    total,
-          currency:  "INR",
-          status:    "COMPLETED",
-          method:    "UPI",
-          contact:   ((order.customerDetails as Record<string, unknown>)?.phone as string) ?? "",
-        });
+          await PaymentRepo.create({
+            paymentId: txnId ?? merchantOrderId ?? "",
+            orderId,
+            amount:    total,
+            currency:  "INR",
+            status:    "COMPLETED",
+            method:    "UPI",
+            contact:   ((order.customerDetails as Record<string, unknown>)?.phone as string) ?? "",
+          });
 
-        // Record earnings for this online payment
-        try {
-          const orderDate = new Date((order as Record<string, unknown>).orderDate as Date | string);
-          await earningRepo.incrementEarnings(getZonedStartOfDayUtc(orderDate).toISOString(), total);
-        } catch (e) {
-          console.error("Error updating daily earnings on PhonePe callback:", e);
+          // Record earnings for this online payment
+          try {
+            const orderDate = new Date((order as Record<string, unknown>).orderDate as Date | string);
+            await earningRepo.incrementEarnings(getZonedStartOfDayUtc(orderDate).toISOString(), total);
+          } catch (e) {
+            console.error("Error updating daily earnings on PhonePe callback:", e);
+          }
         }
+      } else if (prefix === "DEP") {
+        // ── Pre-order deposit payment ─────────────────────────────────────────
+        const preOrderId = internalId;
+        await PreOrderRepo.update(preOrderId, {
+          depositPaid:          true,
+          depositTransactionId: txnId ?? merchantOrderId ?? "",
+          depositPaidAt:        new Date(),
+        });
+        console.log(`[PhonePe] Deposit marked as paid for pre-order ${preOrderId}`);
       }
     }
 

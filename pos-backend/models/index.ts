@@ -59,6 +59,7 @@ const dishSchema = new Schema(
     isAvailable:       { type: Boolean, default: true },
     isFrequent:        { type: Boolean, default: false },
     isOnlineAvailable: { type: Boolean, default: false },
+    isPreorder:        { type: Boolean, default: false },
     numberOfOrders:    { type: Number, default: 0 },
   },
   baseOptions
@@ -249,3 +250,46 @@ const customerOtpSessionSchema = new Schema(
 customerOtpSessionSchema.index({ phone: 1 });
 export const CustomerOtpSession =
   mongoose.models.CustomerOtpSession ?? mongoose.model("CustomerOtpSession", customerOtpSessionSchema);
+
+// ── DishRequest ───────────────────────────────────────────────────────────────
+const dishRequestSchema = new Schema(
+  {
+    customerName:  { type: String, required: true },
+    customerPhone: { type: String, required: true },
+    dishName:      { type: String, required: true },
+    description:   { type: String, default: "" },
+    status:        { type: String, default: "pending" }, // pending | noted | added | rejected
+    adminNote:     { type: String, default: "" },
+  },
+  baseOptions
+);
+dishRequestSchema.index({ status: 1, createdAt: -1 });
+export const DishRequest =
+  mongoose.models.DishRequest ?? mongoose.model("DishRequest", dishRequestSchema);
+
+// ── PreOrder ──────────────────────────────────────────────────────────────────
+const preOrderSchema = new Schema(
+  {
+    customerName:         { type: String, required: true },
+    customerPhone:        { type: String, required: true },
+    scheduledFor:         { type: Date, required: true },
+    items:                { type: [Schema.Types.Mixed], default: [] }, // [{name, quantity}]
+    guestCount:           { type: Number, default: 1 },
+    orderType:            { type: String, default: "dine-in" }, // dine-in | takeaway | delivery
+    deliveryAddress:      { type: String, default: "" },
+    specialInstructions:  { type: String, default: "" },
+    status:               { type: String, default: "pending" }, // pending | confirmed | cancelled | completed
+    adminNote:            { type: String, default: "" },
+    estimatedTotal:       { type: Number, default: 0 },   // customer's rough estimate
+    estimatedAmount:      { type: Number, default: 0 },   // admin-set actual estimate
+    depositAmount:        { type: Number, default: 0 },   // 50% of estimatedTotal, set on initiation
+    depositPaid:          { type: Boolean, default: false },
+    depositTransactionId: { type: String, default: "" },
+    depositPaidAt:        { type: Date, default: null },
+  },
+  baseOptions
+);
+preOrderSchema.index({ scheduledFor: 1, status: 1 });
+preOrderSchema.index({ customerPhone: 1 });
+export const PreOrder =
+  mongoose.models.PreOrder ?? mongoose.model("PreOrder", preOrderSchema);

@@ -11,10 +11,11 @@ interface PayModalProps {
   onClose: () => void;
   order: Partial<Order> & { _id?: string };
   customerData: { customerPhone?: string };
+  isPending?: boolean;
   onSubmitPayment: (amountPaid: number, paymentMethod: PaymentMethod, isFullyPaid: boolean) => void;
 }
 
-const PayModal: React.FC<PayModalProps> = ({ isOpen, onClose, order, onSubmitPayment }) => {
+const PayModal: React.FC<PayModalProps> = ({ isOpen, onClose, order, isPending, onSubmitPayment }) => {
   const [amountPaying, setAmountPaying] = useState("");
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>("Cash");
 
@@ -183,9 +184,10 @@ const PayModal: React.FC<PayModalProps> = ({ isOpen, onClose, order, onSubmitPay
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={!canSubmit}
-                className="bg-gradient-warm text-dhaba-bg px-8 py-2.5 rounded-xl font-bold text-sm hover:shadow-glow transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                disabled={!canSubmit || isPending}
+                className="bg-gradient-warm text-dhaba-bg px-8 py-2.5 rounded-xl font-bold text-sm hover:shadow-glow transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
+                {isPending ? <span className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : null}
                 {isPayLater ? "Add to Tab" : "Record Payment"}
               </button>
             </div>

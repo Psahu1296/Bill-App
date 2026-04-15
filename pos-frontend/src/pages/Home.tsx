@@ -13,7 +13,7 @@ import { enqueueSnackbar } from "notistack";
 import {
   FaPlus, FaArrowUp, FaArrowDown,
   FaHourglassHalf, FaCheckCircle, FaExclamationCircle,
-  FaUserTie, FaCoffee,
+  FaUserTie, FaCoffee, FaClipboardList,
 } from "react-icons/fa";
 import { BsCashCoin } from "react-icons/bs";
 import type { Order } from "../types";
@@ -124,6 +124,7 @@ const Home: React.FC = () => {
 
   const quickActions = [
     { label: "Staff", icon: <FaUserTie />, path: "/staff" },
+    { label: "Requests", icon: <FaClipboardList />, path: "/requests" },
   ];
 
   return (

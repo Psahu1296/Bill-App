@@ -12,6 +12,7 @@ import {
   streamOrderStatus,
   getCustomerOrders,
 } from "../controllers/customerController";
+import { getAvailableDishRequests } from "../controllers/requestController";
 import {
   getCustomerProfile,
   upsertCustomerProfile,
@@ -49,6 +50,7 @@ const streamLimiter = rateLimit({
 
 // ── Menu ──────────────────────────────────────────────────────────────────────
 router.get("/dishes", readLimiter, getPublicDishes);
+router.get("/dish/available", readLimiter, getAvailableDishRequests);
 
 // ── Orders ─────────────────────────────────────────────────────────────────────
 router.post("/order", orderLimiter, placeCustomerOrder);

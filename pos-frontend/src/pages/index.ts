@@ -12,3 +12,4 @@ export { default as DataManagement } from './DataManagement';
 export { default as DishesPage } from './DishesPage';
 export { default as ServerStatus } from './ServerStatus';
 export { default as OnlineConfig } from './OnlineConfig';
+export { default as Requests } from './Requests';

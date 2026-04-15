@@ -9,11 +9,16 @@ import { notifEmitter } from "../utils/notificationEmitter";
 import { isValidIndianPhone, normalizePhone } from "../utils/normalizePhone";
 
 // ── GET /api/customer/dishes ─────────────────────────────────────────────────
-export async function getPublicDishes(_req: Request, res: Response, next: NextFunction) {
+export async function getPublicDishes(req: Request, res: Response, next: NextFunction) {
   try {
+    const mode = req.query.mode as string;
     const all = await DishRepo.findAll();
     const available = all
-      .filter(d => d && d.isAvailable && d.isOnlineAvailable)
+      .filter(d => {
+        if (!d || !d.isAvailable) return false;
+        if (mode === "preorder") return d.isOnlineAvailable || (d as Record<string, unknown>).isPreorder;
+        return d.isOnlineAvailable && !(d as Record<string, unknown>).isPreorder;
+      })
       .map(d => {
         if (!d) return d;
         const { numberOfOrders: _n, ...pub } = d as Record<string, unknown> & { numberOfOrders: unknown };

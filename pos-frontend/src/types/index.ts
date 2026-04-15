@@ -321,6 +321,44 @@ export interface AddPaymentPayload {
   date?: string;
 }
 
+// ── Requests module ───────────────────────────────────────────────────────────
+
+export interface DishRequest {
+  _id: string;
+  customerName: string;
+  customerPhone: string;
+  dishName: string;
+  description: string;
+  status: "pending" | "noted" | "added" | "rejected";
+  adminNote: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PreOrderItem = { name: string; quantity: number };
+
+export interface PreOrder {
+  _id: string;
+  customerName: string;
+  customerPhone: string;
+  scheduledFor: string;
+  items: PreOrderItem[];
+  guestCount: number;
+  orderType: "dine-in" | "takeaway" | "delivery";
+  deliveryAddress: string;
+  specialInstructions: string;
+  status: "pending" | "confirmed" | "cancelled" | "completed";
+  adminNote: string;
+  estimatedTotal: number;
+  estimatedAmount: number;
+  depositAmount: number;
+  depositPaid: boolean;
+  depositTransactionId: string;
+  depositPaidAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ── API response wrapper ──────────────────────────────────────────────────────
 
 export interface ApiResponse<T> {

@@ -298,12 +298,15 @@ const Bill: React.FC = () => {
       <div className="space-y-2">
         <button
           onClick={handlePlaceOrder}
-          className="w-full btn-accent rounded-xl py-3 text-sm"
+          disabled={orderMutation.isPending}
+          className="w-full btn-accent rounded-xl py-3 text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
+          {orderMutation.isPending ? <span className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : null}
           {orderId ? "Update Order" : "Place Order"}
         </button>
         <button
-          className="w-full py-2.5 rounded-xl bg-dhaba-success/10 text-dhaba-success font-bold text-sm border border-dhaba-success/20 hover:bg-dhaba-success/20 transition-colors"
+          disabled={orderMutation.isPending}
+          className="w-full py-2.5 rounded-xl bg-dhaba-success/10 text-dhaba-success font-bold text-sm border border-dhaba-success/20 hover:bg-dhaba-success/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={() => setIsPayModalOpen(true)}
         >
           Pay & Complete
@@ -317,6 +320,7 @@ const Bill: React.FC = () => {
         onClose={() => setIsPayModalOpen(false)}
         order={{ _id: orderId ?? "", ...currentOrderData } as Partial<Order> & { _id: string }}
         customerData={customerData}
+        isPending={orderMutation.isPending}
         onSubmitPayment={handlePaymentSubmit}
       />
 

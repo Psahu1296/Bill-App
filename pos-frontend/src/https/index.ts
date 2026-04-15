@@ -241,3 +241,24 @@ export const deleteDeliveryArea = (id: string) =>
 
 export const toggleDeliveryArea = (id: string, data: { isActive?: boolean; deliveryFee?: number; minOrderAmount?: number }) =>
   axiosWrapper.patch(`/api/online-config/delivery-areas/${id}`, data);
+
+// ── Requests ──────────────────────────────────────────────────────────────────
+export const getDishRequests = (filters?: { status?: string }) =>
+  axiosWrapper.get("/api/requests/dish", { params: filters });
+
+export const updateDishRequest = (id: string, data: { status?: string; adminNote?: string }) =>
+  axiosWrapper.patch(`/api/requests/dish/${id}`, data);
+
+export const deleteDishRequest = (id: string) =>
+  axiosWrapper.delete(`/api/requests/dish/${id}`);
+
+export const getPreOrders = (filters?: { status?: string; date?: string }) =>
+  axiosWrapper.get("/api/requests/preorder", { params: filters });
+
+export const updatePreOrder = (
+  id: string,
+  data: { status?: string; adminNote?: string; estimatedAmount?: number }
+) => axiosWrapper.patch(`/api/requests/preorder/${id}`, data);
+
+export const deletePreOrder = (id: string) =>
+  axiosWrapper.delete(`/api/requests/preorder/${id}`);
