@@ -145,7 +145,6 @@ const Home: React.FC = () => {
 
   const quickActions = [
     { label: "Staff",    icon: <FaUserTie />,      path: "/staff",    badge: 0,            badgeTitle: "" },
-    { label: "Requests", icon: <FaClipboardList />, path: "/requests", badge: totalPending, badgeTitle: requestsBadgeTitle },
   ];
 
   return (
@@ -227,6 +226,94 @@ const Home: React.FC = () => {
               )}
             </button>
           ))}
+
+          {/* ── Ultra Premium Requests Button ── */}
+          <button
+            onClick={() => navigate("/requests")}
+            className={`group relative flex items-center justify-between px-5 py-3 rounded-[1.5rem] flex-1 transition-all duration-500 overflow-hidden active:scale-95 ${
+              pendingPreOrder > 0 || pendingDish > 0
+                ? "border-none shadow-[0_0_50px_-10px_rgba(59,130,246,0.5)] hover:shadow-[0_0_65px_-5px_rgba(59,130,246,0.7)] hover:-translate-y-1 bg-[#0f172a]"
+                : "glass-card text-dhaba-text hover:bg-dhaba-surface border border-dhaba-border/20 hover:shadow-md"
+            }`}
+          >
+            {/* 1) Spinning Edge Glow Border */}
+            {(pendingPreOrder > 0 || pendingDish > 0) && (
+              <div 
+                className="absolute inset-[-150%] animate-spin z-0 pointer-events-none" 
+                style={{ 
+                  animationDuration: '4s', 
+                  background: 'conic-gradient(from 180deg at 50% 50%, #3b82f6 0deg, #a855f7 180deg, transparent 360deg)' 
+                }} 
+              />
+            )}
+            
+            {/* 2) Inner Dark Mask (Leaves a 2px gap showing the spinning edge) */}
+            {(pendingPreOrder > 0 || pendingDish > 0) && (
+              <div className="absolute inset-[2px] bg-[#0c111d] rounded-[1.4rem] z-0 shadow-[inset_0_0_30px_rgba(0,0,0,0.8)] pointer-events-none" />
+            )}
+
+            {/* 3) Ambient Background Orb */}
+            {(pendingPreOrder > 0 || pendingDish > 0) && (
+              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 rounded-full blur-[30px] z-0 animate-pulse pointer-events-none" />
+            )}
+
+            {/* 4) Main Content Container */}
+            <div className={`relative z-10 flex items-center justify-between w-full h-full gap-2 ${pendingPreOrder === 0 && pendingDish === 0 ? "justify-center" : ""}`}>
+              
+              {/* Left Side: Icon & Title */}
+              <div className="flex items-center gap-3">
+                <div className={`relative flex items-center justify-center w-12 h-12 rounded-[1rem] transition-all duration-300 ${pendingPreOrder > 0 || pendingDish > 0 ? "bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-white/10 shadow-inner" : "bg-blue-500/10 text-blue-500"}`}>
+                  <FaClipboardList className={`text-xl ${pendingPreOrder > 0 || pendingDish > 0 ? "text-blue-400 drop-shadow-[0_0_10px_rgba(96,165,250,0.8)]" : ""}`} />
+                  
+                  {/* Ping Dot on Icon */}
+                  {(pendingPreOrder > 0 || pendingDish > 0) && (
+                     <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-[#0c111d] animate-bounce shadow-[0_0_10px_rgba(239,68,68,0.8)]" />
+                  )}
+                </div>
+                
+                <div className="flex flex-col items-start text-left">
+                  <span className={`text-sm md:text-base font-black tracking-wide ${pendingPreOrder > 0 || pendingDish > 0 ? "text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400" : "text-dhaba-text"}`}>
+                    Requests
+                  </span>
+                  {(pendingPreOrder > 0 || pendingDish > 0) ? (
+                    <span className="text-[9px] md:text-[10px] font-bold text-white/50 uppercase tracking-[0.2em] mt-0.5">
+                      New Action
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-dhaba-muted uppercase tracking-widest mt-0.5">Manage</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Side: Data Counter Badges */}
+              {(pendingPreOrder > 0 || pendingDish > 0) && (
+                <div className="flex flex-col gap-1.5 shrink-0 py-1">
+                  
+                  {/* Pre-Orders Counter */}
+                  {pendingPreOrder > 0 && (
+                    <div className="group/badge relative flex items-center justify-between gap-3 bg-[#1e293b]/80 px-2.5 py-1.5 rounded-xl border border-white/10 shadow-[0_4px_15px_rgba(0,0,0,0.3)] backdrop-blur-md overflow-hidden min-w-[100px]">
+                       <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-transparent opacity-0 group-hover/badge:opacity-100 transition-opacity" />
+                       <span className="relative z-10 text-white text-[10px] md:text-[11px] font-black tracking-widest uppercase">Bookings</span>
+                       <span className="relative z-10 flex items-center justify-center bg-blue-500 text-white min-w-[20px] h-5 px-1.5 rounded text-[10px] md:text-xs font-black shadow-[0_0_10px_rgba(59,130,246,0.8)] border border-blue-400/50">
+                         {pendingPreOrder}
+                       </span>
+                    </div>
+                  )}
+                  
+                  {/* Dishes Counter */}
+                  {pendingDish > 0 && (
+                    <div className="flex items-center justify-between gap-3 bg-[#1e293b]/60 px-2.5 py-1 rounded-xl border border-white/5 backdrop-blur-sm min-w-[100px]">
+                       <span className="text-white/60 text-[9px] md:text-[10px] font-bold tracking-widest uppercase">Dishes</span>
+                       <span className="flex items-center justify-center bg-dhaba-warning/15 text-dhaba-warning min-w-[18px] h-4 px-1 rounded text-[9px] md:text-[10px] font-black border border-dhaba-warning/20">
+                         {pendingDish}
+                       </span>
+                    </div>
+                  )}
+                  
+                </div>
+              )}
+            </div>
+          </button>
         </div>
 
         {/* ── Main content ── */}

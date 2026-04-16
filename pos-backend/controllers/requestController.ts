@@ -407,10 +407,12 @@ export async function updatePreOrder(
 ) {
   try {
     const id = req.params.id as string;
-    const { status, adminNote, estimatedAmount } = req.body as {
+    const { status, adminNote, estimatedAmount, depositAmount, depositPaid } = req.body as {
       status?: string;
       adminNote?: string;
       estimatedAmount?: number;
+      depositAmount?: number;
+      depositPaid?: boolean;
     };
 
     const VALID_STATUSES = ["pending", "confirmed", "cancelled", "completed"];
@@ -423,6 +425,8 @@ export async function updatePreOrder(
       status,
       adminNote,
       estimatedAmount,
+      depositAmount,
+      depositPaid,
     });
     if (!data) return next(createHttpError(404, "Pre-order not found"));
     res.json({ success: true, data });
