@@ -6,7 +6,7 @@ import OnlineOrders from "../components/home/OnlineOrders";
 import PopularDishes from "../components/home/PopularDishes";
 import NewOrderModal from "../components/home/NewOrderModal";
 import QuickConsumableModal from "../components/home/QuickConsumableModal";
-import { getDailyEarnings, getOrders, getAllExpenses } from "../https";
+import { getDailyEarnings, getOrders, getAllExpenses, getDishRequests, getPreOrders } from "../https";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { enqueueSnackbar } from "notistack";
@@ -122,9 +122,30 @@ const Home: React.FC = () => {
     },
   ];
 
+  const { data: pendingDishRes } = useQuery({
+    queryKey: ["dish-requests", "pending"],
+    queryFn: () => getDishRequests({ status: "pending" }),
+    staleTime: 2 * 60_000,
+  });
+  const { data: pendingPreOrderRes } = useQuery({
+    queryKey: ["pre-orders", "pending"],
+    queryFn: () => getPreOrders({ status: "pending" }),
+    staleTime: 2 * 60_000,
+  });
+
+  const pendingDish     = ((pendingDishRes?.data as { data?: unknown[] })?.data ?? []).length;
+  const pendingPreOrder = ((pendingPreOrderRes?.data as { data?: unknown[] })?.data ?? []).length;
+  const totalPending    = pendingDish + pendingPreOrder;
+
+  // Badge tooltip: e.g. "3 dish · 2 bookings"
+  const requestsBadgeTitle = [
+    pendingDish     > 0 ? `${pendingDish} dish`     : "",
+    pendingPreOrder > 0 ? `${pendingPreOrder} booking${pendingPreOrder > 1 ? "s" : ""}` : "",
+  ].filter(Boolean).join(" · ");
+
   const quickActions = [
-    { label: "Staff", icon: <FaUserTie />, path: "/staff" },
-    { label: "Requests", icon: <FaClipboardList />, path: "/requests" },
+    { label: "Staff",    icon: <FaUserTie />,      path: "/staff",    badge: 0,            badgeTitle: "" },
+    { label: "Requests", icon: <FaClipboardList />, path: "/requests", badge: totalPending, badgeTitle: requestsBadgeTitle },
   ];
 
   return (
@@ -188,14 +209,22 @@ const Home: React.FC = () => {
             <FaCoffee className="text-lg" /> Quick Chai / Snacks
           </button>
 
-          {quickActions.map(({ label, icon, path }) => (
+          {quickActions.map(({ label, icon, path, badge, badgeTitle }) => (
             <button
               key={label}
               onClick={() => navigate(path)}
-              className="flex items-center gap-2.5 px-6 py-4 rounded-2xl font-bold text-sm glass-card text-dhaba-text hover:bg-dhaba-surface border border-dhaba-border/20 flex-1 justify-center hover:shadow-md active:scale-[0.98] transition-all"
+              className="relative flex items-center gap-2.5 px-6 py-4 rounded-2xl font-bold text-sm glass-card text-dhaba-text hover:bg-dhaba-surface border border-dhaba-border/20 flex-1 justify-center hover:shadow-md active:scale-[0.98] transition-all"
             >
               <span className="text-lg text-blue-500">{icon}</span>
               {label}
+              {badge > 0 && (
+                <span
+                  title={badgeTitle}
+                  className="absolute -top-2 -right-2 min-w-[1.375rem] h-[1.375rem] px-1.5 rounded-full bg-dhaba-warning text-dhaba-bg text-[10px] font-extrabold flex items-center justify-center shadow-md ring-2 ring-dhaba-bg animate-pulse"
+                >
+                  {badge > 99 ? "99+" : badge}
+                </span>
+              )}
             </button>
           ))}
         </div>
