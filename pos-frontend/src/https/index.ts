@@ -257,7 +257,14 @@ export const getPreOrders = (filters?: { status?: string; date?: string }) =>
 
 export const updatePreOrder = (
   id: string,
-  data: { status?: string; adminNote?: string; estimatedAmount?: number }
+  data: {
+    status?: string;
+    adminNote?: string;
+    estimatedAmount?: number;
+    depositAmount?: number;
+    depositPaid?: boolean;
+    depositPaidAt?: string | null;
+  }
 ) => axiosWrapper.patch(`/api/requests/preorder/${id}`, data);
 
 export const deletePreOrder = (id: string) =>

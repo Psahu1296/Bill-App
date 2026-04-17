@@ -75,7 +75,7 @@ const Requests: React.FC = () => {
 
   async function handleUpdatePreOrder(
     id: string,
-    data: { status?: string; adminNote?: string; estimatedAmount?: number; depositAmount?: number; depositPaid?: boolean }
+    data: { status?: string; adminNote?: string; estimatedAmount?: number; depositAmount?: number; depositPaid?: boolean; depositPaidAt?: string | null }
   ) {
     try {
       await updatePreOrder(id, data);

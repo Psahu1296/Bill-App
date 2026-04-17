@@ -9,7 +9,7 @@ import PreOrderPaymentModal from "./PreOrderPaymentModal";
 
 interface PreOrderCardProps {
   item: PreOrder;
-  onUpdate: (id: string, data: { status?: string; adminNote?: string; estimatedAmount?: number; depositAmount?: number; depositPaid?: boolean }) => Promise<void>;
+  onUpdate: (id: string, data: { status?: string; adminNote?: string; estimatedAmount?: number; depositAmount?: number; depositPaid?: boolean; depositPaidAt?: string | null }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }
 
@@ -171,6 +171,14 @@ const PreOrderCard: React.FC<PreOrderCardProps> = ({ item, onUpdate, onDelete })
               />
             </div>
           </div>
+          {estimatedAmount > 0 && (
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/5">
+              <span className="text-dhaba-muted font-medium text-xs">Balance Due:</span>
+              <span className={`font-bold text-sm ${Math.max(0, estimatedAmount - depositAmount) > 0 ? "text-dhaba-warning" : "text-dhaba-success"}`}>
+                ₹{Math.max(0, estimatedAmount - depositAmount)}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -235,17 +243,21 @@ const PreOrderCard: React.FC<PreOrderCardProps> = ({ item, onUpdate, onDelete })
 
       {showPaymentModal && (
         <PreOrderPaymentModal
-          item={item}
+          item={{ ...item, estimatedAmount: estimatedAmount, depositAmount: depositAmount }}
           onClose={() => setShowPaymentModal(false)}
           onConfirm={async (amountPaid, method) => {
-            const newDeposit = (item.depositAmount || 0) + amountPaid;
-            const paymentNote = amountPaid > 0 ? `[Action: Completed with payment ₹${amountPaid} via ${method}]` : `[Action: Completed without payment]`;
+            const newDeposit = depositAmount + amountPaid;
+            const paymentNote = amountPaid > 0
+              ? `[Completed: ₹${amountPaid} via ${method}]`
+              : `[Completed without payment]`;
             const newNote = adminNote ? `${adminNote}\n${paymentNote}` : paymentNote;
-            
+
             await onUpdate(item._id, {
               status: "completed",
+              estimatedAmount: estimatedAmount,
               depositAmount: newDeposit,
               depositPaid: newDeposit > 0,
+              depositPaidAt: newDeposit > 0 ? new Date().toISOString() : null,
               adminNote: newNote,
             });
             setShowPaymentModal(false);
