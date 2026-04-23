@@ -13,3 +13,4 @@ export { default as DishesPage } from './DishesPage';
 export { default as ServerStatus } from './ServerStatus';
 export { default as OnlineConfig } from './OnlineConfig';
 export { default as Requests } from './Requests';
+export { default as Expenses } from './Expenses';

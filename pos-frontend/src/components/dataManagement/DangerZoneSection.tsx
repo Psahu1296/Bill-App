@@ -1,9 +1,10 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaBomb, FaCheckCircle, FaExclamationTriangle, FaTrashAlt,
 } from "react-icons/fa";
-import axios from "axios";
+import { isAxiosError } from "axios";
+import { axiosWrapper } from "../../https/axiosWrapper";
 
 interface DangerZoneSectionProps {
   onStorageStatsRefresh: () => void;
@@ -24,7 +25,7 @@ const DangerZoneSection: React.FC<DangerZoneSectionProps> = ({ onStorageStatsRef
     setResetProcessing(true);
     setResetResult(null);
     try {
-      await axios.post<{ success: boolean; message: string }>("/api/data/reset", {
+      await axiosWrapper.post<{ success: boolean; message: string }>("/api/data/reset", {
         confirmPhrase: resetPhrase,
         password: resetPassword,
       });
@@ -34,7 +35,7 @@ const DangerZoneSection: React.FC<DangerZoneSectionProps> = ({ onStorageStatsRef
       setResetPassword("");
       onStorageStatsRefresh();
     } catch (err: unknown) {
-      const msg = axios.isAxiosError(err) ? err.response?.data?.message : "Reset failed.";
+      const msg = isAxiosError(err) ? (err.response?.data as { message?: string })?.message : "Reset failed.";
       setResetResult({ type: "error", message: msg ?? "Reset failed." });
     } finally {
       setResetProcessing(false);

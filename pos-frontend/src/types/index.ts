@@ -247,6 +247,17 @@ export interface AddExpensePayload {
   expenseDate?: string | Date;
 }
 
+export interface Expense {
+  _id: string;
+  type: string;
+  name: string;
+  amount: number;
+  description?: string;
+  expenseDate: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type ConsumableType = "tea" | "gutka" | "cigarette";
 export type ConsumerType = "customer" | "staff" | "owner";
 

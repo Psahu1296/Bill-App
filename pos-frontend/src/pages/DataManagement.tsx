@@ -8,7 +8,8 @@ import {
 import { MdStorage, MdDeleteSweep } from "react-icons/md";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import { isAxiosError } from "axios";
+import { axiosWrapper } from "../https/axiosWrapper";
 import BackButton from "../components/shared/BackButton";
 import { BackupRestoreSection, DangerZoneSection } from "../components/dataManagement";
 import type { RootState } from "../redux/store";
@@ -58,7 +59,7 @@ const DataManagement: React.FC = () => {
   const isAdmin = role === "Admin";
 
   const refreshStorageStats = useCallback(() => {
-    axios
+    axiosWrapper
       .get<{ success: boolean; data: StorageStats }>("/api/data/stats")
       .then((res) => setStorageStats(res.data.data))
       .catch(() => {});
@@ -90,16 +91,29 @@ const DataManagement: React.FC = () => {
     setConfirmDelete(false);
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!selectedModules.length) {
       setResult({ type: "error", message: "Please select at least one data module." });
       return;
     }
-    const params = new URLSearchParams({ modules: selectedModules.join(","), startDate, endDate, format });
-    const a = document.createElement("a");
-    a.href = `/api/data/export?${params.toString()}`;
-    a.click();
-    setResult({ type: "success", message: "Export started — check your Downloads folder." });
+    setProcessing(true);
+    try {
+      const params = new URLSearchParams({ modules: selectedModules.join(","), startDate, endDate, format });
+      const res = await axiosWrapper.get(`/api/data/export?${params.toString()}`, { responseType: "blob" });
+      const url = window.URL.createObjectURL(new Blob([res.data as BlobPart]));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `dhaba_export_${new Date().toISOString().split("T")[0]}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      setResult({ type: "success", message: "Export downloaded successfully." });
+    } catch {
+      setResult({ type: "error", message: "Export failed. Please try again." });
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const handleDeletePreview = async () => {
@@ -111,7 +125,7 @@ const DataManagement: React.FC = () => {
     setDeletePreview(null);
     try {
       const params = new URLSearchParams({ modules: selectedModules.join(","), startDate, endDate });
-      const res = await axios.get<{ success: boolean; data: { counts: Record<string, number>; cascaded: Record<string, number>; total: number } }>(
+      const res = await axiosWrapper.get<{ success: boolean; data: { counts: Record<string, number>; cascaded: Record<string, number>; total: number } }>(
         `/api/data/delete-preview?${params.toString()}`
       );
       setDeletePreview(res.data.data);
@@ -130,7 +144,7 @@ const DataManagement: React.FC = () => {
     setConfirmDelete(false);
     setDeletePreview(null);
     try {
-      const res = await axios.delete<{ success: boolean; message: string; data: Record<string, number> }>(
+      const res = await axiosWrapper.delete<{ success: boolean; message: string; data: Record<string, number> }>(
         "/api/data/delete",
         { data: { modules: selectedModules, startDate, endDate } }
       );
@@ -138,7 +152,7 @@ const DataManagement: React.FC = () => {
       setResult({ type: "success", message: `Deleted — ${summary}` });
       refreshStorageStats();
     } catch (err: unknown) {
-      const msg = axios.isAxiosError(err) ? err.response?.data?.message : "Delete failed.";
+      const msg = isAxiosError(err) ? (err.response?.data as { message?: string })?.message : "Delete failed.";
       setResult({ type: "error", message: msg ?? "Delete failed." });
     } finally {
       setProcessing(false);

@@ -1,11 +1,12 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaCheckCircle, FaExclamationTriangle, FaFolderOpen,
   FaSave, FaSync, FaUpload,
 } from "react-icons/fa";
 import { MdRestore } from "react-icons/md";
-import axios from "axios";
+import { isAxiosError } from "axios";
+import { axiosWrapper } from "../../https/axiosWrapper";
 
 interface BackupRestoreSectionProps {
   selectedModules: string[];
@@ -51,7 +52,7 @@ const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
     setResult(null);
     try {
       const params = new URLSearchParams({ modules: modules.join(","), startDate, endDate, format: "json" });
-      const res = await axios.get<Blob>(`/api/data/export?${params.toString()}`, { responseType: "blob" });
+      const res = await axiosWrapper.get<Blob>(`/api/data/export?${params.toString()}`, { responseType: "blob" });
       const date = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
       const filename = `dhaba_backup_${date}.json`;
       const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
@@ -60,7 +61,7 @@ const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
       await writable.close();
       setResult({ type: "success", message: `Saved "${filename}" to "${dirHandle.name}"` });
     } catch (err: unknown) {
-      const msg = axios.isAxiosError(err) ? err.response?.data?.message : null;
+      const msg = isAxiosError(err) ? (err.response?.data as { message?: string })?.message : null;
       setResult({ type: "error", message: msg ?? "Backup failed." });
     } finally {
       setBackupProcessing(false);
@@ -74,7 +75,7 @@ const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
     try {
       const text = await restoreFile.text();
       const data = JSON.parse(text) as unknown;
-      await axios.post("/api/data/import", data);
+      await axiosWrapper.post("/api/data/import", data);
       setResult({ type: "success", message: "Data restored successfully from backup." });
       setRestoreFile(null);
       onStorageStatsRefresh();
@@ -89,7 +90,7 @@ const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
     setRecalcProcessing(true);
     setResult(null);
     try {
-      const res = await axios.post<{ success: boolean; message: string }>("/api/data/recalc-earnings");
+      const res = await axiosWrapper.post<{ success: boolean; message: string }>("/api/data/recalc-earnings");
       setResult({ type: "success", message: res.data.message });
     } catch {
       setResult({ type: "error", message: "Recalculation failed." });

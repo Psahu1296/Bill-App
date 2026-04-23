@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { FaCoffee, FaUsers, FaDatabase, FaSyncAlt, FaServer } from "react-icons/fa";
+import { FaCoffee, FaUsers, FaDatabase, FaSyncAlt, FaServer, FaReceipt } from "react-icons/fa";
 import { MdSystemUpdateAlt, MdDashboard, MdWifi, MdWifiOff, MdSettings } from "react-icons/md";
 import { MdContentCopy, MdCheck, MdSignalWifiStatusbarConnectedNoInternet4 } from "react-icons/md";
 import logo from "../../assets/images/logo.png";
@@ -67,8 +67,12 @@ const Header: React.FC = () => {
       dispatch(removeUser());
       navigate("/auth");
     },
-    onError: (error: unknown) => {
-      console.log(error);
+    onError: () => {
+      // Even if the API call fails, clear local auth state so the user isn't
+      // stuck.  The server session may still be active but the client will
+      // treat them as logged out.
+      dispatch(removeUser());
+      navigate("/auth");
     },
   });
 
@@ -118,6 +122,16 @@ const Header: React.FC = () => {
               title="Dashboard"
             >
               <MdDashboard className="text-dhaba-muted text-xl group-hover:text-dhaba-accent transition-colors" />
+            </button>
+          )}
+
+          {userData.role === "Admin" && (
+            <button
+              onClick={() => navigate("/expenses")}
+              className="glass-card rounded-xl p-2.5 hover:bg-dhaba-surface-hover transition-all duration-200 group"
+              title="Expense Management"
+            >
+              <FaReceipt className="text-dhaba-muted text-xl group-hover:text-dhaba-accent transition-colors" />
             </button>
           )}
 
