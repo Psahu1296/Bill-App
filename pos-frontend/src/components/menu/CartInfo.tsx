@@ -32,9 +32,14 @@ const CartInfo: React.FC = () => {
           cartData.map((item) => (
             <div key={item.id} className="glass-input rounded-xl px-3 py-3">
               <div className="flex items-center justify-between">
-                <h4 className="text-dhaba-text text-xs font-semibold truncate flex-1 mr-2">
-                  {item.name}
-                </h4>
+                <div className="flex items-center gap-1.5 flex-1 min-w-0 mr-2">
+                  <h4 className="text-dhaba-text text-xs font-semibold truncate">{item.name}</h4>
+                  {item.variantSize && (
+                    <span className="shrink-0 text-[10px] font-bold text-dhaba-accent bg-dhaba-accent/15 px-1.5 py-0.5 rounded-md">
+                      {item.variantSize}
+                    </span>
+                  )}
+                </div>
                 <div className="flex gap-2 items-center">
                   <button
                     className="h-6 w-6 rounded-lg bg-dhaba-danger/15 text-dhaba-danger flex items-center justify-center hover:bg-dhaba-danger/25 transition-colors"

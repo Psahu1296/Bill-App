@@ -29,7 +29,7 @@ const MenuItem: React.FC<MenuItemProps> = ({ item }) => {
   const handleAddToCart = () => {
     if (!selectedVariant) return;
     dispatch(addItems({
-      id: item._id,
+      id: `${item._id}_${selectedVariant.size}`,
       name: item.name,
       variantSize: selectedVariant.size,
       pricePerQuantity: selectedVariant.price,
