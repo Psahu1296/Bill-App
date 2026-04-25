@@ -7,6 +7,7 @@ import {
   createLedger,
   updateLedger,
   deleteLedger,
+  mergeLedger,
 } from "../controllers/customerLedgerController";
 import { isVerifiedUser } from "../middlewares/tokenVerification";
 const router = express.Router();
@@ -22,5 +23,6 @@ router.route("/:phone")
 
 router.route("/:phone/pay").post(isVerifiedUser, recordCustomerPayment);
 router.route("/:phone/add-debt").post(isVerifiedUser, addDebtToLedger);
+router.route("/:phone/merge-into/:targetPhone").post(isVerifiedUser, mergeLedger);
 
 export default router;

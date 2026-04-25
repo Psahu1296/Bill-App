@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNotifications } from "../../context/NotificationContext";
-import { FaCheckDouble, FaPhone, FaUser, FaUtensils, FaMotorcycle } from "react-icons/fa";
+import { FaCheckDouble, FaPhone, FaUser, FaUtensils, FaMotorcycle, FaEdit } from "react-icons/fa";
 import { IoCheckmarkDoneCircle, IoTimeOutline } from "react-icons/io5";
 import { MdTableRestaurant, MdDeleteOutline } from "react-icons/md";
 import { formatDateAndTime, getAvatarName } from "../../utils/index";
@@ -15,6 +15,7 @@ import PayRemainingModal from "./PayRemainingModal";
 import DeleteOrderModal from "./DeleteOrderModal";
 import OrderStatusSwitcher from "./OrderStatusSwitcher";
 import DeliveryOrderModal from "./DeliveryOrderModal";
+import EditOrderModal from "./EditOrderModal";
 import type { Order, OrderStatus } from "../../types";
 
 interface OrderCardProps {
@@ -89,6 +90,7 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
+  const [showEditPayment, setShowEditPayment] = useState(false);
 
   const notification = notifications.get(order._id);
   const isHighlighted = !!notification;
@@ -202,13 +204,22 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
           </div>
 
           <div className="text-right shrink-0 flex flex-col items-end gap-1">
-            <button
-              onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(true); }}
-              className="w-6 h-6 flex items-center justify-center rounded-lg text-dhaba-muted hover:text-dhaba-danger hover:bg-dhaba-danger/10 transition-colors mb-0.5"
-              title="Delete order"
-            >
-              <MdDeleteOutline className="text-base" />
-            </button>
+            <div className="flex items-center gap-1 mb-0.5">
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowEditPayment(true); }}
+                className="w-6 h-6 flex items-center justify-center rounded-lg text-dhaba-muted hover:text-dhaba-accent hover:bg-dhaba-accent/10 transition-colors"
+                title="Edit order"
+              >
+                <FaEdit className="text-xs" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(true); }}
+                className="w-6 h-6 flex items-center justify-center rounded-lg text-dhaba-muted hover:text-dhaba-danger hover:bg-dhaba-danger/10 transition-colors"
+                title="Delete order"
+              >
+                <MdDeleteOutline className="text-base" />
+              </button>
+            </div>
             {isDelivery && (
               <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-blue-500/15 text-blue-400">
                 <FaMotorcycle className="text-[9px]" /> Delivery
@@ -357,6 +368,13 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
         <DeliveryOrderModal
           order={order}
           onClose={() => setShowDeliveryModal(false)}
+        />
+      )}
+
+      {showEditPayment && (
+        <EditOrderModal
+          order={order}
+          onClose={() => setShowEditPayment(false)}
         />
       )}
     </>

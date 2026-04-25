@@ -162,6 +162,35 @@ const updateLedger = async (req: Request, res: Response, next: NextFunction) => 
   }
 };
 
+const mergeLedger = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const sourcePhone = req.params.phone as string;
+    const targetPhone = req.params.targetPhone as string;
+
+    if (!sourcePhone || !targetPhone) {
+      return next(createHttpError(400, "Source and target phone numbers are required."));
+    }
+    if (sourcePhone === targetPhone) {
+      return next(createHttpError(400, "Source and target cannot be the same ledger."));
+    }
+
+    const source = await ledgerRepo.findByPhone(sourcePhone);
+    if (!source) return next(createHttpError(404, "Source ledger not found."));
+
+    const target = await ledgerRepo.findByPhone(targetPhone);
+    if (!target) return next(createHttpError(404, "Target ledger not found."));
+
+    const merged = await ledgerRepo.mergeLedgers(sourcePhone, targetPhone);
+    res.status(200).json({
+      success: true,
+      message: `Merged "${source.customerName}" into "${target.customerName}".`,
+      data: merged,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const deleteLedger = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const phone = req.params.phone as string;
@@ -177,4 +206,4 @@ const deleteLedger = async (req: Request, res: Response, next: NextFunction) => 
   }
 };
 
-export { getCustomerLedger, recordCustomerPayment, addDebtToLedger, getAllCustomerLedgers, createLedger, updateLedger, deleteLedger };
+export { getCustomerLedger, recordCustomerPayment, addDebtToLedger, getAllCustomerLedgers, createLedger, updateLedger, deleteLedger, mergeLedger };

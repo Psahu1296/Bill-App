@@ -113,6 +113,63 @@ export async function deleteByPhone(phone: string): Promise<boolean> {
   return result !== null;
 }
 
+// Transaction types that ADD to the customer's balance (they owe more)
+const BALANCE_INCREASE_TYPES = new Set(["full_payment_due", "balance_increased", "opening_balance"]);
+
+/**
+ * Finds all transactions linked to orderId in the given phone's ledger,
+ * computes the net balance contribution, and writes a single corrective
+ * transaction to bring the net to zero. Used before re-attributing an order.
+ */
+export async function reverseOrderTransactions(orderId: string, phone: string, name: string) {
+  const doc = await CustomerLedger.findOne({ customerPhone: phone }).lean() as Record<string, unknown> | null;
+  if (!doc) return;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const txs = ((doc.transactions as any[]) ?? []).filter((t: any) =>
+    t.orderId && String(t.orderId) === orderId
+  );
+  if (txs.length === 0) return;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const net = txs.reduce((sum: number, tx: any) => {
+    return sum + (BALANCE_INCREASE_TYPES.has(tx.transactionType) ? tx.amount : -tx.amount);
+  }, 0);
+
+  if (Math.abs(net) < 0.01) return; // already balanced
+
+  await upsertWithTransaction({
+    customerPhone: phone,
+    customerName: name,
+    balanceDelta: -net,
+    transaction: {
+      orderId,
+      transactionType: net > 0 ? "balance_decreased" : "balance_increased",
+      amount: Math.abs(net),
+      notes: `Order #${orderId.slice(-6)} — reversed (reassigned to another customer)`,
+    },
+  });
+}
+
+export async function mergeLedgers(sourcePhone: string, targetPhone: string) {
+  const source = await CustomerLedger.findOne({ customerPhone: sourcePhone }).lean() as Record<string, unknown> | null;
+  if (!source) throw new Error(`Source ledger (${sourcePhone}) not found`);
+
+  // Append all source transactions to target and add its balanceDue
+  await CustomerLedger.findOneAndUpdate(
+    { customerPhone: targetPhone },
+    {
+      $inc:  { balanceDue: source.balanceDue as number },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      $push: { transactions: { $each: source.transactions as any[] } },
+      $set:  { lastActivity: new Date() },
+    }
+  );
+
+  await CustomerLedger.findOneAndDelete({ customerPhone: sourcePhone });
+  return findByPhone(targetPhone);
+}
+
 export async function getFullPaymentDueForOrder(orderId: string): Promise<{ amount: number } | null> {
   if (!mongoose.isValidObjectId(orderId)) return null;
   const doc = await CustomerLedger.findOne({

@@ -279,6 +279,7 @@ const updateOrderById = async (req: Request, res: Response, next: NextFunction) 
                 orderId: id,
                 transactionType: "full_payment_due",
                 amount: finalBalanceDue,
+                timestamp: orderCreationDate.toISOString(),
                 notes: `Order #${id} completed — ₹${finalBalanceDue.toFixed(2)} outstanding`,
               },
             });
@@ -288,6 +289,57 @@ const updateOrderById = async (req: Request, res: Response, next: NextFunction) 
           amountChangeForEarnings += finalBalanceDue;
           await orderRepo.update(id, { paymentStatus: "Paid", amountPaid: orderTotalWithTax, balanceDueOnOrder: 0 });
         }
+      }
+    }
+
+    // Ledger: reconcile when customer details or amountPaid changes on an
+    // ALREADY-completed dine-in order. Handles phone reassignment correctly by
+    // reversing the old phone's contribution first, then re-applying to the new phone.
+    const alreadyCompleted = !justCompleted && (currentOrder.orderStatus as string) === "Completed";
+    const orderTypeVal     = (currentOrder.orderType as string) ?? "dine-in";
+
+    if (alreadyCompleted && orderTypeVal === "dine-in") {
+      const oldPhone = (currentOrder.customerDetails as Record<string, unknown>)?.phone as string;
+      const oldName  = (currentOrder.customerDetails as Record<string, unknown>)?.name  as string;
+
+      const newCustomerDetails = requestBodyUpdates.customerDetails as Record<string, unknown> | undefined;
+      const newPhone = (newCustomerDetails?.phone as string | undefined) ?? oldPhone;
+      const newName  = (newCustomerDetails?.name  as string | undefined) ?? oldName;
+
+      const phoneChanged      = newPhone !== oldPhone;
+      const amountPaidChanged = requestBodyUpdates.amountPaid !== undefined &&
+                                (requestBodyUpdates.amountPaid as number) !== oldAmountPaid;
+      const nameOnlyChanged   = !phoneChanged && !amountPaidChanged && newName !== oldName;
+
+      if (phoneChanged || amountPaidChanged) {
+        // Step 1 — erase this order's footprint from the old phone's ledger
+        if (oldPhone) {
+          await ledgerRepo.reverseOrderTransactions(id, oldPhone, oldName);
+        }
+
+        // Step 2 — write the correct balance to the new phone's ledger
+        const effectivePaid = requestBodyUpdates.amountPaid !== undefined
+          ? (requestBodyUpdates.amountPaid as number)
+          : oldAmountPaid;
+        const newBalance = Math.max(0, orderTotalWithTax - effectivePaid);
+
+        if (newBalance > 0 && newPhone) {
+          await ledgerRepo.upsertWithTransaction({
+            customerPhone: newPhone,
+            customerName:  newName,
+            balanceDelta:  newBalance,
+            transaction: {
+              orderId:         id,
+              transactionType: "full_payment_due",
+              amount:          newBalance,
+              timestamp:       orderCreationDate.toISOString(),
+              notes:           `Order #${id.slice(-6)} — updated by admin (₹${newBalance.toFixed(2)} outstanding)`,
+            },
+          });
+        }
+      } else if (nameOnlyChanged && oldPhone) {
+        // Name changed but phone/payment didn't — just update the ledger display name
+        await ledgerRepo.updateCustomer(oldPhone, { name: newName });
       }
     }
 

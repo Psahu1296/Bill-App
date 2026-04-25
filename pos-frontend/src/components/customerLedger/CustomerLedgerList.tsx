@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getAllCustomerLedgers, recordCustomerPayment, createLedgerEntry, updateLedgerEntry, deleteLedgerEntry } from "../../https";
+import { getAllCustomerLedgers, recordCustomerPayment, createLedgerEntry, updateLedgerEntry, deleteLedgerEntry, addDebtToLedger, mergeLedgerEntry, getOrderById } from "../../https";
 import { enqueueSnackbar } from "notistack";
 import { motion, AnimatePresence } from "framer-motion";
 import PaymentModal from "./PaymentModal";
@@ -69,6 +69,34 @@ const CustomerLedgerList: React.FC = () => {
   // Delete state
   const [deleteTarget, setDeleteTarget] = useState<CustomerLedger | null>(null);
 
+  // Merge state — set when edit returns 409 (phone already exists on another customer)
+  const [mergeCandidate, setMergeCandidate] = useState<{ sourcePhone: string; targetPhone: string; targetName: string } | null>(null);
+
+  // Add entry state
+  const [addEntryModalOpen, setAddEntryModalOpen] = useState(false);
+  const [addEntryCustomer, setAddEntryCustomer] = useState<CustomerLedger | null>(null);
+  const [entryType, setEntryType] = useState<"debit" | "credit">("debit");
+  const [entryAmount, setEntryAmount] = useState("");
+  const [entryNotes, setEntryNotes] = useState("");
+  const [entryDate, setEntryDate] = useState(() => toDateStr(new Date()));
+  const [entryOrderId, setEntryOrderId] = useState("");
+
+  const isValidObjectId = /^[a-f0-9]{24}$/i.test(entryOrderId.trim());
+  const {
+    data: linkedOrderRes,
+    isFetching: orderFetching,
+    isError: orderNotFound,
+  } = useQuery({
+    queryKey: ["orderLookup", entryOrderId],
+    queryFn: () => getOrderById(entryOrderId.trim()),
+    enabled: addEntryModalOpen && isValidObjectId,
+    retry: false,
+  });
+  const linkedOrder = isValidObjectId ? (linkedOrderRes?.data?.data ?? null) : null;
+  const linkedBalanceDue = linkedOrder
+    ? Math.max(0, linkedOrder.bills.totalWithTax - (linkedOrder.amountPaid || 0))
+    : null;
+
   const dateRange = useMemo<DateRange>(() => {
     if (preset === "custom") {
       return {
@@ -134,8 +162,28 @@ const CustomerLedgerList: React.FC = () => {
       enqueueSnackbar(editTarget ? "Customer updated." : "Ledger entry created.", { variant: "success" });
       invalidate(); closeCrud();
     },
-    onError: (err: { response?: { data?: { message?: string } } }) => {
+    onError: (err: { response?: { data?: { message?: string }; status?: number } }) => {
+      // 409 means the new phone already belongs to another customer — offer merge
+      if (err.response?.status === 409 && editTarget && crudPhone !== editTarget.customerPhone) {
+        const targetName = allCustomers.find((c) => c.customerPhone === crudPhone)?.customerName ?? crudPhone;
+        setMergeCandidate({ sourcePhone: editTarget.customerPhone, targetPhone: crudPhone, targetName });
+        closeCrud();
+        return;
+      }
       enqueueSnackbar(err.response?.data?.message || "Operation failed.", { variant: "error" });
+    },
+  });
+
+  const mergeMutation = useMutation({
+    mutationFn: ({ sourcePhone, targetPhone }: { sourcePhone: string; targetPhone: string }) =>
+      mergeLedgerEntry(sourcePhone, targetPhone),
+    onSuccess: (res) => {
+      enqueueSnackbar((res.data as { message?: string })?.message || "Ledgers merged.", { variant: "success" });
+      invalidate();
+      setMergeCandidate(null);
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) => {
+      enqueueSnackbar(err.response?.data?.message || "Merge failed.", { variant: "error" });
     },
   });
 
@@ -163,6 +211,36 @@ const CustomerLedgerList: React.FC = () => {
       enqueueSnackbar(err.response?.data?.message || "Failed to record payment.", { variant: "error" });
     },
   });
+
+  const addEntryMutation = useMutation({
+    mutationFn: () => {
+      if (!addEntryCustomer) throw new Error("No customer");
+      const amount = Number(entryAmount);
+      const date   = entryDate ? `${entryDate}T12:00:00` : undefined;
+      const oid    = entryOrderId.trim() || undefined;
+      if (entryType === "debit") {
+        return addDebtToLedger(addEntryCustomer.customerPhone, { amountDue: amount, notes: entryNotes || undefined, date, orderId: oid });
+      }
+      return recordCustomerPayment(addEntryCustomer.customerPhone, { amountPaid: amount, notes: entryNotes || undefined, date, orderId: oid });
+    },
+    onSuccess: () => {
+      enqueueSnackbar("Entry added.", { variant: "success" });
+      invalidate();
+      setAddEntryModalOpen(false); setAddEntryCustomer(null);
+      setEntryAmount(""); setEntryNotes(""); setEntryType("debit");
+      setEntryDate(toDateStr(new Date())); setEntryOrderId("");
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) => {
+      enqueueSnackbar(err.response?.data?.message || "Failed to add entry.", { variant: "error" });
+    },
+  });
+
+  const handleOpenAddEntry = (customer: CustomerLedger) => {
+    setAddEntryCustomer(customer);
+    setEntryType("debit"); setEntryAmount(""); setEntryNotes("");
+    setEntryDate(toDateStr(new Date())); setEntryOrderId("");
+    setAddEntryModalOpen(true);
+  };
 
   const handleOpenPayment = (customer: CustomerLedger) => {
     setCustomerToPay(customer); setPaymentModalOpen(true);
@@ -268,6 +346,7 @@ const CustomerLedgerList: React.FC = () => {
               onSettle={handleOpenSettle}
               onEdit={openEdit}
               onDelete={setDeleteTarget}
+              onAddEntry={handleOpenAddEntry}
             />
           ))}
         </div>
@@ -382,6 +461,214 @@ const CustomerLedgerList: React.FC = () => {
                   disabled={deleteMutation.isPending}
                   className="flex-1 py-2.5 rounded-xl bg-dhaba-danger/10 text-dhaba-danger border border-dhaba-danger/20 font-bold text-sm hover:bg-dhaba-danger/20 transition-all disabled:opacity-40">
                   {deleteMutation.isPending ? "Deleting…" : "Delete"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Add Entry modal */}
+      <AnimatePresence>
+        {addEntryModalOpen && addEntryCustomer && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-dhaba-bg/80 backdrop-blur-sm p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.18 }}
+              className="glass-card w-full max-w-sm rounded-3xl overflow-hidden"
+            >
+              <div className="flex items-center justify-between px-6 py-5 border-b border-dhaba-border/20">
+                <div>
+                  <h2 className="font-display text-lg font-bold text-dhaba-text">Add Entry</h2>
+                  <p className="text-xs text-dhaba-muted mt-0.5">{addEntryCustomer.customerName} · {addEntryCustomer.customerPhone}</p>
+                </div>
+                <button
+                  onClick={() => setAddEntryModalOpen(false)}
+                  className="p-2 hover:bg-dhaba-danger/10 rounded-xl transition-colors"
+                >
+                  <FaTimes className="text-dhaba-muted" />
+                </button>
+              </div>
+
+              <div className="px-6 py-5 space-y-4">
+                {/* Debit / Credit toggle */}
+                <div>
+                  <label className="block text-xs font-bold text-dhaba-muted uppercase tracking-wider mb-2">Entry Type</label>
+                  <div className="flex rounded-xl overflow-hidden glass-input p-1 gap-1">
+                    <button
+                      onClick={() => setEntryType("debit")}
+                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                        entryType === "debit"
+                          ? "bg-dhaba-danger text-white shadow"
+                          : "text-dhaba-muted hover:text-dhaba-text"
+                      }`}
+                    >
+                      Debit (Add Due)
+                    </button>
+                    <button
+                      onClick={() => setEntryType("credit")}
+                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                        entryType === "credit"
+                          ? "bg-dhaba-success text-white shadow"
+                          : "text-dhaba-muted hover:text-dhaba-text"
+                      }`}
+                    >
+                      Credit (Payment)
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-dhaba-muted uppercase tracking-wider mb-1.5">Amount (₹)</label>
+                  <input
+                    value={entryAmount}
+                    onChange={(e) => setEntryAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+                    placeholder="0.00"
+                    type="number"
+                    min="0"
+                    className="w-full glass-input rounded-xl px-4 py-2.5 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50 placeholder:text-dhaba-muted/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-dhaba-muted uppercase tracking-wider mb-1.5">Date</label>
+                  <input
+                    type="date"
+                    value={entryDate}
+                    max={toDateStr(new Date())}
+                    onChange={(e) => setEntryDate(e.target.value)}
+                    className="w-full glass-input rounded-xl px-4 py-2.5 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50"
+                  />
+                </div>
+
+                {/* Order ID */}
+                <div>
+                  <label className="block text-xs font-bold text-dhaba-muted uppercase tracking-wider mb-1.5">
+                    Link to Order <span className="font-normal normal-case">(optional)</span>
+                  </label>
+                  <input
+                    value={entryOrderId}
+                    onChange={(e) => setEntryOrderId(e.target.value.trim())}
+                    placeholder="Paste full Order ID…"
+                    className="w-full glass-input rounded-xl px-4 py-2.5 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50 placeholder:text-dhaba-muted/50 font-mono"
+                  />
+                  {/* Order preview */}
+                  {entryOrderId && (
+                    <div className="mt-2">
+                      {orderFetching && (
+                        <p className="text-[11px] text-dhaba-muted animate-pulse px-1">Looking up order…</p>
+                      )}
+                      {!orderFetching && orderNotFound && isValidObjectId && (
+                        <p className="text-[11px] text-dhaba-danger px-1">Order not found.</p>
+                      )}
+                      {!orderFetching && linkedOrder && (
+                        <div className="glass-input rounded-xl px-3 py-2.5 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[11px] font-bold text-dhaba-text truncate">
+                              {linkedOrder.customerDetails.name}
+                              <span className="ml-1.5 font-normal text-dhaba-muted">· #{linkedOrder._id.slice(-6)}</span>
+                            </p>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                              linkedOrder.orderStatus === "Completed" ? "bg-dhaba-success/15 text-dhaba-success" : "bg-dhaba-accent/15 text-dhaba-accent"
+                            }`}>
+                              {linkedOrder.orderStatus}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex gap-3 text-[11px] text-dhaba-muted">
+                              <span>Total <span className="text-dhaba-text font-semibold">₹{linkedOrder.bills.totalWithTax.toFixed(2)}</span></span>
+                              <span>Paid <span className="text-dhaba-success font-semibold">₹{(linkedOrder.amountPaid || 0).toFixed(2)}</span></span>
+                              {linkedBalanceDue !== null && linkedBalanceDue > 0 && (
+                                <span>Due <span className="text-dhaba-danger font-semibold">₹{linkedBalanceDue.toFixed(2)}</span></span>
+                              )}
+                            </div>
+                            {linkedBalanceDue !== null && linkedBalanceDue > 0 && (
+                              <button
+                                onClick={() => setEntryAmount(linkedBalanceDue.toFixed(2))}
+                                className="text-[10px] font-bold text-dhaba-accent hover:underline shrink-0"
+                              >
+                                Use ₹{linkedBalanceDue.toFixed(2)}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-dhaba-muted uppercase tracking-wider mb-1.5">Notes (optional)</label>
+                  <input
+                    value={entryNotes}
+                    onChange={(e) => setEntryNotes(e.target.value)}
+                    placeholder="e.g. Party order, advance payment…"
+                    className="w-full glass-input rounded-xl px-4 py-2.5 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50 placeholder:text-dhaba-muted/50"
+                  />
+                </div>
+              </div>
+
+              <div className="px-6 py-4 bg-dhaba-surface/30 border-t border-dhaba-border/20 flex gap-3 justify-end">
+                <button
+                  onClick={() => setAddEntryModalOpen(false)}
+                  className="px-5 py-2.5 rounded-xl text-dhaba-muted font-bold text-sm hover:text-dhaba-text transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => addEntryMutation.mutate()}
+                  disabled={!entryAmount || Number(entryAmount) <= 0 || addEntryMutation.isPending}
+                  className={`px-7 py-2.5 rounded-xl font-bold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                    entryType === "debit"
+                      ? "bg-dhaba-danger text-white hover:shadow-glow"
+                      : "bg-dhaba-success text-white hover:shadow-glow"
+                  }`}
+                >
+                  {addEntryMutation.isPending ? "Saving…" : "Add Entry"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Merge confirmation */}
+      <AnimatePresence>
+        {mergeCandidate && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-dhaba-bg/80 backdrop-blur-sm p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.18 }}
+              className="glass-card w-full max-w-sm rounded-3xl overflow-hidden"
+            >
+              <div className="px-6 py-6 space-y-3 text-center">
+                <div className="h-12 w-12 rounded-2xl bg-dhaba-accent/15 flex items-center justify-center mx-auto">
+                  <FaUsers className="text-dhaba-accent text-lg" />
+                </div>
+                <h2 className="font-display text-lg font-bold text-dhaba-text">Merge Ledgers?</h2>
+                <p className="text-sm text-dhaba-muted leading-relaxed">
+                  <span className="text-dhaba-text font-semibold">
+                    {allCustomers.find(c => c.customerPhone === mergeCandidate.sourcePhone)?.customerName ?? mergeCandidate.sourcePhone}
+                  </span>{" "}will be merged into{" "}
+                  <span className="text-dhaba-text font-semibold">{mergeCandidate.targetName}</span>.
+                  <span className="block mt-1.5 text-dhaba-warning text-xs font-semibold">
+                    All transactions and balance will move to {mergeCandidate.targetName}. This cannot be undone.
+                  </span>
+                </p>
+              </div>
+              <div className="px-6 py-4 bg-dhaba-surface/30 border-t border-dhaba-border/20 flex gap-3">
+                <button
+                  onClick={() => setMergeCandidate(null)}
+                  className="flex-1 py-2.5 rounded-xl text-dhaba-muted font-bold text-sm hover:text-dhaba-text transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => mergeMutation.mutate({ sourcePhone: mergeCandidate.sourcePhone, targetPhone: mergeCandidate.targetPhone })}
+                  disabled={mergeMutation.isPending}
+                  className="flex-1 py-2.5 rounded-xl bg-dhaba-accent/15 text-dhaba-accent border border-dhaba-accent/20 font-bold text-sm hover:bg-dhaba-accent/25 transition-all disabled:opacity-40"
+                >
+                  {mergeMutation.isPending ? "Merging…" : "Merge"}
                 </button>
               </div>
             </motion.div>

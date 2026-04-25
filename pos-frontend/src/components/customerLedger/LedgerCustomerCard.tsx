@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { FaChevronDown, FaChevronUp, FaEdit, FaTrash } from "react-icons/fa";
+import { FaChevronDown, FaChevronUp, FaEdit, FaTrash, FaPlus } from "react-icons/fa";
 import type { CustomerLedger, LedgerTransaction } from "../../types";
 
 function getAvatarInitials(name: string) {
@@ -31,10 +31,11 @@ interface LedgerCustomerCardProps {
   onSettle: (customer: CustomerLedger) => void;
   onEdit: (customer: CustomerLedger) => void;
   onDelete: (customer: CustomerLedger) => void;
+  onAddEntry: (customer: CustomerLedger) => void;
 }
 
 const LedgerCustomerCard: React.FC<LedgerCustomerCardProps> = ({
-  customer, isExpanded, onExpand, onRecordPayment, onSettle, onEdit, onDelete,
+  customer, isExpanded, onExpand, onRecordPayment, onSettle, onEdit, onDelete, onAddEntry,
 }) => {
   const txsWithBal = withRunningBalance(customer.transactions ?? []);
 
@@ -84,8 +85,15 @@ const LedgerCustomerCard: React.FC<LedgerCustomerCardProps> = ({
           </div>
         )}
 
-        {/* Edit / Delete */}
+        {/* Add Entry / Edit / Delete */}
         <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => onAddEntry(customer)}
+            className="p-2 rounded-lg hover:bg-dhaba-success/10 text-dhaba-muted hover:text-dhaba-success transition-colors"
+            title="Add Entry"
+          >
+            <FaPlus size={12} />
+          </button>
           <button
             onClick={() => onEdit(customer)}
             className="p-2 rounded-lg hover:bg-dhaba-accent/10 text-dhaba-muted hover:text-dhaba-accent transition-colors"

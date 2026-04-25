@@ -135,7 +135,7 @@ export const getCustomerLedger = (phone: string) =>
 
 export const recordCustomerPayment = (
   phone: string,
-  paymentData: { amountPaid: number; orderId?: string; notes?: string }
+  paymentData: { amountPaid: number; orderId?: string; notes?: string; date?: string }
 ) => axiosWrapper.post(`/api/ledger/${phone}/pay`, paymentData);
 
 export const getAllCustomerLedgers = (filters: Record<string, unknown> = {}) =>
@@ -143,7 +143,7 @@ export const getAllCustomerLedgers = (filters: Record<string, unknown> = {}) =>
 
 export const addDebtToLedger = (
   phone: string,
-  data: { amountDue: number; orderId?: string; customerName?: string; notes?: string }
+  data: { amountDue: number; orderId?: string; customerName?: string; notes?: string; date?: string }
 ) => axiosWrapper.post(`/api/ledger/${phone}/add-debt`, data);
 
 export const createLedgerEntry = (data: {
@@ -160,6 +160,9 @@ export const updateLedgerEntry = (
 
 export const deleteLedgerEntry = (phone: string) =>
   axiosWrapper.delete(`/api/ledger/${phone}`);
+
+export const mergeLedgerEntry = (sourcePhone: string, targetPhone: string) =>
+  axiosWrapper.post(`/api/ledger/${sourcePhone}/merge-into/${targetPhone}`);
 
 // Consumables
 export const addConsumable = (data: AddConsumablePayload) =>
