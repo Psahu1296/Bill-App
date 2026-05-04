@@ -120,6 +120,20 @@ export interface UserState extends User {
   isAuth: boolean;
 }
 
+// ── Customer Profile ──────────────────────────────────────────────────────────
+
+export interface CustomerProfile {
+  phone: string;
+  name: string;
+  preferredArea: string;
+  totalOrders: number;
+  lastOrderedAt: string | null;
+  balanceDue: number;
+  isLedgerOnly?: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
 // ── Customer Ledger ───────────────────────────────────────────────────────────
 
 export interface LedgerTransaction {

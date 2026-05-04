@@ -23,7 +23,7 @@ const getCustomerLedger = async (req: Request, res: Response, next: NextFunction
 const recordCustomerPayment = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const phone = req.params.phone as string;
-    const { amountPaid, orderId, notes } = req.body;
+    const { amountPaid, orderId, notes, date } = req.body;
 
     if (!phone || amountPaid === undefined || amountPaid <= 0) {
       return next(createHttpError(400, "Phone and valid amountPaid are required."));
@@ -42,6 +42,7 @@ const recordCustomerPayment = async (req: Request, res: Response, next: NextFunc
       amountPaid,
       orderId: orderId != null && mongoose.isValidObjectId(orderId) ? orderId : null,
       notes: notes || `Payment received for Order #${orderId ?? "N/A"}`,
+      timestamp: date || undefined,
     });
 
     try {
@@ -59,7 +60,7 @@ const recordCustomerPayment = async (req: Request, res: Response, next: NextFunc
 const addDebtToLedger = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const phone = req.params.phone as string;
-    const { amountDue, orderId, customerName, notes } = req.body;
+    const { amountDue, orderId, customerName, notes, date } = req.body;
 
     if (!phone || amountDue === undefined || amountDue <= 0) {
       return next(createHttpError(400, "Phone and valid amountDue are required."));
@@ -74,6 +75,7 @@ const addDebtToLedger = async (req: Request, res: Response, next: NextFunction) 
         transactionType: "full_payment_due",
         amount: amountDue,
         notes: notes || `Remaining balance for Order #${orderId ?? "N/A"}`,
+        timestamp: date || undefined,
       },
     });
 

@@ -7,6 +7,7 @@ import { MdTableRestaurant } from "react-icons/md";
 import { PiTruckTrailerLight } from "react-icons/pi";
 
 import { getTables, getDishes, addOrder } from "../../https";
+import CustomerFields from "../shared/CustomerFields";
 import { getTodayISO } from "../../utils";
 import type { Table, Dish, DishVariant, OrderStatus, PaymentMethod } from "../../types";
 import PastOrderItemBuilder, { type LocalCartItem } from "./PastOrderItemBuilder";
@@ -200,13 +201,13 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-start justify-center bg-dhaba-bg/80 backdrop-blur-sm p-4 overflow-y-auto">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-dhaba-bg/80 backdrop-blur-sm p-4 sm:p-6">
         <motion.div
           initial={{ opacity: 0, y: 20, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 10, scale: 0.97 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
-          className="glass-card w-full max-w-2xl rounded-3xl overflow-hidden my-4"
+          className="glass-card w-full max-w-6xl rounded-3xl overflow-hidden flex flex-col max-h-[90vh] shadow-2xl border border-white/10"
         >
           {/* ── Header ── */}
           <div className="flex items-center justify-between px-6 py-5 border-b border-dhaba-border/20">
@@ -227,158 +228,152 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
             </button>
           </div>
 
-          <div className="p-6 space-y-6">
-
-            {/* ── Customer Details ── */}
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-dhaba-muted">Customer Details</h3>
-                {/* Driver toggle */}
-                <button
-                  onClick={handleToggleDriver}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
-                    isDriver
-                      ? "bg-blue-500/20 border-blue-500/40 text-blue-400"
-                      : "bg-dhaba-surface/60 border-dhaba-border/30 text-dhaba-muted hover:text-dhaba-text hover:border-dhaba-border/60"
-                  }`}
-                >
-                  <PiTruckTrailerLight className="text-xs" />
-                  {isDriver ? "Driver (on)" : "Driver order"}
-                </button>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-dhaba-muted mb-1 block">Name *</label>
-                  <input
-                    type="text"
-                    value={customerName}
-                    onChange={(e) => { if (!isDriver) setCustomerName(e.target.value); }}
-                    readOnly={isDriver}
-                    placeholder="Customer name"
-                    className={`glass-input w-full rounded-xl px-4 py-2.5 text-sm text-dhaba-text placeholder-dhaba-muted focus:outline-none focus:ring-1 focus:ring-dhaba-accent/40 ${isDriver ? "opacity-60 cursor-not-allowed" : ""}`}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-dhaba-muted mb-1 block">Phone *</label>
-                  <input
-                    type="tel"
-                    value={customerPhone}
-                    onChange={(e) => { if (!isDriver) setCustomerPhone(e.target.value); }}
-                    readOnly={isDriver}
-                    placeholder="10-digit number"
-                    className={`glass-input w-full rounded-xl px-4 py-2.5 text-sm text-dhaba-text placeholder-dhaba-muted focus:outline-none focus:ring-1 focus:ring-dhaba-accent/40 ${isDriver ? "opacity-60 cursor-not-allowed" : ""}`}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-dhaba-muted mb-1 block">Guests</label>
-                  <div className="glass-input rounded-xl flex items-center overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
+            <div className="flex flex-col lg:flex-row gap-8">
+              
+              {/* Left Column: Customer & Summary */}
+              <div className="w-full lg:w-5/12 flex flex-col gap-8">
+                <section>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-dhaba-muted">Customer Details</h3>
+                    {/* Driver toggle */}
                     <button
-                      onClick={handleDecrGuests}
-                      className="px-3 py-2.5 text-dhaba-accent font-bold hover:bg-dhaba-surface transition-colors"
-                    >
-                      <FaMinus className="text-xs" />
-                    </button>
-                    <span className="flex-1 text-center text-sm font-bold text-dhaba-text">{guests}</span>
-                    <button
-                      onClick={handleIncrGuests}
-                      className="px-3 py-2.5 text-dhaba-accent font-bold hover:bg-dhaba-surface transition-colors"
-                    >
-                      <FaPlus className="text-xs" />
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-dhaba-muted mb-1 block">Order Date *</label>
-                  <input
-                    type="date"
-                    value={orderDate}
-                    onChange={(e) => setOrderDate(e.target.value)}
-                    className="glass-input w-full rounded-xl px-4 py-2.5 text-sm text-dhaba-text focus:outline-none focus:ring-1 focus:ring-dhaba-accent/40"
-                  />
-                </div>
-              </div>
-
-              {/* Order type + table selector */}
-              <div className="mt-3">
-                <label className="text-xs text-dhaba-muted mb-2 block">Order Type & Table</label>
-                {tablesLoading ? (
-                  <div className="glass-input rounded-xl px-4 py-2.5 text-sm text-dhaba-muted">Loading tables…</div>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {/* Takeaway */}
-                    <button
-                      onClick={() => handleSelectOrderType("takeaway")}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
-                        orderType === "takeaway"
-                          ? "bg-amber-500/20 border-amber-500/40 text-amber-400"
-                          : "bg-dhaba-surface/60 border-dhaba-border/30 text-dhaba-muted hover:text-dhaba-text hover:border-dhaba-border/60"
-                      }`}
-                    >
-                      <FaShoppingBag className="text-xs" />
-                      Takeaway
-                    </button>
-
-                    {/* Delivery / Driver */}
-                    <button
-                      onClick={() => handleSelectOrderType("delivery")}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
-                        orderType === "delivery"
+                      onClick={handleToggleDriver}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                        isDriver
                           ? "bg-blue-500/20 border-blue-500/40 text-blue-400"
                           : "bg-dhaba-surface/60 border-dhaba-border/30 text-dhaba-muted hover:text-dhaba-text hover:border-dhaba-border/60"
                       }`}
                     >
                       <PiTruckTrailerLight className="text-xs" />
-                      Delivery
+                      {isDriver ? "Driver (on)" : "Driver order"}
                     </button>
-
-                    {/* Physical tables (dine-in) */}
-                    {allTables.filter((t) => !t.isVirtual).map((t) => (
-                      <button
-                        key={t._id}
-                        onClick={() => { handleSelectOrderType("dine-in"); handleSelectTable(t._id); }}
-                        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
-                          orderType === "dine-in" && tableId === t._id
-                            ? "bg-dhaba-accent/20 border-dhaba-accent/40 text-dhaba-accent"
-                            : "bg-dhaba-surface/60 border-dhaba-border/30 text-dhaba-muted hover:text-dhaba-text hover:border-dhaba-border/60"
-                        }`}
-                      >
-                        <MdTableRestaurant className="text-sm" />
-                        T-{t.tableNo}
-                      </button>
-                    ))}
                   </div>
-                )}
+                  <CustomerFields
+                    value={{ name: customerName, phone: customerPhone }}
+                    onChange={({ name, phone }) => { setCustomerName(name); setCustomerPhone(phone); }}
+                    disabled={isDriver}
+                    inputClassName="glass-input w-full rounded-xl px-4 py-3 text-sm text-dhaba-text placeholder-dhaba-muted focus:outline-none focus:ring-1 focus:ring-dhaba-accent/40"
+                  />
+
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    <div>
+                      <label className="text-xs text-dhaba-muted mb-1.5 block font-semibold">Guests</label>
+                      <div className="glass-input rounded-xl flex items-center overflow-hidden h-[46px]">
+                        <button
+                          onClick={handleDecrGuests}
+                          className="px-4 h-full text-dhaba-accent font-bold hover:bg-dhaba-surface transition-colors"
+                        >
+                          <FaMinus className="text-xs" />
+                        </button>
+                        <span className="flex-1 text-center text-sm font-bold text-dhaba-text">{guests}</span>
+                        <button
+                          onClick={handleIncrGuests}
+                          className="px-4 h-full text-dhaba-accent font-bold hover:bg-dhaba-surface transition-colors"
+                        >
+                          <FaPlus className="text-xs" />
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs text-dhaba-muted mb-1.5 block font-semibold">Order Date *</label>
+                      <input
+                        type="date"
+                        value={orderDate}
+                        onChange={(e) => setOrderDate(e.target.value)}
+                        className="glass-input w-full rounded-xl px-4 py-3 text-sm text-dhaba-text focus:outline-none focus:ring-1 focus:ring-dhaba-accent/40"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Order type + table selector */}
+                  <div className="mt-5">
+                    <label className="text-xs text-dhaba-muted mb-2.5 block font-semibold">Order Type & Table</label>
+                    {tablesLoading ? (
+                      <div className="glass-input rounded-xl px-4 py-3 text-sm text-dhaba-muted">Loading tables…</div>
+                    ) : (
+                      <div className="flex flex-wrap gap-2.5">
+                        {/* Takeaway */}
+                        <button
+                          onClick={() => handleSelectOrderType("takeaway")}
+                          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
+                            orderType === "takeaway"
+                              ? "bg-amber-500/20 border-amber-500/40 text-amber-400"
+                              : "bg-dhaba-surface/60 border-dhaba-border/30 text-dhaba-muted hover:text-dhaba-text hover:border-dhaba-border/60"
+                          }`}
+                        >
+                          <FaShoppingBag className="text-xs" />
+                          Takeaway
+                        </button>
+
+                        {/* Delivery / Driver */}
+                        <button
+                          onClick={() => handleSelectOrderType("delivery")}
+                          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
+                            orderType === "delivery"
+                              ? "bg-blue-500/20 border-blue-500/40 text-blue-400"
+                              : "bg-dhaba-surface/60 border-dhaba-border/30 text-dhaba-muted hover:text-dhaba-text hover:border-dhaba-border/60"
+                          }`}
+                        >
+                          <PiTruckTrailerLight className="text-xs" />
+                          Delivery
+                        </button>
+
+                        {/* Physical tables (dine-in) */}
+                        {allTables.filter((t) => !t.isVirtual).map((t) => (
+                          <button
+                            key={t._id}
+                            onClick={() => { handleSelectOrderType("dine-in"); handleSelectTable(t._id); }}
+                            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
+                              orderType === "dine-in" && tableId === t._id
+                                ? "bg-dhaba-accent/20 border-dhaba-accent/40 text-dhaba-accent"
+                                : "bg-dhaba-surface/60 border-dhaba-border/30 text-dhaba-muted hover:text-dhaba-text hover:border-dhaba-border/60"
+                            }`}
+                          >
+                            <MdTableRestaurant className="text-sm" />
+                            T-{t.tableNo}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                <div className="mt-auto">
+                  <PastOrderSummary
+                    subtotal={subtotal}
+                    discount={discount}
+                    finalTotal={finalTotal}
+                    paymentMethod={paymentMethod}
+                    orderStatus={orderStatus}
+                    displayAmountPaid={displayAmountPaid}
+                    onDiscountChange={setDiscount}
+                    onPaymentMethodChange={setPaymentMethod}
+                    onAmountPaidChange={handleAmountPaidChange}
+                    onOrderStatusChange={setOrderStatus}
+                  />
+                </div>
               </div>
-            </section>
 
-            <PastOrderItemBuilder
-              allDishes={allDishes}
-              dishesLoading={dishesLoading}
-              cartItems={cartItems}
-              selectedVariants={selectedVariants}
-              search={search}
-              catFilter={catFilter}
-              onSearchChange={setSearch}
-              onCatFilterChange={setCatFilter}
-              onVariantSelect={handleVariantSelect}
-              onAddToCart={handleAddToCart}
-              onChangeQty={handleChangeQty}
-              onRemoveFromCart={handleRemoveFromCart}
-            />
+              {/* Right Column: Menu / Cart */}
+              <div className="w-full lg:w-7/12 flex flex-col gap-6 lg:border-l lg:border-dhaba-border/20 lg:pl-8">
+                <PastOrderItemBuilder
+                  allDishes={allDishes}
+                  dishesLoading={dishesLoading}
+                  cartItems={cartItems}
+                  selectedVariants={selectedVariants}
+                  search={search}
+                  catFilter={catFilter}
+                  onSearchChange={setSearch}
+                  onCatFilterChange={setCatFilter}
+                  onVariantSelect={handleVariantSelect}
+                  onAddToCart={handleAddToCart}
+                  onChangeQty={handleChangeQty}
+                  onRemoveFromCart={handleRemoveFromCart}
+                />
+              </div>
 
-            <PastOrderSummary
-              subtotal={subtotal}
-              discount={discount}
-              finalTotal={finalTotal}
-              paymentMethod={paymentMethod}
-              orderStatus={orderStatus}
-              displayAmountPaid={displayAmountPaid}
-              onDiscountChange={setDiscount}
-              onPaymentMethodChange={setPaymentMethod}
-              onAmountPaidChange={handleAmountPaidChange}
-              onOrderStatusChange={setOrderStatus}
-            />
-
+            </div>
           </div>
 
           {/* ── Footer ── */}

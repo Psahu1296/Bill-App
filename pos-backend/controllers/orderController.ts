@@ -9,6 +9,7 @@ import * as consumableRepo from "../repositories/consumableRepo";
 import * as ledgerRepo from "../repositories/ledgerRepo";
 import * as earningRepo from "../repositories/earningRepo";
 import * as userRepo from "../repositories/userRepo";
+import * as profileRepo from "../repositories/customerProfileRepo";
 import { getZonedStartOfDayUtc } from "./earningController";
 import { CustomRequest as Request } from "../types";
 
@@ -189,7 +190,7 @@ const getOrderById = async (req: Request, res: Response, next: NextFunction) => 
 
 const getOrders = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { startDate, endDate, tableId, customerPhone, orderStatus, paymentStatus, excludeStatus } = req.query;
+    const { startDate, endDate, tableId, customerPhone, orderStatus, paymentStatus, excludeStatus, search } = req.query;
     const orders = await orderRepo.findAll({
       startDate: startDate as string | undefined,
       endDate:   endDate   as string | undefined,
@@ -198,6 +199,7 @@ const getOrders = async (req: Request, res: Response, next: NextFunction) => {
       orderStatus:   orderStatus   as string | undefined,
       paymentStatus: paymentStatus as string | undefined,
       excludeStatus: excludeStatus as string | undefined,
+      search:        search        as string | undefined,
     });
     res.status(200).json({ success: true, data: orders });
   } catch (error) {
@@ -289,6 +291,19 @@ const updateOrderById = async (req: Request, res: Response, next: NextFunction) 
           amountChangeForEarnings += finalBalanceDue;
           await orderRepo.update(id, { paymentStatus: "Paid", amountPaid: orderTotalWithTax, balanceDueOnOrder: 0 });
         }
+      }
+    }
+
+    // Save customer profile for POS dine-in orders so they appear in auto-suggest.
+    if (justCompleted && (updatedOrder.orderType as string ?? "dine-in") === "dine-in") {
+      const cdName  = (updatedOrder.customerDetails as Record<string, unknown>)?.name  as string ?? "";
+      const cdPhone = (updatedOrder.customerDetails as Record<string, unknown>)?.phone as string ?? "";
+      const isRealPhone = /^\d{10}$/.test(cdPhone);
+      const isRealName  = cdName.trim().toLowerCase() !== "driver" && cdName.trim() !== "";
+      if (isRealPhone && isRealName) {
+        profileRepo.recordPosOrderVisit(cdPhone, cdName).catch((e) =>
+          console.error("Failed to save customer profile from POS order:", e)
+        );
       }
     }
 

@@ -28,6 +28,7 @@ import adminNotifyRoute from "./routes/adminNotifyRoute";
 import onlineConfigRoute from "./routes/onlineConfigRoute";
 import migrationRoutes from "./routes/migrationRoutes";
 import requestRoutes from "./routes/requestRoutes";
+import profilesRoute from "./routes/profilesRoute";
 
 const app = express();
 
@@ -163,6 +164,7 @@ app.use("/api/admin/notify", adminNotifyRoute);
 app.use("/api/online-config", onlineConfigRoute);
 app.use("/api/migration", migrationRoutes);
 app.use("/api/requests", requestRoutes);
+app.use("/api/profiles", profilesRoute);
 
 // Deleted frontend static serving — the Frontend is now fully packed directly inside of the Desktop Electron EXE.
 

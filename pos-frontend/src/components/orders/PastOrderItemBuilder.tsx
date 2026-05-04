@@ -92,11 +92,10 @@ const PastOrderItemBuilder: React.FC<PastOrderItemBuilderProps> = ({
             <button
               key={cat}
               onClick={() => onCatFilterChange(cat)}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                catFilter === cat
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${catFilter === cat
                   ? "bg-dhaba-accent text-dhaba-bg"
                   : "glass-input text-dhaba-muted hover:text-dhaba-text"
-              }`}
+                }`}
             >
               {cat}
             </button>
@@ -112,10 +111,10 @@ const PastOrderItemBuilder: React.FC<PastOrderItemBuilderProps> = ({
         ) : filteredDishes.length === 0 ? (
           <p className="text-center text-sm text-dhaba-muted py-8">No dishes found</p>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-64 overflow-y-auto pr-1">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[600px] overflow-y-auto pr-1 scrollbar-thin">
             {filteredDishes.map((dish) => {
               const variant = getVariant(dish, selectedVariants);
-              const inCart  = cartItems.find((i) => i.id === dish._id && i.variantSize === variant.size);
+              const inCart = cartItems.find((i) => i.id === dish._id && i.variantSize === variant.size);
               const isNonVeg = dish.type === "non-veg";
               return (
                 <div
@@ -137,11 +136,10 @@ const PastOrderItemBuilder: React.FC<PastOrderItemBuilderProps> = ({
                         <button
                           key={v.size}
                           onClick={() => onVariantSelect(dish._id, v)}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all ${
-                            variant.size === v.size
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all ${variant.size === v.size
                               ? "bg-dhaba-accent text-dhaba-bg"
                               : "glass-input text-dhaba-muted"
-                          }`}
+                            }`}
                         >
                           {v.size}
                         </button>

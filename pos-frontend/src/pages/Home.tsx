@@ -148,40 +148,51 @@ const Home: React.FC = () => {
   ];
 
   return (
-    <section className="bg-dhaba-bg min-h-[calc(100vh-4rem)] pb-24 overflow-y-auto">
-      <div className="px-8 pt-6 space-y-8 max-w-[1600px] mx-auto">
+    <section className="bg-dhaba-bg min-h-[calc(100vh-4rem)] pb-24 overflow-y-auto relative">
+      {/* Ambient Orbs */}
+      <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[100px] z-0 pointer-events-none" />
+      <div className="fixed top-[20%] right-[-10%] w-[30%] h-[30%] bg-purple-500/10 rounded-full blur-[100px] z-0 pointer-events-none" />
+
+      <div className="relative z-10 px-4 sm:px-6 md:px-8 pt-8 space-y-8 max-w-[1600px] mx-auto w-full">
 
         {/* ── Greeting ── */}
         <Greetings />
 
         {/* ── Stat cards ── */}
-        <div className="grid grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {statCards.map(({ label, value, icon, pct, color, iconBg, pulse }) => (
-            <div key={label} className="glass-card rounded-[1.5rem] p-5 space-y-3 hover:shadow-glow hover:-translate-y-1 transition-all duration-300 border border-dhaba-border/20">
-              <div className="flex items-center justify-between">
+            <div key={label} className="glass-card rounded-[1.5rem] p-5 space-y-3 border border-dhaba-border/20 relative overflow-hidden">
+              
+              {/* Premium Static Background Gradient */}
+              <div className={`absolute inset-0 bg-gradient-to-br ${iconBg.replace('/15', '/10')} opacity-50 pointer-events-none`} />
+              
+              <div className="relative z-10 flex items-center justify-between">
                 <p className="text-dhaba-muted text-[11px] font-bold uppercase tracking-wider">{label}</p>
-                <div className={`h-10 w-10 rounded-xl ${iconBg} ${color} flex items-center justify-center text-lg shadow-sm ${pulse ? "animate-pulse ring-2 ring-current ring-offset-2 ring-offset-dhaba-bg" : ""}`}>
+                <div className={`h-10 w-10 rounded-xl ${iconBg} ${color} flex items-center justify-center text-lg shadow-sm border border-white/5 ${pulse ? "animate-pulse ring-2 ring-current ring-offset-2 ring-offset-dhaba-bg" : ""}`}>
                   {icon}
                 </div>
               </div>
-              <div className="flex justify-between items-end">
+              
+              <div className="relative z-10 flex justify-between items-end">
                 <p className={`font-display text-4xl font-extrabold tracking-tight ${color}`}>{value}</p>
               </div>
+              
               {label === "Today's Revenue" && (
-                <div className="flex items-center gap-2 flex-wrap pt-1">
-                  <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-dhaba-danger/15 text-dhaba-danger text-xs font-bold border border-dhaba-danger/20">
+                <div className="relative z-10 flex items-center gap-2 flex-wrap pt-1">
+                  <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-dhaba-danger/10 text-dhaba-danger text-xs font-bold border border-dhaba-danger/20">
                     <FaArrowDown className="text-[10px]" />
                     Exp: ₹{todayExpenses.toLocaleString("en-IN")}
                   </span>
-                  <span className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${netEarnings >= 0 ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/20" : "bg-red-500/15 text-red-500 border-red-500/20"}`}>
+                  <span className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${netEarnings >= 0 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"}`}>
                     Net: ₹{netEarnings.toLocaleString("en-IN")}
                   </span>
                 </div>
               )}
+              
               {pct !== null && label !== "Today's Revenue" && (
-                <div className="flex items-center gap-2 pt-1">
+                <div className="relative z-10 flex items-center gap-2 pt-1">
                   <span className={`flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full border
-                    ${pct >= 0 ? "bg-dhaba-success/15 text-dhaba-success border-dhaba-success/20" : "bg-dhaba-danger/15 text-dhaba-danger border-dhaba-danger/20"}`}>
+                    ${pct >= 0 ? "bg-dhaba-success/10 text-dhaba-success border-dhaba-success/20" : "bg-dhaba-danger/10 text-dhaba-danger border-dhaba-danger/20"}`}>
                     {pct >= 0 ? <FaArrowUp className="text-[10px]" /> : <FaArrowDown className="text-[10px]" />}
                     {Math.abs(pct)}%
                   </span>

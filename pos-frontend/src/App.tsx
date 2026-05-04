@@ -6,13 +6,13 @@ import {
   useLocation,
   Navigate,
 } from "react-router-dom";
-import { Home, Auth, Orders, Tables, Menu, Dashboard, OrderSummary, Consumables, AppUpdate, Staff, DataManagement, DishesPage, ServerStatus, OnlineConfig, Requests, Expenses } from "./pages";
+import { Home, Auth, Orders, Tables, Menu, Dashboard, OrderSummary, Consumables, AppUpdate, Staff, DataManagement, DishesPage, ServerStatus, OnlineConfig, Requests, Expenses, Customers } from "./pages";
+import CustomerDetail from "./components/customers/CustomerDetail";
 import Header from "./components/shared/Header";
 import { ErrorBoundary } from "./components/shared";
 import { useSelector } from "react-redux";
 import useLoadData from "./hooks/useLoadData";
 import FullScreenLoader from "./components/shared/FullScreenLoader";
-import CustomerLedgerList from "./components/customerLedger/CustomerLedgerList";
 import type { RootState } from "./redux/store";
 import { NotificationProvider } from "./context/NotificationContext";
 import { useAdminNotify } from "./hooks/useAdminNotify";
@@ -74,13 +74,22 @@ function Layout() {
           }
         />
         <Route
-          path="/ledger"
+          path="/customers"
           element={
             <ProtectedRoutes>
-              <CustomerLedgerList />
+              <Customers />
             </ProtectedRoutes>
           }
         />
+        <Route
+          path="/customers/:phone"
+          element={
+            <ProtectedRoutes>
+              <CustomerDetail />
+            </ProtectedRoutes>
+          }
+        />
+        <Route path="/ledger" element={<Navigate to="/customers" />} />
         <Route
           path="/consumables"
           element={

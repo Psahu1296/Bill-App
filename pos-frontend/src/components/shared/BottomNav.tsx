@@ -1,18 +1,18 @@
 import React, { useState } from "react";
-import { FaHome } from "react-icons/fa";
+import { FaHome, FaUsers } from "react-icons/fa";
 import { MdOutlineReorder, MdTableBar } from "react-icons/md";
-import { BiNotepad, BiSolidDish } from "react-icons/bi";
+import { BiSolidDish } from "react-icons/bi";
 import { useNavigate, useLocation } from "react-router-dom";
 import Modal from "./Modal";
 import { setCustomer } from "../../redux/slices/customerSlice";
 import { useAppDispatch } from "../../redux/hooks";
-import CustomerAutocomplete from "../menu/CustomerAutocomplete";
+import CustomerFields from "./CustomerFields";
 
 const navItems = [
   { path: "/", icon: FaHome, label: "Home" },
   { path: "/orders", icon: MdOutlineReorder, label: "Orders" },
   { path: "/tables", icon: MdTableBar, label: "Tables" },
-  { path: "/ledger", icon: BiNotepad, label: "Ledger" },
+  { path: "/customers", icon: FaUsers, label: "Customers" },
 ];
 
 const BottomNav: React.FC = () => {
@@ -74,40 +74,12 @@ const BottomNav: React.FC = () => {
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Create Order">
         <div className="space-y-4">
-          <div>
-            <label className="block text-dhaba-muted mb-2 text-xs font-bold tracking-wider uppercase">
-              Customer Name
-            </label>
-            <CustomerAutocomplete
-              value={name}
-              onChange={setName}
-              onSelect={({ customerName, customerPhone }) => {
-                setName(customerName);
-                setPhone(customerPhone);
-              }}
-              placeholder="Enter customer name"
-              inputClassName="glass-input rounded-xl px-4 py-3 w-full text-dhaba-text text-sm focus:outline-none placeholder:text-dhaba-muted/50"
-            />
-          </div>
-
-          <div>
-            <label className="block text-dhaba-muted mb-2 text-xs font-bold tracking-wider uppercase">
-              Phone Number
-            </label>
-            <div className="glass-input rounded-xl px-4 py-3">
-              <input
-                value={phone}
-                maxLength={10}
-                onChange={(e) => {
-                  const val = e.target.value.replace(/\D/g, "");
-                  if (val.length <= 10) setPhone(val);
-                }}
-                type="tel"
-                placeholder="9876543210"
-                className="bg-transparent flex-1 w-full text-dhaba-text text-sm focus:outline-none placeholder:text-dhaba-muted/50"
-              />
-            </div>
-          </div>
+          <CustomerFields
+            value={{ name, phone }}
+            onChange={({ name: n, phone: p }) => { setName(n); setPhone(p); }}
+            disabled={isDriver}
+            inputClassName="glass-input rounded-xl px-4 py-3 w-full text-dhaba-text text-sm focus:outline-none placeholder:text-dhaba-muted/50"
+          />
 
           <div>
             <label className="block text-dhaba-muted mb-2 text-xs font-bold tracking-wider uppercase">

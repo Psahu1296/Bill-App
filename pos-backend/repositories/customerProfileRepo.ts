@@ -71,3 +71,26 @@ export async function updateProfile(
   ).lean();
   return toApi(doc);
 }
+
+export async function searchProfiles(query: string): Promise<CustomerProfileData[]> {
+  const filter = query ? { name: { $regex: query, $options: "i" } } : {};
+  const docs = await CustomerProfile.find(filter)
+    .sort({ lastOrderedAt: -1, totalOrders: -1 })
+    .limit(20)
+    .lean();
+  return (docs.map(toApi).filter(Boolean) as CustomerProfileData[]);
+}
+
+// Called on POS dine-in order completion — ensures the customer appears in
+// profiles for future auto-suggest without double-counting app-side totalOrders.
+export async function recordPosOrderVisit(phone: string, name: string): Promise<void> {
+  const normalized = normalizePhone(phone);
+  await CustomerProfile.findOneAndUpdate(
+    { phone: normalized },
+    {
+      $set: { name: name.trim(), lastOrderedAt: new Date() },
+      $setOnInsert: { phone: normalized, preferredArea: "", totalOrders: 0 },
+    },
+    { upsert: true }
+  );
+}

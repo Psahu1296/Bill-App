@@ -129,6 +129,10 @@ export const updateExpense = (id: string, updates: object) =>
 export const deleteExpense = (id: string) =>
   axiosWrapper.delete(`/api/expenses/${id}`);
 
+// Customer Profiles (POS — protected)
+export const searchCustomerProfiles = (params: { name?: string; phone?: string }) =>
+  axiosWrapper.get("/api/profiles/search", { params });
+
 // Customer Ledger API
 export const getCustomerLedger = (phone: string) =>
   axiosWrapper.get(`/api/ledger/${phone}`);

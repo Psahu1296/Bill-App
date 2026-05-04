@@ -54,6 +54,7 @@ export interface OrderFilters {
   orderStatus?: string;
   paymentStatus?: string;
   excludeStatus?: string;
+  search?: string;
 }
 
 export async function findById(id: string, populate = false) {
@@ -85,9 +86,21 @@ export async function findAll(filters: OrderFilters = {}) {
   if (filters.customerPhone) {
     query["customerDetails.phone"] = filters.customerPhone;
   }
-  if (filters.orderStatus) query.orderStatus = filters.orderStatus;
-  if (filters.paymentStatus) query.paymentStatus = filters.paymentStatus;
-  if (filters.excludeStatus) query.orderStatus = { $ne: filters.excludeStatus };
+  if (filters.search) {
+    const s = filters.search.trim();
+    const orClauses: Record<string, unknown>[] = [
+      { "customerDetails.name": { $regex: s, $options: "i" } },
+      { "customerDetails.phone": { $regex: s, $options: "i" } },
+    ];
+    if (/^[0-9a-fA-F]{24}$/.test(s)) {
+      orClauses.push({ _id: new mongoose.Types.ObjectId(s) });
+    }
+    query.$or = orClauses;
+  } else {
+    if (filters.orderStatus) query.orderStatus = filters.orderStatus;
+    if (filters.paymentStatus) query.paymentStatus = filters.paymentStatus;
+    if (filters.excludeStatus) query.orderStatus = { $ne: filters.excludeStatus };
+  }
 
   const docs = await Order.find(query)
     .sort({ orderDate: -1 })

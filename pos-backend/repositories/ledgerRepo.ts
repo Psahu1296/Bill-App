@@ -77,7 +77,7 @@ export async function upsertWithTransaction(data: {
   await CustomerLedger.findOneAndUpdate(
     { customerPhone: data.customerPhone },
     {
-      $set:  { customerName: data.customerName, lastActivity: new Date() },
+      $set:  { customerName: data.customerName, lastActivity: tx.timestamp },
       $inc:  { balanceDue: data.balanceDelta },
       $push: { transactions: tx },
     },
@@ -190,6 +190,7 @@ export async function recordPayment(data: {
   amountPaid: number;
   orderId?: string | null;
   notes?: string;
+  timestamp?: string;
 }) {
   const existing = await CustomerLedger.findOne(
     { customerPhone: data.customerPhone },
@@ -205,6 +206,7 @@ export async function recordPayment(data: {
       transactionType: "payment_received",
       amount: data.amountPaid,
       notes: data.notes,
+      timestamp: data.timestamp,
     },
   });
 }
