@@ -1,11 +1,11 @@
 import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getCustomerLedger, recordCustomerPayment, searchCustomerProfiles } from "../../https";
+import { getCustomerLedger, recordCustomerPayment, searchCustomerProfiles, updateLedgerEntry } from "../../https";
 import { axiosWrapper } from "../../https/axiosWrapper";
 import { enqueueSnackbar } from "notistack";
 import { AnimatePresence, motion } from "framer-motion";
-import { FaArrowLeft, FaPhone, FaMoneyBillWave, FaShoppingBag, FaWallet, FaArrowUp, FaArrowDown } from "react-icons/fa";
+import { FaArrowLeft, FaPhone, FaMoneyBillWave, FaShoppingBag, FaWallet, FaArrowUp, FaArrowDown, FaPen } from "react-icons/fa";
 import { MdAccountBalanceWallet, MdReceipt } from "react-icons/md";
 import { FaTimes } from "react-icons/fa";
 import BottomNav from "../shared/BottomNav";
@@ -32,6 +32,9 @@ const CustomerDetail: React.FC = () => {
   const [payAmount, setPayAmount] = useState("");
   const [payMethod, setPayMethod] = useState("Cash");
   const [payNotes, setPayNotes] = useState("");
+  const [editOpen, setEditOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
 
   // Load profile from cached search results first, then fetch ledger
   const { data: profilesRes } = useQuery({
@@ -90,6 +93,26 @@ const CustomerDetail: React.FC = () => {
     },
   });
 
+  const editMutation = useMutation({
+    mutationFn: () =>
+      updateLedgerEntry(phone, {
+        customerName: editName.trim() || undefined,
+        customerPhone: editPhone.trim() || undefined,
+      }),
+    onSuccess: () => {
+      enqueueSnackbar("Customer updated!", { variant: "success" });
+      queryClient.invalidateQueries({ queryKey: ["customerProfiles"] });
+      queryClient.invalidateQueries({ queryKey: ["customerProfileByPhone", phone] });
+      setEditOpen(false);
+      if (editPhone.trim() && editPhone.trim() !== phone) {
+        navigate(`/customers/${editPhone.trim()}`, { replace: true });
+      }
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) => {
+      enqueueSnackbar(err.response?.data?.message ?? "Update failed.", { variant: "error" });
+    },
+  });
+
   const remaining = Math.max(0, balanceDue - (Number(payAmount) || 0));
   const displayName = profile?.name ?? phone;
 
@@ -125,6 +148,13 @@ const CustomerDetail: React.FC = () => {
               </p>
             </div>
           </div>
+          <button
+            onClick={() => { setEditName(profile?.name ?? ""); setEditPhone(phone); setEditOpen(true); }}
+            className="p-2.5 bg-white/5 hover:bg-blue-500/20 hover:text-blue-400 rounded-xl transition-all border border-white/5 shadow-inner"
+            title="Edit customer"
+          >
+            <FaPen className="text-white/70 text-sm" />
+          </button>
         </div>
 
         {/* Balance strip */}
@@ -393,6 +423,77 @@ const CustomerDetail: React.FC = () => {
                   >
                     {payMutation.isPending && <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
                     {payMutation.isPending ? "Recording…" : "Confirm"}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit customer modal */}
+      <AnimatePresence>
+        {editOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0c111d]/90 backdrop-blur-md p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="relative w-full max-w-sm rounded-[2rem] overflow-hidden"
+            >
+              <div className="absolute inset-[-50%] animate-spin z-0 pointer-events-none" style={{ animationDuration: '6s', background: 'conic-gradient(from 180deg at 50% 50%, #3b82f6 0deg, #8b5cf6 180deg, transparent 360deg)' }} />
+              <div className="absolute inset-[1px] bg-[#111827] rounded-[1.95rem] z-0 shadow-[inset_0_0_30px_rgba(0,0,0,0.8)] pointer-events-none" />
+
+              <div className="relative z-10">
+                <div className="flex items-center justify-between px-6 py-5 border-b border-white/10">
+                  <div>
+                    <h2 className="font-display text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-violet-400">Edit Customer</h2>
+                    <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest mt-1">Update name or phone number</p>
+                  </div>
+                  <button onClick={() => setEditOpen(false)} className="p-2.5 bg-white/5 hover:bg-red-500/20 hover:text-red-400 rounded-xl transition-all border border-white/5">
+                    <FaTimes className="text-white/70" />
+                  </button>
+                </div>
+
+                <div className="px-6 py-6 space-y-5 bg-[#111827]">
+                  <div>
+                    <label className="block text-[10px] font-black text-white/60 uppercase tracking-[0.15em] mb-2">Name</label>
+                    <input
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="Customer name"
+                      className="w-full bg-[#1e293b] rounded-xl px-4 py-3.5 text-white font-medium text-sm focus:outline-none focus:ring-2 ring-blue-500/50 border border-white/5 placeholder:text-white/20 transition-all shadow-inner"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-white/60 uppercase tracking-[0.15em] mb-2">Phone Number</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 font-black text-sm"><FaPhone /></span>
+                      <input
+                        value={editPhone}
+                        onChange={(e) => setEditPhone(e.target.value)}
+                        placeholder="Phone number"
+                        className="w-full bg-[#1e293b] rounded-xl pl-9 pr-4 py-3.5 text-white font-medium text-sm focus:outline-none focus:ring-2 ring-blue-500/50 border border-white/5 placeholder:text-white/20 transition-all shadow-inner"
+                      />
+                    </div>
+                    {editPhone.trim() !== phone && editPhone.trim() && (
+                      <p className="text-[10px] text-amber-400/80 mt-1.5 font-semibold">Phone change will redirect to updated profile</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="px-6 py-5 bg-[#0f172a] border-t border-white/5 flex gap-3 justify-end">
+                  <button onClick={() => setEditOpen(false)} className="px-6 py-3 rounded-xl text-white/50 font-black text-[11px] uppercase tracking-wider hover:text-white hover:bg-white/5 transition-all">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => editMutation.mutate()}
+                    disabled={(!editName.trim() && editPhone.trim() === phone) || editMutation.isPending}
+                    className="bg-gradient-to-r from-blue-500 to-violet-600 text-white px-8 py-3 rounded-xl font-black text-[11px] uppercase tracking-wider flex items-center gap-2 hover:shadow-[0_0_20px_rgba(59,130,246,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-blue-400/30 active:scale-95"
+                  >
+                    {editMutation.isPending && <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                    {editMutation.isPending ? "Saving…" : "Save"}
                   </button>
                 </div>
               </div>
