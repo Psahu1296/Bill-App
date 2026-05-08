@@ -1,4 +1,4 @@
-import { addDays, addWeeks, addMonths, addYears } from "date-fns";
+import { addDays, addWeeks, addMonths, addYears, getDaysInMonth } from "date-fns";
 import { Request, Response, NextFunction } from "express";
 import createHttpError from "http-errors";
 import * as earningRepo from "../repositories/earningRepo";
@@ -10,6 +10,7 @@ import {
   format,
 } from "date-fns";
 import { toZonedTime, fromZonedTime } from "date-fns-tz";
+import { Order, Expense } from "../models";
 
 const TIMEZONE = "Asia/Kolkata";
 
@@ -174,6 +175,109 @@ export const getDashboardEarningsSummary = async (_req: Request, res: Response, 
         weekly:  { total: currentWeekTotal,  percentageChange: calculatePercentageChange(currentWeekTotal,  previousWeekTotal)  },
         monthly: { total: currentMonthTotal, percentageChange: calculatePercentageChange(currentMonthTotal, previousMonthTotal) },
         yearly:  { total: currentYearTotal,  percentageChange: calculatePercentageChange(currentYearTotal,  previousYearTotal)  },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getChartData = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const period = (req.query.period as string) || "day";
+    const now = new Date();
+    const zonedNow = toZonedTime(now, TIMEZONE);
+
+    type Bucket = { start: Date; end: Date };
+    let labels: string[];
+    let buckets: Bucket[];
+
+    const zonedToUtc = (d: Date) => fromZonedTime(d, TIMEZONE);
+
+    switch (period) {
+      case "day": {
+        const dayStart = startOfDay(zonedNow);
+        labels = Array.from({ length: 24 }, (_, i) => {
+          const h = i % 12 || 12;
+          return `${h}${i < 12 ? "am" : "pm"}`;
+        });
+        buckets = Array.from({ length: 24 }, (_, i) => ({
+          start: zonedToUtc(new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate(), i, 0, 0, 0)),
+          end:   zonedToUtc(new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate(), i, 59, 59, 999)),
+        }));
+        break;
+      }
+      case "week": {
+        const weekStart = startOfWeek(zonedNow, { weekStartsOn: 1 });
+        labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+        buckets = Array.from({ length: 7 }, (_, i) => {
+          const day = addDays(weekStart, i);
+          return { start: zonedToUtc(startOfDay(day)), end: zonedToUtc(endOfDay(day)) };
+        });
+        break;
+      }
+      case "month": {
+        const monthStart = startOfMonth(zonedNow);
+        const days = getDaysInMonth(zonedNow);
+        labels = Array.from({ length: days }, (_, i) => String(i + 1));
+        buckets = Array.from({ length: days }, (_, i) => {
+          const day = addDays(monthStart, i);
+          return { start: zonedToUtc(startOfDay(day)), end: zonedToUtc(endOfDay(day)) };
+        });
+        break;
+      }
+      case "year": {
+        const yearStart = startOfYear(zonedNow);
+        labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        buckets = Array.from({ length: 12 }, (_, i) => {
+          const month = addMonths(yearStart, i);
+          return { start: zonedToUtc(startOfMonth(month)), end: zonedToUtc(endOfMonth(month)) };
+        });
+        break;
+      }
+      default:
+        return next(createHttpError(400, "Invalid period. Use day, week, month, or year."));
+    }
+
+    const rangeStart = buckets[0].start;
+    const rangeEnd   = buckets[buckets.length - 1].end;
+
+    const [incomeRaw, expenseRaw, orderRaw] = await Promise.all([
+      Order.find(
+        { paymentStatus: "Paid", orderDate: { $gte: rangeStart, $lte: rangeEnd } },
+        { orderDate: 1, "bills.totalWithTax": 1 }
+      ).lean(),
+      Expense.find(
+        { expenseDate: { $gte: rangeStart, $lte: rangeEnd } },
+        { expenseDate: 1, amount: 1 }
+      ).lean(),
+      Order.find(
+        { orderDate: { $gte: rangeStart, $lte: rangeEnd }, orderStatus: { $ne: "Cancelled" } },
+        { orderDate: 1 }
+      ).lean(),
+    ]);
+
+    const bucket = <T extends { date: Date }>(rows: T[], getDate: (r: T) => Date) =>
+      buckets.map(({ start, end }) =>
+        rows.filter(r => { const d = getDate(r); return d >= start && d <= end; })
+      );
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const incomeBuckets  = bucket(incomeRaw  as any[], r => new Date((r as any).orderDate));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const expenseBuckets = bucket(expenseRaw as any[], r => new Date((r as any).expenseDate));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orderBuckets   = bucket(orderRaw   as any[], r => new Date((r as any).orderDate));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        labels,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        income:   incomeBuckets.map(b  => Math.round(b.reduce((s, r) => s + ((r as any).bills?.totalWithTax ?? 0), 0))),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expenses: expenseBuckets.map(b => Math.round(b.reduce((s, r) => s + ((r as any).amount ?? 0), 0))),
+        orders:   orderBuckets.map(b   => b.length),
       },
     });
   } catch (error) {

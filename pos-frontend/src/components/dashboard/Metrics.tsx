@@ -6,8 +6,10 @@ import {
   getOrders,
   getDishes,
   getTables,
+  getDashboardChartData,
 } from "../../https";
 import MatrixCard from "../matrix/MatrixCard";
+import DashboardCharts from "./DashboardCharts";
 import type { Dish, Order, Table } from "../../types";
 import { FaUtensils, FaTable, FaHourglassHalf, FaLayerGroup } from "react-icons/fa";
 
@@ -67,6 +69,13 @@ const Metrics: React.FC = () => {
     queryFn: () => getOrders({ orderStatus: "Ready" }),
     placeholderData: keepPreviousData,
     refetchInterval: 30_000,
+  });
+
+  const { data: chartRes, isLoading: chartLoading } = useQuery({
+    queryKey: ["dashboardChart", metrics.value],
+    queryFn: () => getDashboardChartData(metrics.value),
+    placeholderData: keepPreviousData,
+    refetchInterval: 60_000,
   });
 
   // ── Derived values ───────────────────────────────────────────────────────────
@@ -188,6 +197,13 @@ const Metrics: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {/* ── Charts ── */}
+      <DashboardCharts
+        data={(chartRes?.data as { data?: { labels: string[]; income: number[]; expenses: number[]; orders: number[] } })?.data}
+        isLoading={chartLoading}
+        period={metrics.value}
+      />
     </div>
   );
 };

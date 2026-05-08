@@ -109,6 +109,9 @@ export const getDashboardEarningsSummary = () =>
 export const getPeriodEarnings = (periodType: string) =>
   axiosWrapper.get(`/api/earnings/${periodType}`);
 
+export const getDashboardChartData = (period: string) =>
+  axiosWrapper.get("/api/earnings/chart", { params: { period } });
+
 // Expenses
 export const addExpense = (expenseData: AddExpensePayload) =>
   axiosWrapper.post("/api/expenses", expenseData);
