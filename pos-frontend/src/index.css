@@ -6,6 +6,7 @@
 @tailwind utilities;
 
 :root {
+  color-scheme: dark;
   /* ─── Core palette ─── */
   --dhaba-bg: 15 12% 7%;
   --dhaba-surface: 20 10% 12%;

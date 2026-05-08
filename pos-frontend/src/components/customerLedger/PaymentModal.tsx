@@ -39,7 +39,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
 
   const handlePaySubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customer) return;
+    if (!customer || recordPaymentMutation.isPending) return;
     const amount = parseFloat(amountPaidInput);
 
     if (isNaN(amount) || amount <= 0) {

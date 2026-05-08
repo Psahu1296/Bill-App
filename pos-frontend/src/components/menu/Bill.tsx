@@ -64,6 +64,8 @@ const Bill: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discount, roundOffEnabled, orderId, total]);
 
+  const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
+
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Cash");
   const [showInvoice, setShowInvoice] = useState(false);
   const [orderInfo, setOrderInfo] = useState<Order | undefined>();
@@ -113,6 +115,8 @@ const Bill: React.FC = () => {
     },
   });
 
+  const isAnyPaymentPending = orderMutation.isPending || isPaymentProcessing;
+
   const completeOrder = async (targetId: string, paidAmount: number, payMethod: PaymentMethod, isFullyPaid: boolean) => {
     const amountAlreadyPaid = existingOrder?.amountPaid ?? orderInfo?.amountPaid ?? 0;
     return updateOrder({
@@ -157,11 +161,12 @@ const Bill: React.FC = () => {
 
     if (orderId) {
       // Existing order: never rebake bills — only send payment fields
-      completeOrder(orderId, paidAmount, payMethod, isFullyPaid).catch(
-        (error: { response?: { data?: { message?: string } } }) => {
+      setIsPaymentProcessing(true);
+      completeOrder(orderId, paidAmount, payMethod, isFullyPaid)
+        .catch((error: { response?: { data?: { message?: string } } }) => {
           enqueueSnackbar(error.response?.data?.message || "Failed to process payment.", { variant: "error" });
-        }
-      );
+        })
+        .finally(() => setIsPaymentProcessing(false));
     } else {
       // New order: bake in current bills (discount/roundoff) + payment
       const orderData = buildOrderData();
@@ -305,7 +310,7 @@ const Bill: React.FC = () => {
           {orderId ? "Update Order" : "Place Order"}
         </button>
         <button
-          disabled={orderMutation.isPending}
+          disabled={isAnyPaymentPending}
           className="w-full py-2.5 rounded-xl bg-dhaba-success/10 text-dhaba-success font-bold text-sm border border-dhaba-success/20 hover:bg-dhaba-success/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={() => setIsPayModalOpen(true)}
         >
@@ -317,10 +322,10 @@ const Bill: React.FC = () => {
 
       <PayModal
         isOpen={isPayModalOpen}
-        onClose={() => setIsPayModalOpen(false)}
+        onClose={() => { if (!isAnyPaymentPending) setIsPayModalOpen(false); }}
         order={{ _id: orderId ?? "", ...currentOrderData } as Partial<Order> & { _id: string }}
         customerData={customerData}
-        isPending={orderMutation.isPending}
+        isPending={isAnyPaymentPending}
         onSubmitPayment={handlePaymentSubmit}
       />
 

@@ -83,13 +83,13 @@ const addPayment = async (req: Request, res: Response, next: NextFunction) => {
     if (!id || !mongoose.isValidObjectId(id)) {
       return next(createHttpError(400, "Invalid staff ID format."));
     }
-    const { amount, type, note } = req.body;
+    const { amount, type, note, date } = req.body;
     if (!amount || !type) {
       return next(createHttpError(400, "amount and type are required."));
     }
     const member = await staffRepo.findById(id);
     if (!member) return next(createHttpError(404, "Staff member not found."));
-    const updated = await staffRepo.addPayment(id, { amount: Number(amount), type, note });
+    const updated = await staffRepo.addPayment(id, { amount: Number(amount), type, note, date });
     res.status(201).json({ success: true, message: "Payment recorded.", data: updated });
   } catch (error) {
     next(error);

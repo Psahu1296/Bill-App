@@ -26,8 +26,8 @@ const PreOrderPaymentModal: React.FC<PreOrderPaymentModalProps> = ({ onClose, it
   const isFullPay = hasInput && paying >= balanceDue - 0.01;
 
   const handlePay = async () => {
-    if (!hasInput || paying < 0) {
-      enqueueSnackbar("Enter a valid amount.", { variant: "warning" });
+    if (processing || !hasInput || paying < 0) {
+      if (!processing) enqueueSnackbar("Enter a valid amount.", { variant: "warning" });
       return;
     }
     setProcessing(true);
@@ -37,7 +37,7 @@ const PreOrderPaymentModal: React.FC<PreOrderPaymentModalProps> = ({ onClose, it
     } catch (e) {
       // Error handled by parent usually
     } finally {
-      if (processing) setProcessing(false);
+      setProcessing(false);
     }
   };
 
