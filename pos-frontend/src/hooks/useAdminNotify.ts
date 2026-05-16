@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNotifications } from "../context/NotificationContext";
 import { enqueueSnackbar } from "notistack";
+import type { ReminderItem } from "./useReminders";
 
 // ── Notification sound ────────────────────────────────────────────────────────
 // Drop the file at public/new-order.mp3 to enable audio alerts.
@@ -21,7 +22,7 @@ function playNewOrderSound() {
  * On every event: refetches orders + adds a notification for card highlight.
  * Mount once at the app layout level (e.g. inside the auth-protected routes).
  */
-export function useAdminNotify(enabled = true) {
+export function useAdminNotify(enabled = true, onReminders?: (r: ReminderItem[]) => void) {
   const queryClient = useQueryClient();
   const { addNotification } = useNotifications();
 
@@ -32,6 +33,17 @@ export function useAdminNotify(enabled = true) {
     es.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
+
+        if (data.type === "reminders") {
+          if (onReminders && Array.isArray(data.reminders) && data.reminders.length > 0) {
+            onReminders(data.reminders);
+            enqueueSnackbar(
+              `${data.reminders.length} reminder${data.reminders.length > 1 ? "s" : ""} need your attention`,
+              { variant: "warning", autoHideDuration: 8000 }
+            );
+          }
+          return;
+        }
 
         // Refetch orders list so the updated card appears immediately
         queryClient.invalidateQueries({ queryKey: ["orders"] });
@@ -63,5 +75,5 @@ export function useAdminNotify(enabled = true) {
     };
 
     return () => es.close();
-  }, [enabled, queryClient, addNotification]);
+  }, [enabled, queryClient, addNotification, onReminders]);
 }

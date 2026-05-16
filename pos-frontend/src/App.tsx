@@ -6,7 +6,7 @@ import {
   useLocation,
   Navigate,
 } from "react-router-dom";
-import { Home, Auth, Orders, Tables, Menu, Dashboard, OrderSummary, Consumables, AppUpdate, Staff, DataManagement, DishesPage, ServerStatus, OnlineConfig, Requests, Expenses, Customers } from "./pages";
+import { Home, Auth, Orders, Tables, Menu, Dashboard, OrderSummary, Consumables, AppUpdate, Staff, DataManagement, DishesPage, ServerStatus, OnlineConfig, Requests, Expenses, Customers, Inventory } from "./pages";
 import CustomerDetail from "./components/customers/CustomerDetail";
 import Header from "./components/shared/Header";
 import { ErrorBoundary } from "./components/shared";
@@ -16,6 +16,7 @@ import FullScreenLoader from "./components/shared/FullScreenLoader";
 import type { RootState } from "./redux/store";
 import { NotificationProvider } from "./context/NotificationContext";
 import { useAdminNotify } from "./hooks/useAdminNotify";
+import { ReminderProvider, useReminderContext } from "./context/ReminderContext";
 
 function Layout() {
   const isLoading = useLoadData();
@@ -170,6 +171,14 @@ function Layout() {
             </ProtectedRoutes>
           }
         />
+        <Route
+          path="/inventory"
+          element={
+            <ProtectedRoutes>
+              <Inventory />
+            </ProtectedRoutes>
+          }
+        />
         <Route path="*" element={<div>Not Found</div>} />
       </Routes>
     </>
@@ -187,18 +196,28 @@ function ProtectedRoutes({ children }: { children: React.ReactNode }) {
 /** Mounts the SSE admin notification listener — only when authenticated */
 function AdminNotifyMount() {
   const { isAuth } = useSelector((state: RootState) => state.user);
-  useAdminNotify(isAuth);
+  const { pushReminders } = useReminderContext();
+  useAdminNotify(isAuth, pushReminders);
   return null;
+}
+
+function AppInner() {
+  const { isAuth } = useSelector((state: RootState) => state.user);
+  return (
+    <ReminderProvider enabled={isAuth}>
+      <AdminNotifyMount />
+      <ErrorBoundary>
+        <Layout />
+      </ErrorBoundary>
+    </ReminderProvider>
+  );
 }
 
 function App() {
   return (
     <NotificationProvider>
       <Router>
-        <AdminNotifyMount />
-        <ErrorBoundary>
-          <Layout />
-        </ErrorBoundary>
+        <AppInner />
       </Router>
     </NotificationProvider>
   );

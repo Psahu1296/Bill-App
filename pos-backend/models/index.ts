@@ -61,6 +61,7 @@ const dishSchema = new Schema(
     isOnlineAvailable: { type: Boolean, default: false },
     isPreorder:        { type: Boolean, default: false },
     numberOfOrders:    { type: Number, default: 0 },
+    rawMaterial:       { type: String, default: "" },
   },
   baseOptions
 );
@@ -125,6 +126,8 @@ const expenseSchema = new Schema(
     type:        { type: String, required: true },
     name:        { type: String, required: true },
     amount:      { type: Number, required: true },
+    quantity:    { type: Number, default: null },
+    unit:        { type: String, default: "" },
     description: { type: String, default: "" },
     expenseDate: { type: Date, default: Date.now },
   },
@@ -267,6 +270,27 @@ dishRequestSchema.index({ status: 1, createdAt: -1 });
 export const DishRequest =
   mongoose.models.DishRequest ?? mongoose.model("DishRequest", dishRequestSchema);
 
+// ── ExpensePreset ─────────────────────────────────────────────────────────────
+const priceHistoryEntrySchema = new Schema(
+  { amount: { type: Number, required: true }, date: { type: Date, default: Date.now } },
+  { _id: false }
+);
+
+const expensePresetSchema = new Schema(
+  {
+    name:          { type: String, required: true, unique: true },
+    category:      { type: String, required: true },
+    type:          { type: String, required: true },
+    lastPrice:     { type: Number, default: 0 },
+    priceHistory:  { type: [priceHistoryEntrySchema], default: [] },
+    isStaffLinked: { type: Boolean, default: false },
+    order:         { type: Number, default: 0 },
+    isActive:      { type: Boolean, default: true },
+  },
+  baseOptions
+);
+export const ExpensePreset = mongoose.models.ExpensePreset ?? mongoose.model("ExpensePreset", expensePresetSchema);
+
 // ── PreOrder ──────────────────────────────────────────────────────────────────
 const preOrderSchema = new Schema(
   {
@@ -293,3 +317,22 @@ preOrderSchema.index({ scheduledFor: 1, status: 1 });
 preOrderSchema.index({ customerPhone: 1 });
 export const PreOrder =
   mongoose.models.PreOrder ?? mongoose.model("PreOrder", preOrderSchema);
+
+// ── StockCycle ─────────────────────────────────────────────────────────────────
+const stockCycleSchema = new Schema(
+  {
+    expenseId:      { type: Schema.Types.ObjectId, ref: "Expense", required: true },
+    rawMaterial:    { type: String, required: true },
+    quantityKg:     { type: Number, required: true },
+    startDate:      { type: Date, required: true },
+    endDate:        { type: Date, default: null },
+    platesConsumed: { type: Number, default: 0 },
+    isEarlyRestock: { type: Boolean, default: false },
+    cycleStatus:    { type: String, default: "active" }, // "active" | "closed"
+  },
+  baseOptions
+);
+stockCycleSchema.index({ rawMaterial: 1, cycleStatus: 1 });
+stockCycleSchema.index({ rawMaterial: 1, startDate: -1 });
+export const StockCycle =
+  mongoose.models.StockCycle ?? mongoose.model("StockCycle", stockCycleSchema);

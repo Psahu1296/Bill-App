@@ -9,6 +9,8 @@ function toApi(doc: any) {
     type: doc.type,
     name: doc.name,
     amount: doc.amount,
+    quantity: doc.quantity ?? null,
+    unit: doc.unit ?? "",
     description: doc.description ?? "",
     expenseDate: doc.expenseDate,
     createdAt: doc.createdAt,
@@ -18,12 +20,15 @@ function toApi(doc: any) {
 
 export async function create(data: {
   type: string; name: string; amount: number;
+  quantity?: number | null; unit?: string;
   description?: string; expenseDate?: string;
 }) {
   const doc = await Expense.create({
     type: data.type,
     name: data.name,
     amount: data.amount,
+    quantity: data.quantity ?? null,
+    unit: data.unit ?? "",
     description: data.description ?? "",
     expenseDate: data.expenseDate ? new Date(data.expenseDate) : new Date(),
   });
@@ -53,7 +58,7 @@ export async function aggregateByType(startDate: Date, endDate: Date) {
 
 export async function update(id: string, updates: Record<string, unknown>) {
   if (!mongoose.isValidObjectId(id)) return null;
-  const allowed = ["type", "name", "amount", "description", "expenseDate"];
+  const allowed = ["type", "name", "amount", "quantity", "unit", "description", "expenseDate"];
   const patch: Record<string, unknown> = {};
   for (const key of allowed) {
     if (key in updates) {

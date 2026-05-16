@@ -15,3 +15,4 @@ export { default as OnlineConfig } from './OnlineConfig';
 export { default as Requests } from './Requests';
 export { default as Expenses } from './Expenses';
 export { default as Customers } from './Customers';
+export { default as Inventory } from './Inventory';

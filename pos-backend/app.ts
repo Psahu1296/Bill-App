@@ -16,6 +16,7 @@ import paymentRoute from "./routes/paymentRoute";
 import dishRoute from "./routes/dishRoute";
 import earningRoute from "./routes/earningRoute";
 import expenseRoutes from "./routes/expenseRoutes";
+import expensePresetRoutes from "./routes/expensePresetRoutes";
 import customerLedgerRoutes from "./routes/customerLedgerRoutes";
 import consumableRoutes from "./routes/consumableRoutes";
 import staffRoutes from "./routes/staffRoutes";
@@ -29,6 +30,9 @@ import onlineConfigRoute from "./routes/onlineConfigRoute";
 import migrationRoutes from "./routes/migrationRoutes";
 import requestRoutes from "./routes/requestRoutes";
 import profilesRoute from "./routes/profilesRoute";
+import reminderRoute from "./routes/reminderRoute";
+import inventoryRoutes from "./routes/inventoryRoutes";
+import { sendScheduledReminders } from "./controllers/reminderController";
 
 const app = express();
 
@@ -59,10 +63,14 @@ cron.schedule(
       console.error("Daily earning calculation job failed:", error);
     }
   },
-  {
-    timezone: "Asia/Kolkata",
-  }
+  { timezone: "Asia/Kolkata" }
 );
+
+// ── Reminder cron jobs — 12:00, 17:00, 22:00 IST ─────────────────────────────
+const reminderCronTimes = ["0 12 * * *", "0 17 * * *", "0 22 * * *"];
+reminderCronTimes.forEach((schedule) => {
+  cron.schedule(schedule, sendScheduledReminders, { timezone: "Asia/Kolkata" });
+});
 
 // ── Global rate limiter ───────────────────────────────────────────────────────
 // Broad defence against floods on any endpoint. 300 req/15 min is generous
@@ -152,6 +160,7 @@ app.use("/api/payment", paymentRoute);
 app.use("/api/dishes", dishRoute);
 app.use("/api/earnings", earningRoute);
 app.use("/api/expenses", expenseRoutes);
+app.use("/api/expense-presets", expensePresetRoutes);
 app.use("/api/ledger", customerLedgerRoutes);
 app.use("/api/consumables", consumableRoutes);
 app.use("/api/staff", staffRoutes);
@@ -165,6 +174,8 @@ app.use("/api/online-config", onlineConfigRoute);
 app.use("/api/migration", migrationRoutes);
 app.use("/api/requests", requestRoutes);
 app.use("/api/profiles", profilesRoute);
+app.use("/api/reminders", reminderRoute);
+app.use("/api/inventory", inventoryRoutes);
 
 // Deleted frontend static serving — the Frontend is now fully packed directly inside of the Desktop Electron EXE.
 

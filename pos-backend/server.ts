@@ -1,8 +1,10 @@
 import app from "./app";
 import connectDB from "./config/database";
+import { seedDefaults as seedExpensePresets } from "./repositories/expensePresetRepo";
 
 const startServer = async (port: number = Number(process.env.PORT) || 5001): Promise<void> => {
   await connectDB();
+  await seedExpensePresets();
   return new Promise((resolve, reject) => {
     const server = app.listen(port, "0.0.0.0", () => {
       console.log(`☑️  POS Server is listening on port ${port}`);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { FaCoffee, FaUsers, FaDatabase, FaSyncAlt, FaServer, FaReceipt } from "react-icons/fa";
+import { FaCoffee, FaUsers, FaDatabase, FaSyncAlt, FaServer, FaReceipt, FaBoxOpen } from "react-icons/fa";
 import { MdSystemUpdateAlt, MdDashboard, MdWifi, MdWifiOff, MdSettings } from "react-icons/md";
 import { MdContentCopy, MdCheck, MdSignalWifiStatusbarConnectedNoInternet4 } from "react-icons/md";
 import logo from "../../assets/images/logo.png";
@@ -11,6 +11,8 @@ import { removeUser } from "../../redux/slices/userSlice";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch } from "../../redux/hooks";
 import type { RootState } from "../../redux/store";
+import ReminderBell from "./ReminderBell";
+import { useReminderContext } from "../../context/ReminderContext";
 
 const Header: React.FC = () => {
   const userData = useSelector((state: RootState) => state.user);
@@ -21,6 +23,7 @@ const Header: React.FC = () => {
   const [showConfirm, setShowConfirm] = useState(false);
   const [tunnelUrl, setTunnelUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const { reminders, dismiss, acknowledge } = useReminderContext();
 
   useEffect(() => {
     const apiDomain = import.meta.env.VITE_BACKEND_URL || "https://api-prod.sahudhaba.in";
@@ -137,6 +140,16 @@ const Header: React.FC = () => {
 
           {userData.role === "Admin" && (
             <button
+              onClick={() => navigate("/inventory")}
+              className="glass-card rounded-xl p-2.5 hover:bg-dhaba-surface-hover transition-all duration-200 group"
+              title="Inventory"
+            >
+              <FaBoxOpen className="text-dhaba-muted text-xl group-hover:text-dhaba-accent transition-colors" />
+            </button>
+          )}
+
+          {userData.role === "Admin" && (
+            <button
               onClick={() => navigate("/data-management")}
               className="glass-card rounded-xl p-2.5 hover:bg-dhaba-surface-hover transition-all duration-200 group"
               title="Data Management"
@@ -222,6 +235,14 @@ const Header: React.FC = () => {
                 </>
               )}
             </div>
+          )}
+
+          {userData.role === "Admin" && (
+            <ReminderBell
+              reminders={reminders}
+              onDismiss={dismiss}
+              onAcknowledge={acknowledge}
+            />
           )}
 
           <button

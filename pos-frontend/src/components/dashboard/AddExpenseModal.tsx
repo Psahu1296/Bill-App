@@ -16,12 +16,37 @@ const EXPENSE_TYPES = [
   "other",
 ];
 
+const UNIT_MAPPING: Record<string, string> = {
+  fish: "kg",
+  chicken: "kg",
+  meat: "kg",
+  paneer: "kg",
+  milk: "Ltr",
+  oil: "Ltr",
+  gutka: "packet",
+  masala: "packet",
+  bread: "packet",
+  egg: "piece",
+  eggs: "piece",
+};
+
+const guessUnit = (name: string): string => {
+  const lowerName = name.toLowerCase();
+  for (const [key, unit] of Object.entries(UNIT_MAPPING)) {
+    if (lowerName.includes(key)) return unit;
+  }
+  return "";
+};
+
 interface ExpenseFormData {
   type: string;
   name: string;
   amount: string;
+  quantity: string;
+  unit: string;
   description: string;
   expenseDate: string;
+  isEarlyRestock: boolean;
 }
 
 interface AddExpenseModalProps {
@@ -35,8 +60,11 @@ const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClose, onEx
     type: "",
     name: "",
     amount: "",
+    quantity: "",
+    unit: "",
     description: "",
     expenseDate: new Date().toISOString().split("T")[0],
+    isEarlyRestock: false,
   };
 
   const [expenseData, setExpenseData] = useState<ExpenseFormData>(defaultExpenseData);
@@ -45,7 +73,14 @@ const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClose, onEx
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setExpenseData((prev) => ({ ...prev, [name]: value }));
+    setExpenseData((prev) => {
+      const updated = { ...prev, [name]: value };
+      if (name === "name" && !prev.unit) {
+        const guessed = guessUnit(value);
+        if (guessed) updated.unit = guessed;
+      }
+      return updated;
+    });
   };
 
   const handleCloseModal = () => {
@@ -62,7 +97,10 @@ const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClose, onEx
     expenseMutation.mutate({
       ...expenseData,
       amount: parseFloat(expenseData.amount),
+      quantity: expenseData.quantity ? parseFloat(expenseData.quantity) : undefined,
+      unit: expenseData.unit || undefined,
       expenseDate: expenseData.expenseDate ? new Date(expenseData.expenseDate) : undefined,
+      isEarlyRestock: expenseData.isEarlyRestock,
     });
   };
 
@@ -175,6 +213,66 @@ const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClose, onEx
                   />
                 </div>
               </div>
+
+              {/* Qty + Unit row */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>
+                    Qty <span className="normal-case text-dhaba-muted font-normal">(optional)</span>
+                  </label>
+                  <input
+                    type="number"
+                    name="quantity"
+                    value={expenseData.quantity}
+                    onChange={handleInputChange}
+                    step="0.01"
+                    min="0"
+                    className={inputClass}
+                    placeholder="e.g. 5"
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>
+                    Unit <span className="normal-case text-dhaba-muted font-normal">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="unit"
+                    value={expenseData.unit}
+                    onChange={handleInputChange}
+                    list="unit-options"
+                    className={inputClass}
+                    placeholder="e.g. kg, Ltr"
+                  />
+                  <datalist id="unit-options">
+                    <option value="kg" />
+                    <option value="gram" />
+                    <option value="Ltr" />
+                    <option value="ml" />
+                    <option value="packet" />
+                    <option value="piece" />
+                    <option value="box" />
+                  </datalist>
+                </div>
+              </div>
+
+              {/* Early Restock — only for raw materials with qty */}
+              {expenseData.type === "food_raw_material" && expenseData.quantity && (
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={expenseData.isEarlyRestock}
+                    onChange={(e) =>
+                      setExpenseData((prev) => ({ ...prev, isEarlyRestock: e.target.checked }))
+                    }
+                    className="h-4 w-4 rounded accent-dhaba-accent"
+                  />
+                  <span className="text-sm text-dhaba-muted">
+                    Early restock{" "}
+                    <span className="text-xs">(previous stock not finished — exclude from avg)</span>
+                  </span>
+                </label>
+              )}
 
               {/* Notes */}
               <div>

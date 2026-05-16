@@ -21,6 +21,7 @@ export interface Dish {
   isFrequent: boolean;
   isOnlineAvailable: boolean;
   numberOfOrders: number;
+  rawMaterial?: string;
 }
 
 export interface TableInfo {
@@ -257,8 +258,69 @@ export interface AddExpensePayload {
   type: string;
   name: string;
   amount: number;
+  quantity?: number;
+  unit?: string;
   description?: string;
   expenseDate?: string | Date;
+  presetId?: string;
+  isEarlyRestock?: boolean;
+}
+
+// ── Inventory / StockCycle ─────────────────────────────────────────────────────
+
+export interface StockCycle {
+  _id: string;
+  expenseId: string;
+  rawMaterial: string;
+  quantityKg: number;
+  startDate: string;
+  endDate: string | null;
+  platesConsumed: number;
+  isEarlyRestock: boolean;
+  cycleStatus: "active" | "closed";
+  createdAt: string;
+}
+
+export interface InventoryItem {
+  rawMaterial: string;
+  activeCycle: StockCycle | null;
+  activePlatesConsumed: number | null;
+  closedCyclesCount: number;
+  consumptionRate: number | null;
+  dailyPlateRate: number;
+  prediction: {
+    daysRemaining: number | null;
+    restockFor7Days: number | null;
+    restockFor14Days: number | null;
+  };
+}
+
+// ── Expense Presets ───────────────────────────────────────────────────────────
+
+export interface PriceHistoryEntry {
+  amount: number;
+  date: string;
+}
+
+export interface ExpensePreset {
+  _id: string;
+  name: string;
+  category: string;
+  type: string;
+  lastPrice: number;
+  priceHistory: PriceHistoryEntry[];
+  isStaffLinked: boolean;
+  order: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateExpensePresetPayload {
+  name: string;
+  category: string;
+  type: string;
+  isStaffLinked?: boolean;
 }
 
 export interface Expense {
@@ -266,6 +328,8 @@ export interface Expense {
   type: string;
   name: string;
   amount: number;
+  quantity?: number;
+  unit?: string;
   description?: string;
   expenseDate: string;
   createdAt: string;

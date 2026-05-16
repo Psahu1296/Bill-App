@@ -116,6 +116,19 @@ export const getDashboardChartData = (period: string) =>
 export const addExpense = (expenseData: AddExpensePayload) =>
   axiosWrapper.post("/api/expenses", expenseData);
 
+// Expense Presets
+export const getExpensePresets = () =>
+  axiosWrapper.get("/api/expense-presets");
+
+export const createExpensePreset = (data: { name: string; category: string; type: string; isStaffLinked?: boolean }) =>
+  axiosWrapper.post("/api/expense-presets", data);
+
+export const updateExpensePreset = (id: string, data: object) =>
+  axiosWrapper.put(`/api/expense-presets/${id}`, data);
+
+export const deleteExpensePreset = (id: string) =>
+  axiosWrapper.delete(`/api/expense-presets/${id}`);
+
 export const getAllExpenses = (filters: Record<string, string> = {}) => {
   const params = new URLSearchParams(filters).toString();
   return axiosWrapper.get(`/api/expenses${params ? "?" + params : ""}`);
@@ -211,6 +224,9 @@ export const addStaffPayment = (id: string, data: AddPaymentPayload) =>
 export const deleteStaffPayment = (staffId: string, paymentId: string) =>
   axiosWrapper.delete(`/api/staff/${staffId}/payments/${paymentId}`);
 
+// Reminders
+export const getReminders = () => axiosWrapper.get("/api/reminders/check");
+
 // Settings
 export const getOnlineOrdersStatus = () =>
   axiosWrapper.get("/api/settings/online-orders");
@@ -279,3 +295,13 @@ export const updatePreOrder = (
 
 export const deletePreOrder = (id: string) =>
   axiosWrapper.delete(`/api/requests/preorder/${id}`);
+
+// ── Inventory ─────────────────────────────────────────────────────────────────
+export const getInventoryDashboard = () =>
+  axiosWrapper.get("/api/inventory");
+
+export const getInventoryCycleHistory = (rawMaterial: string) =>
+  axiosWrapper.get(`/api/inventory/cycles/${encodeURIComponent(rawMaterial)}`);
+
+export const updateInventoryCycle = (id: string, data: { isEarlyRestock: boolean }) =>
+  axiosWrapper.patch(`/api/inventory/cycles/${id}`, data);

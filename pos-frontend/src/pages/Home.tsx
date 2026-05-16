@@ -13,7 +13,7 @@ import { enqueueSnackbar } from "notistack";
 import {
   FaPlus, FaArrowUp, FaArrowDown,
   FaHourglassHalf, FaCheckCircle, FaExclamationCircle,
-  FaUserTie, FaCoffee, FaClipboardList,
+  FaBoxOpen, FaCoffee, FaClipboardList,
 } from "react-icons/fa";
 import { BsCashCoin } from "react-icons/bs";
 import type { Order } from "../types";
@@ -144,7 +144,7 @@ const Home: React.FC = () => {
   ].filter(Boolean).join(" · ");
 
   const quickActions = [
-    { label: "Staff",    icon: <FaUserTie />,      path: "/staff",    badge: 0,            badgeTitle: "" },
+    { label: "Inventory", icon: <FaBoxOpen />, path: "/inventory", badge: 0, badgeTitle: "" },
   ];
 
   return (
@@ -223,9 +223,9 @@ const Home: React.FC = () => {
             <button
               key={label}
               onClick={() => navigate(path)}
-              className="relative flex items-center gap-2.5 px-6 py-4 rounded-2xl font-bold text-sm glass-card text-dhaba-text hover:bg-dhaba-surface border border-dhaba-border/20 flex-1 justify-center hover:shadow-md active:scale-[0.98] transition-all"
+              className="relative flex items-center gap-2.5 px-6 py-4 rounded-2xl font-bold text-sm bg-gradient-to-r from-blue-500 to-indigo-600 text-white flex-1 justify-center hover:shadow-lg hover:shadow-blue-500/30 active:scale-[0.98] transition-all border border-blue-400/20"
             >
-              <span className="text-lg text-blue-500">{icon}</span>
+              <span className="text-lg opacity-90">{icon}</span>
               {label}
               {badge > 0 && (
                 <span

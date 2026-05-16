@@ -2,6 +2,8 @@ import { Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import createHttpError from "http-errors";
 import * as expenseRepo from "../repositories/expenseRepo";
+import * as presetRepo from "../repositories/expensePresetRepo";
+import * as stockCycleRepo from "../repositories/stockCycleRepo";
 import { CustomRequest as Request } from "../types";
 import {
   getZonedStartOfDayUtc, getZonedEndOfDayUtc,
@@ -12,17 +14,54 @@ import { format } from "date-fns/format";
 
 const addExpense = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { type, name, amount, description, expenseDate } = req.body;
+    const { type, name, amount, quantity, unit, description, expenseDate, presetId, isEarlyRestock } = req.body;
 
     if (!type || !name || amount === undefined || amount === null || amount < 0) {
       return next(createHttpError(400, "Missing required expense fields (type, name, amount) or amount is invalid."));
     }
 
+    const purchaseDate = expenseDate ? new Date(expenseDate) : new Date();
+
     const expense = await expenseRepo.create({
       type, name, amount,
+      quantity, unit,
       description,
-      expenseDate: expenseDate ? new Date(expenseDate).toISOString() : new Date().toISOString(),
+      expenseDate: purchaseDate.toISOString(),
     });
+
+    // Update preset price history in background — non-blocking, non-critical
+    if (presetId && mongoose.isValidObjectId(presetId)) {
+      presetRepo.updatePriceHistory(presetId, amount).catch(() => {});
+    }
+
+    // Stock cycle lifecycle — only for raw material purchases with a quantity in kg
+    if (type === "food_raw_material" && quantity && quantity > 0) {
+      (async () => {
+        try {
+          const expenseId = String((expense as Record<string, unknown>)._id);
+          const activeCycle = await stockCycleRepo.findActiveCycle(name);
+          if (activeCycle) {
+            const cycle = activeCycle as { _id: { toString(): string }; startDate: Date };
+            await stockCycleRepo.closeCycle(
+              cycle._id.toString(),
+              purchaseDate,
+              name,
+              new Date(cycle.startDate)
+            );
+          }
+          await stockCycleRepo.create({
+            expenseId,
+            rawMaterial: name,
+            quantityKg: quantity,
+            startDate: purchaseDate,
+            isEarlyRestock: Boolean(isEarlyRestock),
+          });
+        } catch (err) {
+          console.error("[StockCycle] Failed to update cycle:", err);
+        }
+      })();
+    }
+
     res.status(201).json({ success: true, message: "Expense added successfully!", data: expense });
   } catch (error) {
     next(error);
