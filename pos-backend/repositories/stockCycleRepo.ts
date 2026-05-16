@@ -16,28 +16,37 @@ async function getMatchingDishNames(rawMaterial: string): Promise<string[]> {
   return (dishes as unknown as { name: string }[]).map((d) => d.name);
 }
 
-/** Resolve how many units one order item contributes using the variant piece map */
+/** Resolve how many plate-equivalent units one order item contributes.
+ *  "Full" variant is the reference for 1 plate (its piece count = piecesPerPlate).
+ *  Other variants are normalised: pieces / piecesPerPlate → plate fraction.
+ */
 function resolveUnits(
   variantSize: string | undefined,
   quantity: number,
   variantPieceMap: VariantPieceMap
 ): number {
   if (!variantPieceMap) return quantity;
-  const piecesPerUnit =
+  const pieces =
     (variantSize ? variantPieceMap[variantSize] : undefined) ??
     variantPieceMap["_default"] ??
     1;
-  return quantity * piecesPerUnit;
+  // "Full" defines 1 plate; divide so every variant returns plate-equivalents
+  const piecesPerPlate = variantPieceMap["Full"] ?? 1;
+  return (quantity * pieces) / piecesPerPlate;
 }
 
-/** Count units consumed for a raw material in completed orders within a date range */
+/** Count units consumed for a raw material in completed orders within a date range.
+ *  Matches both registered dish names (exact) and custom order items (keyword regex),
+ *  so items added via the custom free-text flow are also counted.
+ */
 async function countUnits(
   dishNames: string[],
+  rawMaterial: string,
   variantPieceMap: VariantPieceMap,
   startDate: Date,
   endDate?: Date
 ): Promise<number> {
-  if (!dishNames.length) return 0;
+  const keyword = rawMaterial.toLowerCase();
   const match: Record<string, unknown> = {
     orderStatus: "Completed",
     createdAt: { $gte: startDate, ...(endDate ? { $lte: endDate } : {}) },
@@ -49,7 +58,9 @@ async function countUnits(
   let total = 0;
   for (const order of orders) {
     for (const item of order.items) {
-      if (dishNames.includes(item.name)) {
+      const matchesDish = dishNames.includes(item.name);
+      const matchesKeyword = item.name.toLowerCase().includes(keyword);
+      if (matchesDish || matchesKeyword) {
         total += resolveUnits(item.variantSize, item.quantity ?? 1, variantPieceMap);
       }
     }
@@ -81,7 +92,7 @@ export async function closeCycle(
   variantPieceMap: VariantPieceMap
 ) {
   const dishNames = await getMatchingDishNames(rawMaterial);
-  const unitsConsumed = await countUnits(dishNames, variantPieceMap, startDate, endDate);
+  const unitsConsumed = await countUnits(dishNames, rawMaterial, variantPieceMap, startDate, endDate);
   return StockCycle.findByIdAndUpdate(
     cycleId,
     { cycleStatus: "closed", endDate, unitsConsumed },
@@ -115,7 +126,7 @@ export async function activeUnitsConsumed(
   variantPieceMap: VariantPieceMap
 ): Promise<number> {
   const dishNames = await getMatchingDishNames(rawMaterial);
-  return countUnits(dishNames, variantPieceMap, startDate);
+  return countUnits(dishNames, rawMaterial, variantPieceMap, startDate);
 }
 
 /** 14-day rolling unit rate for a raw material */
@@ -126,6 +137,6 @@ export async function dailyUnitRate(
   const since = new Date();
   since.setDate(since.getDate() - 14);
   const dishNames = await getMatchingDishNames(rawMaterial);
-  const total = await countUnits(dishNames, variantPieceMap, since);
+  const total = await countUnits(dishNames, rawMaterial, variantPieceMap, since);
   return total / 14;
 }
