@@ -68,4 +68,18 @@ const recordPresetPrice = async (req: Request, res: Response, next: NextFunction
   }
 };
 
-export { getPresets, createPreset, updatePreset, deletePreset, recordPresetPrice };
+const updatePresetPieceMap = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = req.params.id as string;
+    if (!mongoose.isValidObjectId(id)) return next(createHttpError(400, "Invalid preset ID."));
+    const { variantPieceMap } = req.body;
+    // null = remove mapping, object = set mapping
+    const preset = await presetRepo.updateVariantPieceMap(id, variantPieceMap ?? null);
+    if (!preset) return next(createHttpError(404, "Preset not found."));
+    res.status(200).json({ success: true, data: preset });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export { getPresets, createPreset, updatePreset, deletePreset, recordPresetPrice, updatePresetPieceMap };

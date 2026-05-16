@@ -39,14 +39,19 @@ const addExpense = async (req: Request, res: Response, next: NextFunction) => {
       (async () => {
         try {
           const expenseId = String((expense as Record<string, unknown>)._id);
+          // Fetch variantPieceMap for this raw material from its preset
+          const preset = await presetRepo.findByName(name).catch(() => null);
+          const variantPieceMap = (preset as Record<string, unknown> | null)?.variantPieceMap as Record<string, number> | null ?? null;
+
           const activeCycle = await stockCycleRepo.findActiveCycle(name);
           if (activeCycle) {
-            const cycle = activeCycle as { _id: { toString(): string }; startDate: Date };
+            const cycle = activeCycle as unknown as { _id: { toString(): string }; startDate: Date };
             await stockCycleRepo.closeCycle(
               cycle._id.toString(),
               purchaseDate,
               name,
-              new Date(cycle.startDate)
+              new Date(cycle.startDate),
+              variantPieceMap
             );
           }
           await stockCycleRepo.create({

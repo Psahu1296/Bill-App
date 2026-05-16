@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getInventoryDashboard, getInventoryCycleHistory, updateInventoryCycle } from "../https";
+import { getInventoryDashboard, getInventoryCycleHistory, updateInventoryCycle, updateExpensePresetPieceMap } from "../https";
 import type { InventoryItem, StockCycle } from "../types";
 import { enqueueSnackbar } from "notistack";
-import { FaBoxOpen, FaChartLine, FaHistory, FaExclamationTriangle } from "react-icons/fa";
+import { FaBoxOpen, FaChartLine, FaHistory, FaExclamationTriangle, FaPuzzlePiece } from "react-icons/fa";
 import { MdRefresh, MdInventory } from "react-icons/md";
 import Skeleton from "../components/shared/Skeleton";
 import BackButton from "../components/shared/BackButton";
@@ -145,9 +145,9 @@ function CycleHistoryPanel({
                     <div className="mt-2 pt-2 border-t border-white/10 flex flex-col gap-1">
                       <p className="text-[10px] font-black uppercase tracking-wider text-white/30">Performance</p>
                       <p className="text-sm font-bold text-white/70">
-                        <span className="text-white/90">{cycle.platesConsumed}</span> {unit} →{" "}
+                        <span className="text-white/90">{cycle.unitsConsumed}</span> {unit} →{" "}
                         <span className="text-emerald-400 font-black bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                          {(cycle.quantityKg / cycle.platesConsumed).toFixed(3)} kg/{unit}
+                          {cycle.unitsConsumed > 0 ? (cycle.quantityKg / cycle.unitsConsumed).toFixed(3) : "—"} kg/{unit}
                         </span>
                       </p>
                     </div>
@@ -178,14 +178,121 @@ function CycleHistoryPanel({
   );
 }
 
+const DEFAULT_VARIANT_KEYS = ["Full", "Half", "_default"];
+
+function PieceMapEditor({
+  presetId,
+  rawMaterial,
+  variantPieceMap,
+}: {
+  presetId: string;
+  rawMaterial: string;
+  variantPieceMap: Record<string, number> | null;
+}) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<Record<string, string>>(() => {
+    const base: Record<string, string> = {};
+    DEFAULT_VARIANT_KEYS.forEach((k) => {
+      base[k] = variantPieceMap?.[k] !== undefined ? String(variantPieceMap[k]) : "";
+    });
+    return base;
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const map: Record<string, number> = {};
+      for (const [k, v] of Object.entries(draft)) {
+        const n = parseFloat(v);
+        if (!isNaN(n) && n > 0) map[k] = n;
+      }
+      const payload = Object.keys(map).length > 0 ? map : null;
+      return updateExpensePresetPieceMap(presetId, payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      enqueueSnackbar("Piece map saved", { variant: "success" });
+      setOpen(false);
+    },
+    onError: () => enqueueSnackbar("Failed to save piece map", { variant: "error" }),
+  });
+
+  const displayLabel = (key: string) => (key === "_default" ? "Custom (1pc)" : key);
+
+  return (
+    <div className="border border-white/5 rounded-2xl overflow-hidden relative z-10">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-white/3 hover:bg-white/5 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <FaPuzzlePiece className="text-purple-400 text-xs" />
+          <span className="text-[10px] font-black uppercase tracking-widest text-white/50">
+            Piece Map
+          </span>
+          {variantPieceMap && (
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 uppercase tracking-wider">
+              Active
+            </span>
+          )}
+        </div>
+        <span className="text-[10px] font-black text-white/30 uppercase tracking-wider">
+          {open ? "▲" : "▼"}
+        </span>
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 pt-2 bg-black/20 flex flex-col gap-3">
+          <p className="text-[10px] text-white/30 font-medium">
+            How many pieces = 1 {rawMaterial} order item?
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            {DEFAULT_VARIANT_KEYS.map((key) => (
+              <div key={key} className="flex flex-col gap-1">
+                <label className="text-[9px] font-black uppercase tracking-widest text-white/40">
+                  {displayLabel(key)}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="—"
+                  value={draft[key]}
+                  onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-sm font-bold text-white/80 text-center focus:outline-none focus:border-purple-500/50 focus:bg-purple-500/5 transition-colors"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={() => saveMutation.mutate()}
+              disabled={saveMutation.isPending}
+              className="flex-1 py-2 rounded-xl bg-purple-500/20 border border-purple-500/30 text-purple-400 text-[11px] font-black uppercase tracking-wider hover:bg-purple-500/30 transition-colors disabled:opacity-50"
+            >
+              {saveMutation.isPending ? "Saving…" : "Save"}
+            </button>
+            <button
+              onClick={() => setOpen(false)}
+              className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white/40 text-[11px] font-black uppercase tracking-wider hover:bg-white/10 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InventoryCard({ item }: { item: InventoryItem }) {
   const [showHistory, setShowHistory] = useState(false);
   const [targetDays, setTargetDays] = useState(7);
   const unit = getConsumptionUnit(item.rawMaterial);
 
   const restockQty =
-    item.consumptionRate && item.dailyPlateRate > 0
-      ? (item.dailyPlateRate * targetDays * item.consumptionRate).toFixed(2)
+    item.consumptionRate && item.dailyUnitRate > 0
+      ? (item.dailyUnitRate * targetDays * item.consumptionRate).toFixed(2)
       : null;
 
   const isLowStock = item.prediction.daysRemaining !== null && item.prediction.daysRemaining <= 3;
@@ -228,7 +335,7 @@ function InventoryCard({ item }: { item: InventoryItem }) {
         <div className="grid grid-cols-3 gap-3 relative z-10">
           <div className="bg-[#1e293b] border border-white/5 rounded-2xl p-4 flex flex-col justify-center shadow-inner">
             <p className={labelClass}>Daily Avg</p>
-            <p className={`${valueClass} mt-1`}>{item.dailyPlateRate.toFixed(1)}</p>
+            <p className={`${valueClass} mt-1`}>{item.dailyUnitRate.toFixed(1)}</p>
             <p className="text-[10px] font-bold text-white/30 mt-0.5">{unit}/day</p>
           </div>
           <div className="bg-[#1e293b] border border-white/5 rounded-2xl p-4 flex flex-col justify-center shadow-inner">
@@ -241,7 +348,7 @@ function InventoryCard({ item }: { item: InventoryItem }) {
           <div className="bg-[#1e293b] border border-white/5 rounded-2xl p-4 flex flex-col justify-center shadow-inner">
             <p className={labelClass}>{unit} Sold</p>
             <p className={`${valueClass} mt-1`}>
-              {item.activePlatesConsumed !== null ? item.activePlatesConsumed : "—"}
+              {item.activeUnitsConsumed !== null ? item.activeUnitsConsumed : "—"}
             </p>
             <p className="text-[10px] font-bold text-white/30 mt-0.5">this cycle</p>
           </div>
@@ -263,7 +370,7 @@ function InventoryCard({ item }: { item: InventoryItem }) {
         </div>
 
         {/* Restock recommendation */}
-        {item.consumptionRate !== null && item.dailyPlateRate > 0 && (
+        {item.consumptionRate !== null && item.dailyUnitRate > 0 && (
           <div className="bg-blue-500/5 border border-blue-500/10 rounded-2xl p-5 relative z-10">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
@@ -293,6 +400,13 @@ function InventoryCard({ item }: { item: InventoryItem }) {
             </div>
           </div>
         )}
+
+        {/* Piece map config */}
+        <PieceMapEditor
+          presetId={item.presetId}
+          rawMaterial={item.rawMaterial}
+          variantPieceMap={item.variantPieceMap}
+        />
 
         {/* Cycles count */}
         <div className="flex items-center justify-between mt-auto pt-2 relative z-10">

@@ -275,19 +275,21 @@ export interface StockCycle {
   quantityKg: number;
   startDate: string;
   endDate: string | null;
-  platesConsumed: number;
+  unitsConsumed: number;
   isEarlyRestock: boolean;
   cycleStatus: "active" | "closed";
   createdAt: string;
 }
 
 export interface InventoryItem {
+  presetId: string;
   rawMaterial: string;
+  variantPieceMap: Record<string, number> | null;
   activeCycle: StockCycle | null;
-  activePlatesConsumed: number | null;
+  activeUnitsConsumed: number | null;
   closedCyclesCount: number;
   consumptionRate: number | null;
-  dailyPlateRate: number;
+  dailyUnitRate: number;
   prediction: {
     daysRemaining: number | null;
     restockFor7Days: number | null;
@@ -312,6 +314,7 @@ export interface ExpensePreset {
   isStaffLinked: boolean;
   order: number;
   isActive: boolean;
+  variantPieceMap: Record<string, number> | null;
   createdAt: string;
   updatedAt: string;
 }

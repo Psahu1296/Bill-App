@@ -2,60 +2,59 @@ import { Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import createHttpError from "http-errors";
 import { CustomRequest as Request } from "../types";
+import { ExpensePreset } from "../models";
 import * as stockCycleRepo from "../repositories/stockCycleRepo";
 
-/** kg/plate avg from all closed non-early-restock cycles */
+type VariantPieceMap = Record<string, number> | null | undefined;
+
+/** kg/unit avg from all closed non-early-restock cycles */
 function computeConsumptionRate(
-  cycles: { quantityKg: number; platesConsumed: number }[]
+  cycles: { quantityKg: number; unitsConsumed: number }[]
 ): number | null {
-  const valid = cycles.filter((c) => c.platesConsumed > 0);
+  const valid = cycles.filter((c) => c.unitsConsumed > 0);
   if (!valid.length) return null;
-  const rates = valid.map((c) => c.quantityKg / c.platesConsumed);
+  const rates = valid.map((c) => c.quantityKg / c.unitsConsumed);
   return rates.reduce((a, b) => a + b, 0) / rates.length;
 }
 
 const getInventoryDashboard = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { ExpensePreset } = await import("../models");
     const rawMaterialPresets = await ExpensePreset.find({
       category: "Raw Material",
       isActive: true,
     })
-      .select("name")
-      .lean() as { name: string }[];
+      .select("_id name variantPieceMap")
+      .lean() as unknown as { _id: { toString(): string }; name: string; variantPieceMap: VariantPieceMap }[];
 
     const results = await Promise.all(
-      rawMaterialPresets.map(async ({ name: rawMaterial }) => {
+      rawMaterialPresets.map(async ({ _id: presetDoc, name: rawMaterial, variantPieceMap }) => {
         const [activeCycle, closedCycles, dailyRate] = await Promise.all([
           stockCycleRepo.findActiveCycle(rawMaterial),
           stockCycleRepo.findClosedCycles(rawMaterial),
-          stockCycleRepo.dailyPlateRate(rawMaterial),
+          stockCycleRepo.dailyUnitRate(rawMaterial, variantPieceMap),
         ]);
 
         const consumptionRate = computeConsumptionRate(
-          closedCycles as { quantityKg: number; platesConsumed: number }[]
+          closedCycles as unknown as { quantityKg: number; unitsConsumed: number }[]
         );
 
-        let activePlates: number | null = null;
+        let activeUnits: number | null = null;
         let daysRemaining: number | null = null;
         let restockFor7Days: number | null = null;
         let restockFor14Days: number | null = null;
 
         if (activeCycle) {
-          const cycle = activeCycle as { startDate: Date; quantityKg: number; _id: unknown };
-          activePlates = await stockCycleRepo.activePlatesConsumed(
+          const cycle = activeCycle as unknown as { startDate: Date; quantityKg: number };
+          activeUnits = await stockCycleRepo.activeUnitsConsumed(
             rawMaterial,
-            new Date(cycle.startDate)
+            new Date(cycle.startDate),
+            variantPieceMap
           );
 
           if (consumptionRate && dailyRate > 0) {
-            const totalPlatesInStock = cycle.quantityKg / consumptionRate;
-            const remainingPlates = totalPlatesInStock - activePlates;
-            daysRemaining = remainingPlates / dailyRate;
-          } else if (dailyRate > 0) {
-            // no consumption rate yet — use raw daily rate for a rough estimate
-            // treat 1 plate = 1 unit as a stand-in (will refine once first cycle closes)
-            daysRemaining = null;
+            const totalUnitsInStock = cycle.quantityKg / consumptionRate;
+            const remainingUnits = totalUnitsInStock - activeUnits;
+            daysRemaining = remainingUnits / dailyRate;
           }
         }
 
@@ -65,12 +64,14 @@ const getInventoryDashboard = async (req: Request, res: Response, next: NextFunc
         }
 
         return {
+          presetId: presetDoc.toString(),
           rawMaterial,
+          variantPieceMap: variantPieceMap ?? null,
           activeCycle: activeCycle ?? null,
-          activePlatesConsumed: activePlates,
+          activeUnitsConsumed: activeUnits,
           closedCyclesCount: closedCycles.length,
           consumptionRate: consumptionRate !== null ? parseFloat(consumptionRate.toFixed(4)) : null,
-          dailyPlateRate: parseFloat(dailyRate.toFixed(2)),
+          dailyUnitRate: parseFloat(dailyRate.toFixed(2)),
           prediction: {
             daysRemaining: daysRemaining !== null ? parseFloat(daysRemaining.toFixed(1)) : null,
             restockFor7Days,
@@ -88,7 +89,7 @@ const getInventoryDashboard = async (req: Request, res: Response, next: NextFunc
 
 const getCycleHistory = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { rawMaterial } = req.params;
+    const rawMaterial = req.params.rawMaterial as string;
     if (!rawMaterial) return next(createHttpError(400, "rawMaterial param required"));
     const cycles = await stockCycleRepo.findAllCycles(rawMaterial);
     res.status(200).json({ success: true, data: cycles });
@@ -99,7 +100,7 @@ const getCycleHistory = async (req: Request, res: Response, next: NextFunction) 
 
 const updateCycle = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     if (!id || !mongoose.isValidObjectId(id)) {
       return next(createHttpError(400, "Invalid cycle ID"));
     }

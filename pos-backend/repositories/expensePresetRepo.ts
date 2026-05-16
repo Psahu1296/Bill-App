@@ -16,17 +16,18 @@ const DEFAULT_PRESETS = [
 function toApi(doc: any) {
   if (!doc) return null;
   return {
-    _id:           String(doc._id),
-    name:          doc.name,
-    category:      doc.category,
-    type:          doc.type,
-    lastPrice:     doc.lastPrice ?? 0,
-    priceHistory:  (doc.priceHistory ?? []) as { amount: number; date: string }[],
-    isStaffLinked: doc.isStaffLinked ?? false,
-    order:         doc.order ?? 0,
-    isActive:      doc.isActive ?? true,
-    createdAt:     doc.createdAt,
-    updatedAt:     doc.updatedAt,
+    _id:             String(doc._id),
+    name:            doc.name,
+    category:        doc.category,
+    type:            doc.type,
+    lastPrice:       doc.lastPrice ?? 0,
+    priceHistory:    (doc.priceHistory ?? []) as { amount: number; date: string }[],
+    isStaffLinked:   doc.isStaffLinked ?? false,
+    order:           doc.order ?? 0,
+    isActive:        doc.isActive ?? true,
+    variantPieceMap: doc.variantPieceMap ?? null,
+    createdAt:       doc.createdAt,
+    updatedAt:       doc.updatedAt,
   };
 }
 
@@ -69,6 +70,20 @@ export async function remove(id: string) {
   if (!mongoose.isValidObjectId(id)) return null;
   // Soft-delete so price history is preserved
   const doc = await ExpensePreset.findByIdAndUpdate(id, { $set: { isActive: false } }, { new: true }).lean();
+  return toApi(doc);
+}
+
+export async function findByName(name: string) {
+  return ExpensePreset.findOne({ name, isActive: true }).lean();
+}
+
+export async function updateVariantPieceMap(id: string, variantPieceMap: Record<string, number> | null) {
+  if (!mongoose.isValidObjectId(id)) return null;
+  const doc = await ExpensePreset.findByIdAndUpdate(
+    id,
+    { $set: { variantPieceMap } },
+    { new: true }
+  ).lean();
   return toApi(doc);
 }
 

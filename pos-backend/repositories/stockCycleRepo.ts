@@ -1,5 +1,7 @@
 import { StockCycle, Dish, Order } from "../models";
 
+type VariantPieceMap = Record<string, number> | null | undefined;
+
 /** Dish names that map to a raw material (explicit tag first, name-match fallback) */
 async function getMatchingDishNames(rawMaterial: string): Promise<string[]> {
   const keyword = rawMaterial.toLowerCase();
@@ -11,12 +13,27 @@ async function getMatchingDishNames(rawMaterial: string): Promise<string[]> {
   })
     .select("name")
     .lean();
-  return (dishes as { name: string }[]).map((d) => d.name);
+  return (dishes as unknown as { name: string }[]).map((d) => d.name);
 }
 
-/** Count plates of a raw material sold in completed orders within a date range */
-async function countPlates(
+/** Resolve how many units one order item contributes using the variant piece map */
+function resolveUnits(
+  variantSize: string | undefined,
+  quantity: number,
+  variantPieceMap: VariantPieceMap
+): number {
+  if (!variantPieceMap) return quantity;
+  const piecesPerUnit =
+    (variantSize ? variantPieceMap[variantSize] : undefined) ??
+    variantPieceMap["_default"] ??
+    1;
+  return quantity * piecesPerUnit;
+}
+
+/** Count units consumed for a raw material in completed orders within a date range */
+async function countUnits(
   dishNames: string[],
+  variantPieceMap: VariantPieceMap,
   startDate: Date,
   endDate?: Date
 ): Promise<number> {
@@ -25,11 +42,16 @@ async function countPlates(
     orderStatus: "Completed",
     createdAt: { $gte: startDate, ...(endDate ? { $lte: endDate } : {}) },
   };
-  const orders = await Order.find(match).select("items").lean() as { items: { name: string; quantity?: number }[] }[];
+  const orders = await Order.find(match)
+    .select("items")
+    .lean() as unknown as { items: { name: string; quantity?: number; variantSize?: string }[] }[];
+
   let total = 0;
   for (const order of orders) {
     for (const item of order.items) {
-      if (dishNames.includes(item.name)) total += item.quantity ?? 1;
+      if (dishNames.includes(item.name)) {
+        total += resolveUnits(item.variantSize, item.quantity ?? 1, variantPieceMap);
+      }
     }
   }
   return total;
@@ -50,18 +72,19 @@ export async function findActiveCycle(rawMaterial: string) {
   return StockCycle.findOne({ rawMaterial, cycleStatus: "active" }).lean();
 }
 
-/** Close a cycle: record endDate + platesConsumed from order history */
+/** Close a cycle: record endDate + unitsConsumed from order history */
 export async function closeCycle(
   cycleId: string,
   endDate: Date,
   rawMaterial: string,
-  startDate: Date
+  startDate: Date,
+  variantPieceMap: VariantPieceMap
 ) {
   const dishNames = await getMatchingDishNames(rawMaterial);
-  const platesConsumed = await countPlates(dishNames, startDate, endDate);
+  const unitsConsumed = await countUnits(dishNames, variantPieceMap, startDate, endDate);
   return StockCycle.findByIdAndUpdate(
     cycleId,
-    { cycleStatus: "closed", endDate, platesConsumed },
+    { cycleStatus: "closed", endDate, unitsConsumed },
     { new: true }
   ).lean();
 }
@@ -71,7 +94,7 @@ export async function findClosedCycles(rawMaterial: string) {
     rawMaterial,
     cycleStatus: "closed",
     isEarlyRestock: false,
-    platesConsumed: { $gt: 0 },
+    unitsConsumed: { $gt: 0 },
   })
     .sort({ endDate: -1 })
     .lean();
@@ -85,17 +108,24 @@ export async function patchCycle(id: string, updates: Partial<{ isEarlyRestock: 
   return StockCycle.findByIdAndUpdate(id, updates, { new: true }).lean();
 }
 
-/** Plates consumed so far in the active cycle (live query, not stored) */
-export async function activePlatesConsumed(rawMaterial: string, startDate: Date): Promise<number> {
+/** Units consumed so far in the active cycle (live query) */
+export async function activeUnitsConsumed(
+  rawMaterial: string,
+  startDate: Date,
+  variantPieceMap: VariantPieceMap
+): Promise<number> {
   const dishNames = await getMatchingDishNames(rawMaterial);
-  return countPlates(dishNames, startDate);
+  return countUnits(dishNames, variantPieceMap, startDate);
 }
 
-/** 14-day rolling plate count for a raw material */
-export async function dailyPlateRate(rawMaterial: string): Promise<number> {
+/** 14-day rolling unit rate for a raw material */
+export async function dailyUnitRate(
+  rawMaterial: string,
+  variantPieceMap: VariantPieceMap
+): Promise<number> {
   const since = new Date();
   since.setDate(since.getDate() - 14);
   const dishNames = await getMatchingDishNames(rawMaterial);
-  const total = await countPlates(dishNames, since);
+  const total = await countUnits(dishNames, variantPieceMap, since);
   return total / 14;
 }

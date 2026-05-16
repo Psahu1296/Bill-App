@@ -278,14 +278,15 @@ const priceHistoryEntrySchema = new Schema(
 
 const expensePresetSchema = new Schema(
   {
-    name:          { type: String, required: true, unique: true },
-    category:      { type: String, required: true },
-    type:          { type: String, required: true },
-    lastPrice:     { type: Number, default: 0 },
-    priceHistory:  { type: [priceHistoryEntrySchema], default: [] },
-    isStaffLinked: { type: Boolean, default: false },
-    order:         { type: Number, default: 0 },
-    isActive:      { type: Boolean, default: true },
+    name:           { type: String, required: true, unique: true },
+    category:       { type: String, required: true },
+    type:           { type: String, required: true },
+    lastPrice:      { type: Number, default: 0 },
+    priceHistory:   { type: [priceHistoryEntrySchema], default: [] },
+    isStaffLinked:  { type: Boolean, default: false },
+    order:          { type: Number, default: 0 },
+    isActive:       { type: Boolean, default: true },
+    variantPieceMap: { type: Schema.Types.Mixed, default: null },
   },
   baseOptions
 );
@@ -326,7 +327,7 @@ const stockCycleSchema = new Schema(
     quantityKg:     { type: Number, required: true },
     startDate:      { type: Date, required: true },
     endDate:        { type: Date, default: null },
-    platesConsumed: { type: Number, default: 0 },
+    unitsConsumed:  { type: Number, default: 0 },
     isEarlyRestock: { type: Boolean, default: false },
     cycleStatus:    { type: String, default: "active" }, // "active" | "closed"
   },

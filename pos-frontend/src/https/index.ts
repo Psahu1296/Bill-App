@@ -305,3 +305,6 @@ export const getInventoryCycleHistory = (rawMaterial: string) =>
 
 export const updateInventoryCycle = (id: string, data: { isEarlyRestock: boolean }) =>
   axiosWrapper.patch(`/api/inventory/cycles/${id}`, data);
+
+export const updateExpensePresetPieceMap = (id: string, variantPieceMap: Record<string, number> | null) =>
+  axiosWrapper.patch(`/api/expense-presets/${id}/piece-map`, { variantPieceMap });

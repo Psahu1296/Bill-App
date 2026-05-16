@@ -15,17 +15,25 @@ A dish whose primary ingredient is a specific Raw Material. Identified by `dish.
 _Avoid_: Fish dish, chicken item, ingredient-linked dish
 
 **Consumption Rate**:
-The average kg of a Raw Material consumed per plate sold, derived from closed non-early-restock Stock Cycles. Shows "—" until at least one cycle closes.
+The average kg of a Raw Material consumed per Unit sold, derived from closed non-early-restock Stock Cycles. Shows "—" until at least one cycle closes.
 _Avoid_: Usage rate, kg per serving, average consumption
 
-**Daily Plate Rate**:
-The 14-day rolling average of Raw Material Dish plates sold per day for a given Raw Material. Used as the velocity input for Stock Prediction.
-_Avoid_: Daily average, sales rate, demand rate
+**Daily Unit Rate**:
+The 14-day rolling average of Units sold per day for a given Raw Material. Used as the velocity input for Stock Prediction.
+_Avoid_: Daily plate rate, daily average, sales rate, demand rate
+
+**Unit**:
+The base counting measure for a Raw Material's consumption. For materials without a Variant Piece Map, 1 order item = 1 Unit (plate). For materials with a Variant Piece Map (e.g., Fish), Units are pieces — a Full plate = 4 Units, Half = 2 Units, unmapped = 1 Unit.
+_Avoid_: Plate, piece, serving (use Unit as the canonical term in code; display label varies per material)
+
+**Variant Piece Map**:
+A per-Raw-Material config stored on `ExpensePreset.variantPieceMap` that defines how many Units (pieces) each dish variant contributes. Keys are `variantSize` strings (`"Full"`, `"Half"`) plus `"_default"` as fallback. Absent map = treat every order item as 1 Unit.
+_Avoid_: Piece config, serving size map, portion mapping
 
 ### Stock Cycles
 
 **Stock Cycle**:
-The inventory period that begins when a Raw Material is purchased and ends when the same Raw Material is purchased again. Tracks quantity bought and plates consumed during that window.
+The inventory period that begins when a Raw Material is purchased and ends when the same Raw Material is purchased again. Tracks quantity bought and Units consumed during that window.
 _Avoid_: Stock period, inventory batch, replenishment window
 
 **Active Cycle**:
@@ -33,7 +41,7 @@ A Stock Cycle with no end date — the current open window for a Raw Material.
 _Avoid_: Open cycle, current stock, live batch
 
 **Closed Cycle**:
-A Stock Cycle that has ended (next purchase recorded). Has a final `platesConsumed` count and contributes to Consumption Rate unless flagged as Early Restock.
+A Stock Cycle that has ended (next purchase recorded). Has a final `unitsConsumed` count and contributes to Consumption Rate unless flagged as Early Restock.
 _Avoid_: Completed cycle, finished batch
 
 **Early Restock**:
