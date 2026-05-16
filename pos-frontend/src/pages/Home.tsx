@@ -65,13 +65,18 @@ const Home: React.FC = () => {
   });
 
   const earningsData = earningsRes?.data?.data as { todayEarning?: number; percentageChange?: number } | undefined;
-  const earnings = Math.floor(Number(earningsData?.todayEarning ?? 0));
   const earningPct = earningsData?.percentageChange ?? 0;
   const todayExpenses = Math.floor(Number((todayExpensesRes?.data as { total?: number })?.total ?? 0));
-  const netEarnings = earnings - todayExpenses;
 
   const todayOrders: Order[] = useMemo(() => (todayOrdersRes?.data?.data as Order[]) ?? [], [todayOrdersRes]);
   const yesterdayOrders: Order[] = useMemo(() => (yesterdayOrdersRes?.data?.data as Order[]) ?? [], [yesterdayOrdersRes]);
+
+  // Derived from live order data — stays in sync with Orders page (no DailyEarning cache lag)
+  const earnings = useMemo(
+    () => Math.floor(todayOrders.reduce((s, o) => s + (o.amountPaid || 0), 0)),
+    [todayOrders]
+  );
+  const netEarnings = earnings - todayExpenses;
 
   const stats = useMemo(() => {
     const active = todayOrders.filter((o) => o.orderStatus === "In Progress" || o.orderStatus === "Ready").length;
