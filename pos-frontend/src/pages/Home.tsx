@@ -3,7 +3,6 @@ import BottomNav from "../components/shared/BottomNav";
 import Greetings from "../components/home/Greetings";
 import RecentOrders from "../components/home/RecentOrders";
 import OnlineOrders from "../components/home/OnlineOrders";
-import PopularDishes from "../components/home/PopularDishes";
 import NewOrderModal from "../components/home/NewOrderModal";
 import QuickConsumableModal from "../components/home/QuickConsumableModal";
 import { getDailyEarnings, getOrders, getAllExpenses, getDishRequests, getPreOrders } from "../https";
@@ -328,12 +327,11 @@ const Home: React.FC = () => {
         </div>
 
         {/* ── Main content ── */}
-        <div className="grid grid-cols-12 gap-8 pb-10">
-          <div className="col-span-12 xl:col-span-7 flex flex-col gap-8">
+        <div className="grid grid-cols-12 gap-8 pb-10 items-stretch">
+          <div className="col-span-12 xl:col-span-7 flex flex-col h-full">
             <RecentOrders />
-            <PopularDishes />
           </div>
-          <div className="col-span-12 xl:col-span-5 flex flex-col gap-8">
+          <div className="col-span-12 xl:col-span-5 flex flex-col h-full">
             <OnlineOrders />
           </div>
         </div>

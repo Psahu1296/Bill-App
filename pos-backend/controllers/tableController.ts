@@ -54,4 +54,18 @@ const updateTable = async (req: Request, res: Response, next: NextFunction) => {
   }
 };
 
-export { addTable, getTables, updateTable };
+const deleteTable = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = req.params.id as string;
+    if (!id || !mongoose.isValidObjectId(id)) {
+      return next(createHttpError(400, "Invalid table ID format!"));
+    }
+    const table = await tableRepo.remove(id);
+    if (!table) return next(createHttpError(404, "Table not found!"));
+    res.status(200).json({ success: true, message: "Table deleted!" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export { addTable, getTables, updateTable, deleteTable };

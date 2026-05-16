@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaTimes, FaUtensils, FaPlus, FaMinus, FaTrash } from "react-icons/fa";
+import { FaTimes, FaUtensils, FaPlus, FaMinus, FaTrash, FaCheckCircle, FaStar, FaGlobe, FaEyeSlash } from "react-icons/fa";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { enqueueSnackbar } from "notistack";
 import { useForm, useFieldArray } from "react-hook-form";
@@ -11,6 +11,12 @@ const DISH_TYPES = ["veg", "non-veg"];
 const DISH_CATEGORIES = ["rice", "roti", "sabji", "drinks", "snacks", "other"];
 const DISH_VARIANT_SIZES = ["Single", "Half", "Full", "Regular", "Small", "Large"];
 
+const VISIBILITY_SETTINGS = [
+  { id: "isAvailable", label: "Available for Order", icon: FaCheckCircle },
+  { id: "isFrequent", label: "Frequently Ordered", icon: FaStar },
+  { id: "isOnlineAvailable", label: "Available Online", icon: FaGlobe },
+  { id: "excludeFromPopular", label: "Hide from Popular", icon: FaEyeSlash },
+] as const;
 interface DishFormData {
   image: string;
   name: string;
@@ -22,6 +28,7 @@ interface DishFormData {
   isAvailable: boolean;
   isFrequent: boolean;
   isOnlineAvailable: boolean;
+  excludeFromPopular: boolean;
 }
 
 interface AddDishModalProps {
@@ -61,6 +68,7 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
       isAvailable: true,
       isFrequent: false,
       isOnlineAvailable: false,
+      excludeFromPopular: false,
     },
   });
 
@@ -134,6 +142,7 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
           isAvailable: dish.isAvailable !== undefined ? dish.isAvailable : true,
           isFrequent: dish.isFrequent !== undefined ? dish.isFrequent : false,
           isOnlineAvailable: dish.isOnlineAvailable !== undefined ? dish.isOnlineAvailable : false,
+          excludeFromPopular: dish.excludeFromPopular ?? false,
         });
       } else {
         reset();
@@ -144,42 +153,42 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
   const isActionPending = isFormSubmitting || addDishMutation.isPending || updateDishMutation.isPending;
 
   const inputClass =
-    "w-full glass-input rounded-xl px-4 py-2.5 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50 placeholder:text-dhaba-muted/50";
+    "w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm font-medium focus:outline-none focus:ring-2 ring-blue-500/50 placeholder:text-white/20 transition-all";
   const selectClass =
-    "w-full glass-input rounded-xl px-4 py-2.5 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50 appearance-none";
-  const labelClass = "block text-xs font-bold text-dhaba-muted uppercase tracking-wider mb-1.5";
+    "w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm font-medium focus:outline-none focus:ring-2 ring-blue-500/50 appearance-none transition-all";
+  const labelClass = "block text-[10px] font-black text-white/40 uppercase tracking-widest mb-1.5 ml-1";
 
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-dhaba-bg/80 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className="glass-card w-full max-w-xl rounded-3xl overflow-hidden max-h-[90vh] flex flex-col"
+            className="glass-card w-full max-w-4xl rounded-[2rem] overflow-hidden max-h-[90vh] flex flex-col shadow-glow border border-white/10 relative"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-5 border-b border-dhaba-border/20 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-dhaba-accent/10 flex items-center justify-center">
-                  <FaUtensils className="text-dhaba-accent" />
+            <div className="flex items-center justify-between px-8 py-6 border-b border-white/5 shrink-0 bg-black/20">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.15)]">
+                  <FaUtensils className="text-blue-400 text-lg" />
                 </div>
                 <div>
-                  <h2 className="font-display text-xl font-bold text-dhaba-text">
+                  <h2 className="font-display text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-white/70 tracking-wide">
                     {isEditMode ? "Edit Dish" : "Add New Dish"}
                   </h2>
-                  <p className="text-xs text-dhaba-muted">
+                  <p className="text-[11px] font-bold text-white/40 uppercase tracking-widest mt-0.5">
                     {isEditMode ? "Update dish details" : "Fill in the dish details below"}
                   </p>
                 </div>
               </div>
               <button
                 onClick={onClose}
-                className="p-2 hover:bg-dhaba-danger/10 rounded-xl transition-colors group"
+                className="p-2.5 bg-white/5 hover:bg-red-500/20 border border-white/5 hover:border-red-500/30 rounded-xl transition-all group"
               >
-                <FaTimes className="text-dhaba-muted group-hover:text-dhaba-danger" />
+                <FaTimes className="text-white/40 group-hover:text-red-400" />
               </button>
             </div>
 
@@ -187,82 +196,76 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
             <form
               id="dish-form"
               onSubmit={handleSubmit(onSubmit)}
-              className="overflow-y-auto flex-1 px-6 py-5 space-y-5"
+              className="overflow-y-auto flex-1 px-8 py-6 space-y-6 scrollbar-hide relative z-10"
             >
-              {/* Name */}
-              <div>
-                <label className={labelClass}>Dish Name *</label>
-                <input
-                  type="text"
-                  {...register("name", { required: "Dish name is required" })}
-                  className={inputClass}
-                  placeholder="e.g. Paneer Butter Masala"
-                />
-                {errors.name && <p className="text-dhaba-danger text-xs mt-1">{errors.name.message}</p>}
-              </div>
-
-              {/* Image URL (optional) */}
-              <div>
-                <label className={labelClass}>Image URL <span className="normal-case text-dhaba-muted font-normal">(optional)</span></label>
-                <input
-                  type="text"
-                  {...register("image")}
-                  className={inputClass}
-                  placeholder="https://example.com/image.jpg"
-                />
-              </div>
-
-              {/* Type + Category row */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* Primary Details Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Name */}
                 <div>
-                  <label className={labelClass}>Veg / Non-Veg *</label>
-                  <select
-                    {...register("type", { required: true })}
-                    className={selectClass}
-                  >
-                    {DISH_TYPES.map((t) => (
-                      <option key={t} value={t} className="bg-dhaba-surface text-dhaba-text">
-                        {t === "non-veg" ? "Non-Veg" : "Veg"}
-                      </option>
-                    ))}
-                  </select>
+                  <label className={labelClass}>Dish Name *</label>
+                  <input
+                    type="text"
+                    {...register("name", { required: "Dish name is required" })}
+                    className={inputClass}
+                    placeholder="e.g. Paneer Butter Masala"
+                  />
+                  {errors.name && <p className="text-red-400 text-[10px] font-bold mt-1.5 ml-1">{errors.name.message}</p>}
                 </div>
+
+                {/* Category */}
                 <div>
                   <label className={labelClass}>Category *</label>
-                  <select
-                    {...register("category", { required: true })}
-                    className={selectClass}
-                  >
+                  <select {...register("category", { required: true })} className={selectClass}>
                     {DISH_CATEGORIES.map((c) => (
-                      <option key={c} value={c} className="bg-dhaba-surface text-dhaba-text">
+                      <option key={c} value={c} className="bg-[#1a1f2e] text-white">
                         {c.charAt(0).toUpperCase() + c.slice(1)}
                       </option>
                     ))}
                   </select>
                 </div>
+
+                {/* Type */}
+                <div>
+                  <label className={labelClass}>Dietary Type *</label>
+                  <select {...register("type", { required: true })} className={selectClass}>
+                    {DISH_TYPES.map((t) => (
+                      <option key={t} value={t} className="bg-[#1a1f2e] text-white">
+                        {t === "non-veg" ? "Non-Veg" : "Veg"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Image URL */}
+                <div>
+                  <label className={labelClass}>Image URL <span className="normal-case opacity-50">(optional)</span></label>
+                  <input
+                    type="text"
+                    {...register("image")}
+                    className={inputClass}
+                    placeholder="https://example.com/image.jpg"
+                  />
+                </div>
               </div>
 
               {/* Variants table */}
-              <div>
-                <label className={labelClass}>Variants / Pricing *</label>
-                <div className="rounded-2xl border border-dhaba-border/30 overflow-hidden">
+              <div className="pt-2">
+                <label className={labelClass}>Variants & Pricing *</label>
+                <div className="rounded-2xl border border-white/10 overflow-hidden bg-black/10">
                   {/* Table header */}
-                  <div className="grid grid-cols-[1.2fr_2fr_1.2fr_1.2fr_2rem] gap-2 px-4 py-2 bg-dhaba-surface/60 border-b border-dhaba-border/20">
-                    <span className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">Size</span>
-                    <span className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">Price (₹)</span>
-                    <span className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">
-                      MRP <span className="normal-case font-normal opacity-60">(opt)</span>
-                    </span>
-                    <span className="text-[10px] font-bold text-dhaba-muted uppercase tracking-wider">
-                      Online <span className="normal-case font-normal opacity-60">(opt)</span>
-                    </span>
+                  <div className="grid grid-cols-[1.5fr_2fr_1.5fr_1.5fr_3rem] gap-3 px-5 py-3 bg-white/5 border-b border-white/5">
+                    <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">Size</span>
+                    <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">Base Price</span>
+                    <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">MRP <span className="opacity-50">(Opt)</span></span>
+                    <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">Online <span className="opacity-50">(Opt)</span></span>
                     <span />
                   </div>
 
                   {/* Table rows */}
-                  <div className="divide-y divide-dhaba-border/10">
+                  <div className="divide-y divide-white/5">
                     {fields.map((field, index) => (
-                      <div key={field.id} className="grid grid-cols-[1.2fr_2fr_1.2fr_1.2fr_2rem] gap-2 items-center px-4 py-2.5">
+                      <div key={field.id} className="grid grid-cols-[1.5fr_2fr_1.5fr_1.5fr_3rem] gap-3 items-start px-5 py-3">
+                        {/* Size */}
                         <div>
                           <select
                             {...register(`variants.${index}.size`, {
@@ -272,19 +275,21 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
                                 return all.filter((v) => v.size === value).length <= 1 || "Duplicate";
                               },
                             })}
-                            className="w-full glass-input rounded-lg px-3 py-2 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50 appearance-none"
+                            className={`${selectClass} py-2 text-xs`}
                           >
-                            <option value="" disabled className="bg-dhaba-surface">Select</option>
+                            <option value="" disabled className="bg-[#1a1f2e]">Select</option>
                             {DISH_VARIANT_SIZES.map((s) => (
-                              <option key={s} value={s} className="bg-dhaba-surface text-dhaba-text">{s}</option>
+                              <option key={s} value={s} className="bg-[#1a1f2e] text-white">{s}</option>
                             ))}
                           </select>
                           {errors.variants?.[index]?.size && (
-                            <p className="text-dhaba-danger text-[10px] mt-0.5">{errors.variants[index]?.size?.message}</p>
+                            <p className="text-red-400 text-[9px] font-bold mt-1 ml-1">{errors.variants[index]?.size?.message}</p>
                           )}
                         </div>
+
+                        {/* Base Price */}
                         <div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1.5">
                             <input
                               type="number"
                               step="1"
@@ -293,35 +298,20 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
                                 min: { value: 0, message: "≥ 0" },
                                 valueAsNumber: true,
                               })}
-                              className="w-full glass-input rounded-lg px-3 py-2 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50"
+                              className={`${inputClass} py-2 text-xs`}
                               placeholder="0"
                             />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const cur = Number(getValues(`variants.${index}.price`)) || 0;
-                                setValue(`variants.${index}.price`, Math.max(0, cur - 10), { shouldValidate: true });
-                              }}
-                              className="shrink-0 px-2 py-2 rounded-lg bg-dhaba-surface border border-dhaba-border/30 text-dhaba-muted text-xs font-bold hover:text-dhaba-danger hover:border-dhaba-danger/30 transition-colors flex items-center gap-0.5"
-                            >
-                              <FaMinus size={8} />10
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const cur = Number(getValues(`variants.${index}.price`)) || 0;
-                                setValue(`variants.${index}.price`, cur + 10, { shouldValidate: true });
-                              }}
-                              className="shrink-0 px-2 py-2 rounded-lg bg-dhaba-accent/10 text-dhaba-accent text-xs font-bold hover:bg-dhaba-accent/20 transition-colors flex items-center gap-0.5"
-                            >
-                              <FaPlus size={8} />10
-                            </button>
+                            <div className="flex flex-col gap-0.5 shrink-0">
+                              <button type="button" onClick={() => { const cur = Number(getValues(`variants.${index}.price`)) || 0; setValue(`variants.${index}.price`, cur + 10, { shouldValidate: true }); }} className="h-4 w-6 rounded bg-white/10 hover:bg-blue-500/30 flex items-center justify-center transition-colors text-[8px] text-white/70 hover:text-blue-400"><FaPlus /></button>
+                              <button type="button" onClick={() => { const cur = Number(getValues(`variants.${index}.price`)) || 0; setValue(`variants.${index}.price`, Math.max(0, cur - 10), { shouldValidate: true }); }} className="h-4 w-6 rounded bg-white/10 hover:bg-red-500/30 flex items-center justify-center transition-colors text-[8px] text-white/70 hover:text-red-400"><FaMinus /></button>
+                            </div>
                           </div>
                           {errors.variants?.[index]?.price && (
-                            <p className="text-dhaba-danger text-[10px] mt-0.5">{errors.variants[index]?.price?.message}</p>
+                            <p className="text-red-400 text-[9px] font-bold mt-1 ml-1">{errors.variants[index]?.price?.message}</p>
                           )}
                         </div>
-                        {/* MRP cell */}
+
+                        {/* MRP */}
                         <div>
                           <input
                             type="number"
@@ -332,20 +322,18 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
                                 if (value === "" || value === undefined || value === null) return true;
                                 const mp = Number(value);
                                 const p  = Number(getValues(`variants.${index}.price`));
-                                return mp > p || "Must be > price";
+                                return mp > p || "Must > Price";
                               },
                             })}
-                            className="w-full glass-input rounded-lg px-3 py-2 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50"
-                            placeholder="e.g. 300"
+                            className={`${inputClass} py-2 text-xs`}
+                            placeholder="Opt."
                           />
                           {errors.variants?.[index]?.markedPrice && (
-                            <p className="text-dhaba-danger text-[10px] mt-0.5">
-                              {errors.variants[index]?.markedPrice?.message}
-                            </p>
+                            <p className="text-red-400 text-[9px] font-bold mt-1 ml-1">{errors.variants[index]?.markedPrice?.message}</p>
                           )}
                         </div>
 
-                        {/* Online Price cell */}
+                        {/* Online Price */}
                         <div>
                           <input
                             type="number"
@@ -353,93 +341,98 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
                             {...register(`variants.${index}.onlinePrice`, {
                               min: { value: 0, message: "≥ 0" },
                             })}
-                            className="w-full glass-input rounded-lg px-3 py-2 text-dhaba-text text-sm focus:outline-none focus:ring-1 ring-dhaba-accent/50"
-                            placeholder="e.g. 250"
+                            className={`${inputClass} py-2 text-xs`}
+                            placeholder="Opt."
                           />
                           {errors.variants?.[index]?.onlinePrice && (
-                            <p className="text-dhaba-danger text-[10px] mt-0.5">
-                              {errors.variants[index]?.onlinePrice?.message}
-                            </p>
+                            <p className="text-red-400 text-[9px] font-bold mt-1 ml-1">{errors.variants[index]?.onlinePrice?.message}</p>
                           )}
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => remove(index)}
-                          disabled={fields.length === 1}
-                          className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-dhaba-danger/15 text-dhaba-muted hover:text-dhaba-danger transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                          <FaTrash size={12} />
-                        </button>
+                        {/* Delete */}
+                        <div className="flex justify-end pt-1">
+                          <button
+                            type="button"
+                            onClick={() => remove(index)}
+                            disabled={fields.length === 1}
+                            className="h-8 w-8 flex items-center justify-center rounded-xl bg-white/5 hover:bg-red-500/20 text-white/30 hover:text-red-400 transition-colors border border-white/5 disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            <FaTrash size={12} />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
 
                   {/* Add row */}
-                  <div className="px-4 py-2.5 border-t border-dhaba-border/20 bg-dhaba-surface/30">
+                  <div className="px-5 py-3 border-t border-white/5 bg-black/20">
                     <button
                       type="button"
                       onClick={() => append({ size: "", price: "", markedPrice: "", onlinePrice: "" })}
-                      className="flex items-center gap-1.5 text-dhaba-accent text-xs font-bold hover:underline"
+                      className="flex items-center gap-2 text-blue-400 text-[11px] font-black uppercase tracking-widest hover:text-blue-300 transition-colors"
                     >
-                      <FaPlus size={10} /> Add Variant
+                      <div className="h-5 w-5 rounded bg-blue-500/20 flex items-center justify-center"><FaPlus size={8} /></div>
+                      Add Variant
                     </button>
                   </div>
                 </div>
               </div>
 
               {/* Description */}
-              <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
                 <div>
-                  <label className={labelClass}>Description — English <span className="normal-case text-dhaba-muted font-normal">(optional · shown to customers)</span></label>
+                  <label className={labelClass}>Description (English) <span className="normal-case opacity-50">(optional)</span></label>
                   <textarea
                     rows={3}
                     {...register("description")}
                     className={`${inputClass} resize-none`}
-                    placeholder="e.g. Tender chicken slow-cooked in a bold spiced masala. Rich, hearty and a dhaba favourite."
+                    placeholder="e.g. Rich, hearty, and a dhaba favourite."
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Description — हिंदी <span className="normal-case text-dhaba-muted font-normal">(वैकल्पिक · ग्राहकों को दिखाया जाता है)</span></label>
+                  <label className={labelClass}>Description (Hindi) <span className="normal-case opacity-50">(optional)</span></label>
                   <textarea
                     rows={3}
                     {...register("descriptionHi")}
                     className={`${inputClass} resize-none`}
-                    placeholder="जैसे: मुलायम चिकन मसालेदार ग्रेवी में धीमी आंच पर पकाया जाता है। भरपूर और स्वादिष्ट।"
+                    placeholder="e.g. भरपूर और स्वादिष्ट।"
                   />
                 </div>
               </div>
 
               {/* Toggles */}
-              <div className="flex gap-3">
-                {(
-                  [
-                    { id: "isAvailable",       label: "Available for Order" },
-                    { id: "isFrequent",        label: "Frequently Ordered"  },
-                    { id: "isOnlineAvailable", label: "Available Online"    },
-                  ] as { id: "isAvailable" | "isFrequent" | "isOnlineAvailable"; label: string }[]
-                ).map(({ id, label }) => (
-                  <label
-                    key={id}
-                    className="flex-1 flex items-center gap-3 cursor-pointer glass-input rounded-xl px-4 py-3 hover:bg-dhaba-surface-hover transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      {...register(id)}
-                      className="h-4 w-4 accent-dhaba-accent rounded"
-                    />
-                    <span className="text-dhaba-text text-sm font-medium">{label}</span>
-                  </label>
-                ))}
+              <div className="pt-2">
+                <label className={labelClass}>Visibility & Settings</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {VISIBILITY_SETTINGS.map(({ id, label, icon: Icon }) => (
+                    <label
+                      key={id}
+                      className="flex items-center justify-between cursor-pointer bg-black/20 border border-white/5 rounded-xl px-4 py-3.5 hover:bg-white/5 hover:border-white/10 transition-all group"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Icon className="text-white/40 group-hover:text-blue-400 transition-colors text-lg" />
+                        <span className="text-white/80 text-xs font-bold tracking-wide">{label}</span>
+                      </div>
+                      <div className="relative flex items-center justify-center">
+                        <input
+                          type="checkbox"
+                          {...register(id)}
+                          className="peer sr-only"
+                        />
+                        <div className="w-9 h-5 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
               </div>
             </form>
 
             {/* Footer */}
-            <div className="px-6 py-4 bg-dhaba-surface/30 border-t border-dhaba-border/20 flex gap-3 justify-end shrink-0">
+            <div className="px-8 py-5 bg-black/20 border-t border-white/5 flex gap-4 justify-end shrink-0 relative z-10">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-6 py-2.5 rounded-xl text-dhaba-muted font-bold text-sm hover:text-dhaba-text transition-colors"
+                className="px-6 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 font-bold text-sm hover:text-white transition-colors"
               >
                 Cancel
               </button>
@@ -447,14 +440,14 @@ const AddDishModal: React.FC<AddDishModalProps> = ({
                 type="submit"
                 form="dish-form"
                 disabled={isActionPending}
-                className="bg-gradient-warm text-dhaba-bg px-8 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:shadow-glow transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 text-white px-8 py-2.5 rounded-xl font-black text-sm tracking-wide flex items-center gap-2 shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-blue-400/50"
               >
                 {isActionPending && (
-                  <div className="h-4 w-4 border-2 border-dhaba-bg border-t-transparent rounded-full animate-spin" />
+                  <div className="h-4 w-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
                 )}
                 {isActionPending
                   ? isEditMode ? "Updating..." : "Adding..."
-                  : isEditMode ? "Update Dish" : "Add Dish"}
+                  : isEditMode ? "Save Changes" : "Add Dish"}
               </button>
             </div>
           </motion.div>

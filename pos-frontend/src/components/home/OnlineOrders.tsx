@@ -144,7 +144,7 @@ const OnlineOrders: React.FC = () => {
   const total    = deliveryOrders.length;
 
   return (
-    <div className="glass-card rounded-[2rem] overflow-hidden border border-blue-400/30 shadow-2xl shadow-blue-500/10 relative pb-4 bg-gradient-to-b from-blue-500/5 to-dhaba-bg">
+    <div className="glass-card rounded-[2rem] overflow-hidden border border-blue-400/30 shadow-2xl shadow-blue-500/10 relative pb-4 bg-gradient-to-b from-blue-500/5 to-dhaba-bg h-full">
       {/* Header */}
       <div className="relative overflow-hidden px-6 py-6 border-b border-blue-400/20 bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 shadow-sm">
         <div className="absolute top-0 right-0 w-32 h-32 bg-white/20 rounded-full blur-3xl -mt-10 -mr-10 pointer-events-none"></div>

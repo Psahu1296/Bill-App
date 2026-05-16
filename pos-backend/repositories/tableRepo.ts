@@ -65,3 +65,9 @@ export async function update(id: string, data: { status?: string; currentOrderId
   const doc = await Table.findByIdAndUpdate(id, { $set: patch }, { new: true }).lean();
   return toApi(doc);
 }
+
+export async function remove(id: string) {
+  if (!mongoose.isValidObjectId(id)) return null;
+  const doc = await Table.findByIdAndDelete(id).lean();
+  return toApi(doc);
+}

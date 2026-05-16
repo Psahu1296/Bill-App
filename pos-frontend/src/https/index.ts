@@ -32,6 +32,8 @@ export const updateTable = ({
   orderId: string | null;
 }) => axiosWrapper.put(`/api/table/${tableId}`, tableData);
 
+export const deleteTable = (tableId: string) => axiosWrapper.delete(`/api/table/${tableId}`);
+
 // Payment Endpoints
 // BE validates typeof amount !== 'number', so amount must be a number (not a string)
 export const createOrderRazorpay = (data: { amount: number }) =>

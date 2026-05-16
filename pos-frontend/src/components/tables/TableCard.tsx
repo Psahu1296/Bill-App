@@ -4,11 +4,11 @@ import { useNavigate } from "react-router-dom";
 import { getAvatarName, getBgColor } from "../../utils";
 import { removeCustomer, updateTable as tableStateUpdate } from "../../redux/slices/customerSlice";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { updateTable } from "../../https";
+import { updateTable, deleteTable } from "../../https";
 import { removeAllItems } from "../../redux/slices/cartSlice";
 import { useAppDispatch } from "../../redux/hooks";
 import { MdChair } from "react-icons/md";
-import { MdQrCode2, MdDownload, MdClose } from "react-icons/md";
+import { MdQrCode2, MdDownload, MdClose, MdDeleteOutline } from "react-icons/md";
 import { QRCodeCanvas } from "qrcode.react";
 
 interface TableCardProps {
@@ -28,6 +28,7 @@ const TableCard: React.FC<TableCardProps> = ({ id, name, status, initials, seats
   const isBooked = !isVirtual && status === "Booked";
 
   const [showQr, setShowQr] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [tunnelUrl, setTunnelUrl] = useState<string | null>(null);
   const qrRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -72,6 +73,13 @@ const TableCard: React.FC<TableCardProps> = ({ id, name, status, initials, seats
     },
   });
 
+  const tableDeleteMutation = useMutation({
+    mutationFn: () => deleteTable(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tables"] });
+    },
+  });
+
   return (
     <>
     <div
@@ -113,19 +121,48 @@ const TableCard: React.FC<TableCardProps> = ({ id, name, status, initials, seats
         </div>
         {!isVirtual && (
           <div className="flex items-center gap-2">
-            <button
-              className="text-xs font-bold p-1.5 rounded-xl bg-dhaba-surface text-dhaba-muted hover:text-dhaba-accent hover:bg-dhaba-accent/10 transition-colors"
-              title="Show QR code"
-              onClick={(e) => { e.stopPropagation(); setShowQr(true); }}
-            >
-              <MdQrCode2 className="text-base" />
-            </button>
-            <button
-              className="text-xs font-bold px-3 py-1.5 rounded-xl bg-dhaba-accent/10 text-dhaba-accent hover:bg-dhaba-accent/20 transition-colors"
-              onClick={onChangeStatus}
-            >
-              {isBooked ? "Free Up" : "Reserve"}
-            </button>
+            {confirmDelete ? (
+              <>
+                <span className="text-[11px] text-dhaba-danger font-bold">Sure?</span>
+                <button
+                  className="text-xs font-bold px-2.5 py-1.5 rounded-xl bg-dhaba-danger/15 text-dhaba-danger hover:bg-dhaba-danger/30 transition-colors"
+                  onClick={(e) => { e.stopPropagation(); tableDeleteMutation.mutate(); }}
+                >
+                  Yes
+                </button>
+                <button
+                  className="text-xs font-bold px-2.5 py-1.5 rounded-xl bg-dhaba-surface text-dhaba-muted hover:text-dhaba-text transition-colors"
+                  onClick={(e) => { e.stopPropagation(); setConfirmDelete(false); }}
+                >
+                  No
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  className="text-xs font-bold p-1.5 rounded-xl bg-dhaba-surface text-dhaba-muted hover:text-dhaba-accent hover:bg-dhaba-accent/10 transition-colors"
+                  title="Show QR code"
+                  onClick={(e) => { e.stopPropagation(); setShowQr(true); }}
+                >
+                  <MdQrCode2 className="text-base" />
+                </button>
+                {!isBooked && (
+                  <button
+                    className="text-xs font-bold p-1.5 rounded-xl bg-dhaba-surface text-dhaba-muted hover:text-dhaba-danger hover:bg-dhaba-danger/10 transition-colors"
+                    title="Delete table"
+                    onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
+                  >
+                    <MdDeleteOutline className="text-base" />
+                  </button>
+                )}
+                <button
+                  className="text-xs font-bold px-3 py-1.5 rounded-xl bg-dhaba-accent/10 text-dhaba-accent hover:bg-dhaba-accent/20 transition-colors"
+                  onClick={onChangeStatus}
+                >
+                  {isBooked ? "Free Up" : "Reserve"}
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

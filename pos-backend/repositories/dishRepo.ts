@@ -17,6 +17,7 @@ function toApi(doc: any) {
     isFrequent: Boolean(doc.isFrequent),
     isOnlineAvailable: Boolean(doc.isOnlineAvailable),
     numberOfOrders: doc.numberOfOrders ?? 0,
+    excludeFromPopular: Boolean(doc.excludeFromPopular),
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };
@@ -46,7 +47,7 @@ export async function findOnlineAvailable() {
 }
 
 export async function findFrequent(minOrders = 1, limit = 10) {
-  const docs = await Dish.find({ isFrequent: true, numberOfOrders: { $gte: minOrders } })
+  const docs = await Dish.find({ excludeFromPopular: { $ne: true }, numberOfOrders: { $gte: minOrders } })
     .sort({ numberOfOrders: -1 })
     .limit(limit)
     .lean();
@@ -56,7 +57,7 @@ export async function findFrequent(minOrders = 1, limit = 10) {
 export async function create(data: {
   image?: string; name: string; type: string; category: string;
   variants: object[]; description?: string; descriptionHi?: string;
-  isAvailable?: boolean; isFrequent?: boolean; isOnlineAvailable?: boolean;
+  isAvailable?: boolean; isFrequent?: boolean; isOnlineAvailable?: boolean; excludeFromPopular?: boolean;
 }) {
   const doc = await Dish.create({
     ...data,
@@ -91,7 +92,7 @@ export async function update(id: string, updates: Record<string, any>) {
   if (!mongoose.isValidObjectId(id)) return null;
   const patch: Record<string, unknown> = {};
   const allowed = ["image", "name", "type", "category", "variants", "description", "descriptionHi",
-                   "isAvailable", "isFrequent", "isOnlineAvailable", "numberOfOrders"];
+                   "isAvailable", "isFrequent", "isOnlineAvailable", "numberOfOrders", "excludeFromPopular"];
   for (const key of allowed) {
     if (key in updates) patch[key] = updates[key];
   }

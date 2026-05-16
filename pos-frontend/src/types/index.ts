@@ -21,6 +21,7 @@ export interface Dish {
   isFrequent: boolean;
   isOnlineAvailable: boolean;
   numberOfOrders: number;
+  excludeFromPopular?: boolean;
   rawMaterial?: string;
 }
 
