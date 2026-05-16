@@ -63,7 +63,7 @@ const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClose, onEx
     quantity: "",
     unit: "",
     description: "",
-    expenseDate: new Date().toISOString().split("T")[0],
+    expenseDate: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16),
     isEarlyRestock: false,
   };
 
@@ -202,9 +202,9 @@ const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClose, onEx
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Date *</label>
+                  <label className={labelClass}>Date & Time *</label>
                   <input
-                    type="date"
+                    type="datetime-local"
                     name="expenseDate"
                     value={expenseData.expenseDate}
                     onChange={handleInputChange}

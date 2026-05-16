@@ -1,25 +1,22 @@
 import { StockCycle, Dish, Order } from "../models";
 
 type VariantPieceMap = Record<string, number> | null | undefined;
+type TrackingMode = "order-linked" | "time-linked";
 
-/** Dish names that map to a raw material (explicit tag first, name-match fallback) */
-async function getMatchingDishNames(rawMaterial: string): Promise<string[]> {
-  const keyword = rawMaterial.toLowerCase();
+/** Dish names that map to a raw material (explicit tag first, name-match fallback, aliases) */
+async function getMatchingDishNames(rawMaterial: string, aliases: string[] = []): Promise<string[]> {
+  const keywords = [rawMaterial.toLowerCase(), ...aliases.map((a) => a.toLowerCase())];
+  const regexClauses = keywords.map((k) => ({ name: { $regex: k, $options: "i" } }));
+
   const dishes = await Dish.find({
-    $or: [
-      { rawMaterial },
-      { name: { $regex: keyword, $options: "i" } },
-    ],
+    $or: [{ rawMaterial }, ...regexClauses],
   })
     .select("name")
     .lean();
   return (dishes as unknown as { name: string }[]).map((d) => d.name);
 }
 
-/** Resolve how many plate-equivalent units one order item contributes.
- *  "Full" variant is the reference for 1 plate (its piece count = piecesPerPlate).
- *  Other variants are normalised: pieces / piecesPerPlate → plate fraction.
- */
+/** Resolve how many plate-equivalent units one order item contributes. */
 function resolveUnits(
   variantSize: string | undefined,
   quantity: number,
@@ -30,23 +27,19 @@ function resolveUnits(
     (variantSize ? variantPieceMap[variantSize] : undefined) ??
     variantPieceMap["_default"] ??
     1;
-  // "Full" defines 1 plate; divide so every variant returns plate-equivalents
   const piecesPerPlate = variantPieceMap["Full"] ?? 1;
   return (quantity * pieces) / piecesPerPlate;
 }
 
-/** Count units consumed for a raw material in completed orders within a date range.
- *  Matches both registered dish names (exact) and custom order items (keyword regex),
- *  so items added via the custom free-text flow are also counted.
- */
 async function countUnits(
   dishNames: string[],
   rawMaterial: string,
+  aliases: string[],
   variantPieceMap: VariantPieceMap,
   startDate: Date,
   endDate?: Date
 ): Promise<number> {
-  const keyword = rawMaterial.toLowerCase();
+  const keywords = [rawMaterial.toLowerCase(), ...aliases.map((a) => a.toLowerCase())];
   const match: Record<string, unknown> = {
     orderStatus: "Completed",
     createdAt: { $gte: startDate, ...(endDate ? { $lte: endDate } : {}) },
@@ -59,7 +52,7 @@ async function countUnits(
   for (const order of orders) {
     for (const item of order.items) {
       const matchesDish = dishNames.includes(item.name);
-      const matchesKeyword = item.name.toLowerCase().includes(keyword);
+      const matchesKeyword = keywords.some((k) => item.name.toLowerCase().includes(k));
       if (matchesDish || matchesKeyword) {
         total += resolveUnits(item.variantSize, item.quantity ?? 1, variantPieceMap);
       }
@@ -83,16 +76,27 @@ export async function findActiveCycle(rawMaterial: string) {
   return StockCycle.findOne({ rawMaterial, cycleStatus: "active" }).lean();
 }
 
-/** Close a cycle: record endDate + unitsConsumed from order history */
+/** Close a cycle. For time-linked items, records daysLasted; for order-linked, counts consumed units. */
 export async function closeCycle(
   cycleId: string,
   endDate: Date,
   rawMaterial: string,
   startDate: Date,
-  variantPieceMap: VariantPieceMap
+  variantPieceMap: VariantPieceMap,
+  trackingMode: TrackingMode = "order-linked",
+  aliases: string[] = []
 ) {
-  const dishNames = await getMatchingDishNames(rawMaterial);
-  const unitsConsumed = await countUnits(dishNames, rawMaterial, variantPieceMap, startDate, endDate);
+  if (trackingMode === "time-linked") {
+    const daysLasted = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
+    return StockCycle.findByIdAndUpdate(
+      cycleId,
+      { cycleStatus: "closed", endDate, daysLasted: parseFloat(daysLasted.toFixed(2)), unitsConsumed: 0 },
+      { new: true }
+    ).lean();
+  }
+
+  const dishNames = await getMatchingDishNames(rawMaterial, aliases);
+  const unitsConsumed = await countUnits(dishNames, rawMaterial, aliases, variantPieceMap, startDate, endDate);
   return StockCycle.findByIdAndUpdate(
     cycleId,
     { cycleStatus: "closed", endDate, unitsConsumed },
@@ -105,7 +109,6 @@ export async function findClosedCycles(rawMaterial: string) {
     rawMaterial,
     cycleStatus: "closed",
     isEarlyRestock: false,
-    unitsConsumed: { $gt: 0 },
   })
     .sort({ endDate: -1 })
     .lean();
@@ -119,24 +122,46 @@ export async function patchCycle(id: string, updates: Partial<{ isEarlyRestock: 
   return StockCycle.findByIdAndUpdate(id, updates, { new: true }).lean();
 }
 
-/** Units consumed so far in the active cycle (live query) */
+/** Units consumed so far in the active cycle (live query, order-linked only) */
 export async function activeUnitsConsumed(
   rawMaterial: string,
   startDate: Date,
-  variantPieceMap: VariantPieceMap
+  variantPieceMap: VariantPieceMap,
+  aliases: string[] = []
 ): Promise<number> {
-  const dishNames = await getMatchingDishNames(rawMaterial);
-  return countUnits(dishNames, rawMaterial, variantPieceMap, startDate);
+  const dishNames = await getMatchingDishNames(rawMaterial, aliases);
+  return countUnits(dishNames, rawMaterial, aliases, variantPieceMap, startDate);
 }
 
-/** 14-day rolling unit rate for a raw material */
+/** 14-day rolling unit rate.
+ *  order-linked: plates sold per day from orders.
+ *  time-linked:  1 / avg daysLasted across closed non-early cycles (units per day = 1 unit per N days).
+ */
 export async function dailyUnitRate(
   rawMaterial: string,
-  variantPieceMap: VariantPieceMap
+  variantPieceMap: VariantPieceMap,
+  trackingMode: TrackingMode = "order-linked",
+  aliases: string[] = []
 ): Promise<number> {
+  if (trackingMode === "time-linked") {
+    const closed = await StockCycle.find({
+      rawMaterial,
+      cycleStatus: "closed",
+      isEarlyRestock: false,
+      daysLasted: { $gt: 0 },
+    })
+      .sort({ endDate: -1 })
+      .limit(5)
+      .lean() as unknown as { daysLasted: number }[];
+
+    if (!closed.length) return 0;
+    const avg = closed.reduce((sum, c) => sum + c.daysLasted, 0) / closed.length;
+    return avg > 0 ? 1 / avg : 0;
+  }
+
   const since = new Date();
   since.setDate(since.getDate() - 14);
-  const dishNames = await getMatchingDishNames(rawMaterial);
-  const total = await countUnits(dishNames, rawMaterial, variantPieceMap, since);
+  const dishNames = await getMatchingDishNames(rawMaterial, aliases);
+  const total = await countUnits(dishNames, rawMaterial, aliases, variantPieceMap, since);
   return total / 14;
 }

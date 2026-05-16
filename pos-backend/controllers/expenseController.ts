@@ -40,8 +40,10 @@ const addExpense = async (req: Request, res: Response, next: NextFunction) => {
         try {
           const expenseId = String((expense as Record<string, unknown>)._id);
           // Fetch variantPieceMap for this raw material from its preset
-          const preset = await presetRepo.findByName(name).catch(() => null);
-          const variantPieceMap = (preset as Record<string, unknown> | null)?.variantPieceMap as Record<string, number> | null ?? null;
+          const preset = await presetRepo.findByName(name).catch(() => null) as Record<string, unknown> | null;
+          const variantPieceMap = preset?.variantPieceMap as Record<string, number> | null ?? null;
+          const trackingMode = (preset?.trackingMode as "order-linked" | "time-linked") ?? "order-linked";
+          const aliases = (preset?.aliases as string[]) ?? [];
 
           const activeCycle = await stockCycleRepo.findActiveCycle(name);
           if (activeCycle) {
@@ -51,7 +53,9 @@ const addExpense = async (req: Request, res: Response, next: NextFunction) => {
               purchaseDate,
               name,
               new Date(cycle.startDate),
-              variantPieceMap
+              variantPieceMap,
+              trackingMode,
+              aliases
             );
           }
           await stockCycleRepo.create({

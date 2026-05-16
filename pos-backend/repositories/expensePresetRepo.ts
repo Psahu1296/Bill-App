@@ -25,9 +25,14 @@ function toApi(doc: any) {
     isStaffLinked:   doc.isStaffLinked ?? false,
     order:           doc.order ?? 0,
     isActive:        doc.isActive ?? true,
-    variantPieceMap: doc.variantPieceMap ?? null,
-    createdAt:       doc.createdAt,
-    updatedAt:       doc.updatedAt,
+    variantPieceMap:          doc.variantPieceMap ?? null,
+    trackingMode:             doc.trackingMode ?? "order-linked",
+    stockUnit:                doc.stockUnit ?? "kg",
+    consumptionUnit:          doc.consumptionUnit ?? "plates",
+    stockToConsumptionFactor: doc.stockToConsumptionFactor ?? 1,
+    aliases:                  doc.aliases ?? [],
+    createdAt:                doc.createdAt,
+    updatedAt:                doc.updatedAt,
   };
 }
 
@@ -56,7 +61,10 @@ export async function create(data: {
 
 export async function update(id: string, updates: Record<string, unknown>) {
   if (!mongoose.isValidObjectId(id)) return null;
-  const allowed = ["name", "category", "type", "lastPrice", "isStaffLinked", "order", "isActive"];
+  const allowed = [
+    "name", "category", "type", "lastPrice", "isStaffLinked", "order", "isActive",
+    "trackingMode", "stockUnit", "consumptionUnit", "stockToConsumptionFactor", "aliases",
+  ];
   const patch: Record<string, unknown> = {};
   for (const key of allowed) {
     if (key in updates) patch[key] = updates[key];

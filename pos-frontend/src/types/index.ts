@@ -60,6 +60,8 @@ export interface OrderCustomerDetails {
 
 export interface OrderBills {
   total: number;
+  subtotal?: number;
+  tax?: number;
   discount?: number;
   roundOff?: number;
   totalWithTax: number;
@@ -276,19 +278,28 @@ export interface StockCycle {
   startDate: string;
   endDate: string | null;
   unitsConsumed: number;
+  daysLasted: number | null;
   isEarlyRestock: boolean;
   cycleStatus: "active" | "closed";
   createdAt: string;
 }
 
+export type TrackingMode = "order-linked" | "time-linked";
+
 export interface InventoryItem {
   presetId: string;
   rawMaterial: string;
   variantPieceMap: Record<string, number> | null;
+  trackingMode: TrackingMode;
+  stockUnit: string;
+  consumptionUnit: string;
+  stockToConsumptionFactor: number;
+  aliases: string[];
   activeCycle: StockCycle | null;
   activeUnitsConsumed: number | null;
   closedCyclesCount: number;
   consumptionRate: number | null;
+  avgDaysLasted: number | null;
   dailyUnitRate: number;
   prediction: {
     daysRemaining: number | null;
@@ -315,6 +326,11 @@ export interface ExpensePreset {
   order: number;
   isActive: boolean;
   variantPieceMap: Record<string, number> | null;
+  trackingMode: TrackingMode;
+  stockUnit: string;
+  consumptionUnit: string;
+  stockToConsumptionFactor: number;
+  aliases: string[];
   createdAt: string;
   updatedAt: string;
 }

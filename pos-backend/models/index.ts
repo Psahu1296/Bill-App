@@ -287,6 +287,12 @@ const expensePresetSchema = new Schema(
     order:          { type: Number, default: 0 },
     isActive:       { type: Boolean, default: true },
     variantPieceMap: { type: Schema.Types.Mixed, default: null },
+    // Inventory tracking config
+    trackingMode:              { type: String, default: "order-linked" }, // "order-linked" | "time-linked"
+    stockUnit:                 { type: String, default: "kg" },           // purchase unit shown on stock fill
+    consumptionUnit:           { type: String, default: "plates" },       // unit shown in consumption stats
+    stockToConsumptionFactor:  { type: Number, default: 1 },              // e.g. 1 tray = 30 pc
+    aliases:                   { type: [String], default: [] },           // regional/Hindi synonyms
   },
   baseOptions
 );
@@ -328,6 +334,7 @@ const stockCycleSchema = new Schema(
     startDate:      { type: Date, required: true },
     endDate:        { type: Date, default: null },
     unitsConsumed:  { type: Number, default: 0 },
+    daysLasted:     { type: Number, default: null },     // time-linked only: endDate - startDate in days
     isEarlyRestock: { type: Boolean, default: false },
     cycleStatus:    { type: String, default: "active" }, // "active" | "closed"
   },

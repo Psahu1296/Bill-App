@@ -300,6 +300,9 @@ export const deletePreOrder = (id: string) =>
 export const getInventoryDashboard = () =>
   axiosWrapper.get("/api/inventory");
 
+export const getInventoryVariants = (rawMaterial: string) =>
+  axiosWrapper.get(`/api/inventory/variants/${encodeURIComponent(rawMaterial)}`);
+
 export const getInventoryCycleHistory = (rawMaterial: string) =>
   axiosWrapper.get(`/api/inventory/cycles/${encodeURIComponent(rawMaterial)}`);
 
@@ -308,3 +311,14 @@ export const updateInventoryCycle = (id: string, data: { isEarlyRestock: boolean
 
 export const updateExpensePresetPieceMap = (id: string, variantPieceMap: Record<string, number> | null) =>
   axiosWrapper.patch(`/api/expense-presets/${id}/piece-map`, { variantPieceMap });
+
+export const updateInventoryConfig = (
+  id: string,
+  config: {
+    trackingMode: string;
+    stockUnit: string;
+    consumptionUnit: string;
+    stockToConsumptionFactor: number;
+    aliases: string[];
+  }
+) => axiosWrapper.put(`/api/expense-presets/${id}`, config);
