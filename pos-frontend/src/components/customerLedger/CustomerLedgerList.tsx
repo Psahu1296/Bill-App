@@ -204,7 +204,7 @@ const CustomerLedgerList: React.FC = () => {
     onSuccess: (res) => {
       enqueueSnackbar((res.data as { message?: string })?.message || "Payment recorded!", { variant: "success" });
       queryClient.invalidateQueries({ queryKey: ["customerLedgers"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboardEarningsSummary"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardEarnings"] });
       setPaymentModalOpen(false); setCustomerToPay(null);
     },
     onError: (err: { response?: { data?: { message?: string } } }) => {

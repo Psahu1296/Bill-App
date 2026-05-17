@@ -105,7 +105,9 @@ const Bill: React.FC = () => {
       dispatch(removeCustomer());
       dispatch(removeAllItems());
       queryClient.invalidateQueries({ queryKey: ["earnings"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardEarnings"] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["tables"] });
       enqueueSnackbar("Order Processed!", { variant: "success" });
       setIsPayModalOpen(false);
       navigate("/", { replace: true });
@@ -131,7 +133,9 @@ const Bill: React.FC = () => {
       dispatch(removeCustomer());
       dispatch(removeAllItems());
       queryClient.invalidateQueries({ queryKey: ["earnings"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardEarnings"] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["tables"] });
       enqueueSnackbar("Order Processed!", { variant: "success" });
       setIsPayModalOpen(false);
       navigate("/", { replace: true });

@@ -109,7 +109,7 @@ const CustomerDetail: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ["customerLedger", phone] });
       queryClient.invalidateQueries({ queryKey: ["customerProfiles"] });
       queryClient.invalidateQueries({ queryKey: ["customerLedgers"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboardEarningsSummary"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardEarnings"] });
       setPayOpen(false);
       setPayAmount(""); setPayNotes(""); setPayMethod("Cash");
     },

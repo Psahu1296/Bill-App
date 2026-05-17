@@ -38,8 +38,9 @@ const PayRemainingModal: React.FC<PayRemainingModalProps> = ({
       updateOrder(updates as unknown as { id: string; [key: string]: unknown }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["earnings"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboardEarningsSummary"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardEarnings"] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["tables"] });
       queryClient.invalidateQueries({ queryKey: ["customerLedgers"] });
       enqueueSnackbar("Payment recorded successfully!", { variant: "success" });
       onSuccess();

@@ -36,7 +36,7 @@ const Metrics: React.FC = () => {
   });
 
   const { data: earningsRes } = useQuery({
-    queryKey: ["earnings"],
+    queryKey: ["dashboardEarnings"],
     queryFn: getDashboardEarningsSummary,
     placeholderData: keepPreviousData,
     refetchInterval: 60_000,

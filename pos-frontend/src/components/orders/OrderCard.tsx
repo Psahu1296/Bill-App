@@ -111,6 +111,7 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
     onSuccess: (_, newStatus) => {
       enqueueSnackbar(`Status updated to "${newStatus}"`, { variant: "success" });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["tables"] });
     },
     onError: () => {
       enqueueSnackbar("Failed to update status.", { variant: "error" });

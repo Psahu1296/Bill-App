@@ -46,7 +46,8 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({ order, onClose }) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["earnings"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboardEarningsSummary"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardEarnings"] });
+      queryClient.invalidateQueries({ queryKey: ["tables"] });
       enqueueSnackbar("Order updated.", { variant: "success" });
       onClose();
     },

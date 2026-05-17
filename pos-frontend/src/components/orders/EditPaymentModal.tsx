@@ -34,7 +34,8 @@ const EditPaymentModal: React.FC<EditPaymentModalProps> = ({ order, onClose }) =
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["earnings"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboardEarningsSummary"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardEarnings"] });
+      queryClient.invalidateQueries({ queryKey: ["tables"] });
       enqueueSnackbar("Payment updated.", { variant: "success" });
       onClose();
     },
