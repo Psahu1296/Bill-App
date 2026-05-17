@@ -1,6 +1,7 @@
 import express from "express";
 import {
   addConsumable,
+  addConsumableBatch,
   getAllConsumables,
   getDailySummary,
   updateConsumable,
@@ -17,6 +18,8 @@ router
   .route("/")
   .get(isVerifiedUser, getAllConsumables)
   .post(isVerifiedUser, addConsumable);
+
+router.route("/batch").post(isVerifiedUser, addConsumableBatch);
 
 router
   .route("/:id")

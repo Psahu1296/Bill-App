@@ -160,6 +160,33 @@ const addOrder = async (req: Request, res: Response, next: NextFunction) => {
       } catch (e) { console.error("Earnings error on addOrder:", e); }
     }
 
+    // Ledger: if order is created already-completed with an outstanding balance,
+    // record it immediately (mirrors the justCompleted logic in updateOrder).
+    if (
+      (newOrder.orderStatus as string) === "Completed" &&
+      balanceDueOnOrder > 0 &&
+      (newOrder.orderType as string) === "dine-in"
+    ) {
+      try {
+        const phone = (newOrder.customerDetails as Record<string, unknown>)?.phone as string;
+        const name  = (newOrder.customerDetails as Record<string, unknown>)?.name  as string;
+        if (phone) {
+          await ledgerRepo.upsertWithTransaction({
+            customerPhone: phone,
+            customerName: name,
+            balanceDelta: balanceDueOnOrder,
+            transaction: {
+              orderId: String(newOrder._id),
+              transactionType: "full_payment_due",
+              amount: balanceDueOnOrder,
+              timestamp: new Date((newOrder.orderDate as Date | string | undefined) ?? new Date()).toISOString(),
+              notes: `Order #${newOrder._id} added — ₹${balanceDueOnOrder.toFixed(2)} outstanding`,
+            },
+          });
+        }
+      } catch (e) { console.error("Ledger error on addOrder:", e); }
+    }
+
     // Increment dish order counts
     try {
       const items = (newOrder.items as { id: string; quantity: number }[]) ?? [];

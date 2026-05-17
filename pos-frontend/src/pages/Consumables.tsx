@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { FaCoffee, FaBox, FaPlus, FaTrash, FaTimes } from "react-icons/fa";
 import { GiCigarette } from "react-icons/gi";
+import { MdFoodBank } from "react-icons/md";
 import { FiRefreshCw } from "react-icons/fi";
 import BackButton from "../components/shared/BackButton";
+import CustomerFields from "../components/shared/CustomerFields";
 import {
-  addConsumable,
+  addConsumableBatch,
   getAllConsumables,
   deleteConsumable,
   getAllStaff,
@@ -35,6 +37,10 @@ const DEFAULT_CONSUMABLE_CONFIG: Record<ConsumableType, ConsumableConfig> = {
     label: "Cigarette", icon: <GiCigarette />, unit: "stick",
     variants: [{ label: "Stick", price: 20 }],
   },
+  snack: {
+    label: "Snacks", icon: <MdFoodBank />, unit: "item",
+    variants: [],
+  },
 };
 
 // Map a dish name → consumable type
@@ -64,6 +70,15 @@ const getSummaryFromEntries = (entries: ConsumableEntry[], type: ConsumableType)
   };
 };
 
+interface CartItem {
+  key: string;
+  type: ConsumableType;
+  itemName?: string;
+  variantLabel: string;
+  pricePerUnit: number;
+  quantity: number;
+}
+
 const Consumables: React.FC = () => {
   useEffect(() => {
     document.title = "Dhaba POS | Consumables";
@@ -78,12 +93,23 @@ const Consumables: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Form state ──
-  const [formQty, setFormQty] = useState(1);
-  const [formVariantIdx, setFormVariantIdx] = useState(0);
+  // ── Consumer state ──
   const [formConsumerType, setFormConsumerType] = useState<ConsumerType>("customer");
-  const [formName, setFormName] = useState("");
+  const [formName, setFormName]   = useState("");
+  const [formPhone, setFormPhone] = useState("");
   const [formSelectedStaff, setFormSelectedStaff] = useState<string[]>([]);
+
+  // ── Item builder state ──
+  const [formItemType, setFormItemType] = useState<ConsumableType>("tea");
+  const [formQty, setFormQty]           = useState(1);
+  const [formVariantIdx, setFormVariantIdx] = useState(0);
+  const [snackDishes, setSnackDishes]   = useState<Dish[]>([]);
+  const [formSelectedSnackDish, setFormSelectedSnackDish] = useState<Dish | null>(null);
+  const [formSelectedSnackVariantIdx, setFormSelectedSnackVariantIdx] = useState(0);
+
+  // ── Cart + payment state ──
+  const [cart, setCart]                 = useState<CartItem[]>([]);
+  const [formAmountPaid, setFormAmountPaid] = useState<number | "">("");
 
   // ── Fetch today's entries ──
   const fetchEntries = useCallback(async () => {
@@ -107,7 +133,6 @@ const Consumables: React.FC = () => {
     getAllStaff({ isActive: "true" })
       .then((res) => setAvailableStaff(res.data?.data ?? []))
       .catch(() => { });
-    // Fetch dishes to update consumable variants/prices
     getDishes()
       .then((res) => {
         const dishes: Dish[] = res.data?.data ?? [];
@@ -122,18 +147,57 @@ const Consumables: React.FC = () => {
           }
         }
         setConsumableConfig(updated);
+        setSnackDishes(dishes.filter((d) => d.category === "snacks" && d.isAvailable));
       })
       .catch(() => { });
   }, [fetchEntries]);
 
-  const config = consumableConfig[activeTab];
+  // ── Derived (log view) ──
+  const config   = consumableConfig[activeTab];
   const filtered = entries.filter((e) => e.type === activeTab);
-  const summary = getSummaryFromEntries(entries, activeTab);
-  const activeVariant = config.variants[formVariantIdx] ?? config.variants[0];
+  const summary  = getSummaryFromEntries(entries, activeTab);
+
+  // ── Derived (item builder) ──
+  const builderConfig = consumableConfig[formItemType];
+  const builderSnackVariant = formSelectedSnackDish
+    ? formSelectedSnackDish.variants[formSelectedSnackVariantIdx] ?? formSelectedSnackDish.variants[0]
+    : null;
+  const builderVariant = formItemType === "snack"
+    ? { label: formSelectedSnackDish?.name ?? "", price: builderSnackVariant?.price ?? 0 }
+    : builderConfig.variants[formVariantIdx] ?? builderConfig.variants[0];
+
+  const cartTotal = cart.reduce((s, i) => s + i.quantity * i.pricePerUnit, 0);
+
+  const canAddToCart =
+    formQty >= 1 &&
+    (formItemType === "snack" ? formSelectedSnackDish !== null : builderVariant != null);
+
+  const canSubmit =
+    cart.length > 0 &&
+    (formConsumerType === "staff" ? formSelectedStaff.length > 0 : true);
+
+  const resetItemBuilder = () => {
+    setFormQty(1);
+    setFormVariantIdx(0);
+    setFormSelectedSnackDish(null);
+    setFormSelectedSnackVariantIdx(0);
+  };
+
+  const resetForm = () => {
+    setFormConsumerType("customer");
+    setFormName("");
+    setFormPhone("");
+    setFormSelectedStaff([]);
+    setFormItemType("tea");
+    setCart([]);
+    setFormAmountPaid("");
+    resetItemBuilder();
+  };
 
   const handleConsumerTypeSwitch = (ct: ConsumerType) => {
     setFormConsumerType(ct);
     setFormName("");
+    setFormPhone("");
     setFormSelectedStaff([]);
   };
 
@@ -143,36 +207,41 @@ const Consumables: React.FC = () => {
     );
   };
 
-  const resetForm = () => {
-    setFormQty(1);
-    setFormVariantIdx(0);
-    setFormName("");
-    setFormConsumerType("customer");
-    setFormSelectedStaff([]);
+  // ── Add item to cart ──
+  const handleAddToCart = () => {
+    if (!canAddToCart) return;
+    setCart((prev) => [...prev, {
+      key: `${Date.now()}-${Math.random()}`,
+      type: formItemType,
+      ...(formItemType === "snack" && formSelectedSnackDish ? { itemName: formSelectedSnackDish.name } : {}),
+      variantLabel: builderVariant?.label ?? "",
+      pricePerUnit: builderVariant?.price ?? 0,
+      quantity: formQty,
+    }]);
+    resetItemBuilder();
   };
 
-  const canSubmit = formConsumerType === "staff" ? formSelectedStaff.length > 0 : true;
-
-  // ── Add Entry ──
+  // ── Submit batch ──
   const handleAdd = async () => {
-    if (formQty < 1 || !canSubmit) return;
+    if (!canSubmit) return;
     setIsSubmitting(true);
     try {
       const consumerName =
         formConsumerType === "staff"
-          ? formSelectedStaff
-            .map((id) => availableStaff.find((s) => s._id === id)?.name || "")
-            .filter(Boolean)
-            .join(", ")
+          ? formSelectedStaff.map((id) => availableStaff.find((s) => s._id === id)?.name || "").filter(Boolean).join(", ")
           : formName.trim() || (formConsumerType === "customer" ? "Walk-in" : "Owner");
 
-      await addConsumable({
-        type: activeTab,
-        quantity: formQty,
-        pricePerUnit: activeVariant.price,
+      await addConsumableBatch({
+        items: cart.map((i) => ({
+          type: i.type,
+          ...(i.itemName ? { itemName: i.itemName } : {}),
+          quantity: i.quantity,
+          pricePerUnit: i.pricePerUnit,
+        })),
         consumerType: formConsumerType,
         consumerName,
-        staffIds: formConsumerType === "staff" ? formSelectedStaff : undefined,
+        ...(formConsumerType === "customer" && formPhone ? { consumerPhone: formPhone } : {}),
+        ...(formConsumerType === "customer" && formAmountPaid !== "" ? { amountPaid: formAmountPaid } : {}),
       });
 
       setShowAddModal(false);
@@ -196,7 +265,7 @@ const Consumables: React.FC = () => {
     }
   };
 
-  const tabs: ConsumableType[] = ["tea", "gutka", "cigarette"];
+  const tabs: ConsumableType[] = ["tea", "gutka", "cigarette", "snack"];
 
   return (
     <div className="bg-dhaba-bg min-h-[calc(100vh-4rem)] pb-8">
@@ -207,7 +276,7 @@ const Consumables: React.FC = () => {
             <BackButton />
             <div>
               <h1 className="font-display text-2xl font-bold text-dhaba-text">Consumables Tracker</h1>
-              <p className="text-sm text-dhaba-muted">Tea, Gutka & Cigarette — Sales & Consumption</p>
+              <p className="text-sm text-dhaba-muted">Tea, Gutka, Cigarette & Snacks — Sales & Consumption</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -288,7 +357,9 @@ const Consumables: React.FC = () => {
                       {entry.quantity}
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-dhaba-text">{entry.consumerName}</p>
+                      <p className="text-sm font-semibold text-dhaba-text">
+                        {entry.itemName ? `${entry.itemName} · ` : ""}{entry.consumerName}
+                      </p>
                       <p className="text-xs text-dhaba-muted">
                         {entry.consumerType === "customer" ? "🛒 Customer Sale" : entry.consumerType === "staff" ? "👷 Staff" : "👑 Owner"}
                         {" · "}
@@ -316,69 +387,50 @@ const Consumables: React.FC = () => {
 
       {/* ── Add Entry Modal ── */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowAddModal(false)}>
-          <div className="glass-card rounded-2xl p-6 w-full max-w-md mx-4 space-y-5" onClick={(e) => e.stopPropagation()}>
-            <h2 className="font-display text-xl font-bold text-dhaba-text flex items-center gap-2">
-              {config.icon} Add {config.label}
-            </h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setShowAddModal(false); resetForm(); }}>
+          <div className="glass-card rounded-2xl p-6 w-full max-w-lg mx-4 space-y-5 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
 
-            {/* Consumer Type */}
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-xl font-bold text-dhaba-text">Add Entry</h2>
+              <button onClick={() => { setShowAddModal(false); resetForm(); }} className="p-1.5 rounded-lg hover:bg-dhaba-danger/10 text-dhaba-muted hover:text-dhaba-danger transition-colors">
+                <FaTimes size={13} />
+              </button>
+            </div>
+
+            {/* ── Who ── */}
             <div>
               <label className="text-xs text-dhaba-muted font-bold tracking-wider uppercase mb-2 block">Who?</label>
-              <div className="flex gap-2">
+              <div className="flex gap-2 mb-3">
                 {(["customer", "staff", "owner"] as ConsumerType[]).map((ct) => (
-                  <button
-                    key={ct}
-                    onClick={() => handleConsumerTypeSwitch(ct)}
-                    className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all ${formConsumerType === ct ? "bg-dhaba-accent/15 text-dhaba-accent" : "glass-input text-dhaba-muted hover:text-dhaba-text"
-                      }`}
-                  >
+                  <button key={ct} onClick={() => handleConsumerTypeSwitch(ct)}
+                    className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all ${formConsumerType === ct ? "bg-dhaba-accent/15 text-dhaba-accent" : "glass-input text-dhaba-muted hover:text-dhaba-text"}`}>
                     {ct === "customer" ? "🛒 Customer" : ct === "staff" ? "👷 Staff" : "👑 Owner"}
                   </button>
                 ))}
               </div>
-            </div>
-
-            {/* Name / Staff selector */}
-            <div>
-              <label className="text-xs text-dhaba-muted font-bold tracking-wider uppercase mb-2 block">
-                {formConsumerType === "staff" ? "Select Staff" : formConsumerType === "owner" ? "Owner" : "Name (optional)"}
-              </label>
               {formConsumerType === "customer" ? (
-                <input
-                  type="text"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  placeholder="Walk-in"
-                  className="glass-input w-full rounded-xl px-4 py-2.5 text-dhaba-text text-sm outline-none placeholder:text-dhaba-muted/50"
+                <CustomerFields
+                  value={{ name: formName, phone: formPhone }}
+                  onChange={({ name, phone }) => { setFormName(name); setFormPhone(phone); }}
+                  inputClassName="glass-input w-full rounded-xl px-4 py-2.5 text-dhaba-text text-sm outline-none placeholder:text-dhaba-muted/50"
                 />
               ) : formConsumerType === "staff" ? (
                 <div className="space-y-2">
                   <div className="flex flex-wrap gap-2">
                     {availableStaff.filter((s) => s.role !== "owner").map((s) => (
-                      <button
-                        key={s._id}
-                        onClick={() => toggleStaffSelection(s._id)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${formSelectedStaff.includes(s._id)
-                            ? "bg-dhaba-accent/20 text-dhaba-accent ring-1 ring-dhaba-accent/40"
-                            : "glass-input text-dhaba-muted hover:text-dhaba-text"
-                          }`}
-                      >
+                      <button key={s._id} onClick={() => toggleStaffSelection(s._id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${formSelectedStaff.includes(s._id) ? "bg-dhaba-accent/20 text-dhaba-accent ring-1 ring-dhaba-accent/40" : "glass-input text-dhaba-muted hover:text-dhaba-text"}`}>
                         {ROLE_EMOJI[s.role]} {s.name}
                         {formSelectedStaff.includes(s._id) && <FaTimes size={8} className="ml-1" />}
                       </button>
                     ))}
                   </div>
-                  {formSelectedStaff.length > 0 && (
-                    <p className="text-[10px] text-dhaba-accent font-semibold">{formSelectedStaff.length} staff selected</p>
-                  )}
+                  {formSelectedStaff.length > 0 && <p className="text-[10px] text-dhaba-accent font-semibold">{formSelectedStaff.length} staff selected</p>}
                 </div>
               ) : (
-                <select
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  className="glass-input w-full rounded-xl px-4 py-2.5 text-dhaba-text text-sm outline-none appearance-none"
-                >
+                <select value={formName} onChange={(e) => setFormName(e.target.value)}
+                  className="glass-input w-full rounded-xl px-4 py-2.5 text-dhaba-text text-sm outline-none appearance-none">
                   <option value="">Select owner</option>
                   {availableStaff.filter((s) => s.role === "owner").map((s) => (
                     <option key={s._id} value={s.name}>{s.name}</option>
@@ -387,63 +439,137 @@ const Consumables: React.FC = () => {
               )}
             </div>
 
-            {/* Size variant dropdown */}
-            <div>
-              <label className="text-xs text-dhaba-muted font-bold tracking-wider uppercase mb-2 block">Size</label>
-              <select
-                value={formVariantIdx}
-                onChange={(e) => setFormVariantIdx(Number(e.target.value))}
-                className="glass-input w-full rounded-xl px-4 py-2.5 text-dhaba-text text-sm outline-none appearance-none focus:ring-1 ring-dhaba-accent/50"
-              >
-                {config.variants.map((v, i) => (
-                  <option key={v.label} value={i} className="bg-dhaba-surface text-dhaba-text">
-                    {v.label} — ₹{v.price}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* ── Item Builder ── */}
+            <div className="glass-card rounded-2xl p-4 space-y-4">
+              <p className="text-xs font-bold text-dhaba-muted uppercase tracking-wider">Add Items</p>
 
-            {/* Quantity */}
-            <div>
-              <label className="text-xs text-dhaba-muted font-bold tracking-wider uppercase mb-2 block">
-                Quantity ({config.unit}s)
-              </label>
-              <div className="glass-input rounded-xl flex items-center gap-4 px-4 py-2 w-fit">
-                <button onClick={() => setFormQty((p) => Math.max(1, p - 1))} className="text-dhaba-accent font-bold text-lg w-6">−</button>
-                <span className="text-dhaba-text font-bold text-lg w-6 text-center">{formQty}</span>
-                <button onClick={() => setFormQty((p) => p + 1)} className="text-dhaba-accent font-bold text-lg w-6">+</button>
+              {/* Type chips */}
+              <div className="flex flex-wrap gap-2">
+                {(["tea", "gutka", "cigarette", "snack"] as ConsumableType[]).map((t) => {
+                  const c = consumableConfig[t];
+                  return (
+                    <button key={t} onClick={() => { setFormItemType(t); resetItemBuilder(); }}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${formItemType === t ? "bg-dhaba-accent/20 border-dhaba-accent/40 text-dhaba-accent" : "bg-dhaba-surface/60 border-dhaba-border/30 text-dhaba-muted hover:text-dhaba-text"}`}>
+                      {c.icon} {c.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Snack dish picker OR size variant */}
+              {formItemType === "snack" ? (
+                <div>
+                  {snackDishes.length === 0
+                    ? <p className="text-xs text-dhaba-muted italic">No snack dishes found. Add dishes with category "snacks" first.</p>
+                    : <div className="flex flex-wrap gap-2">
+                        {snackDishes.map((dish) => (
+                          <button key={dish._id} onClick={() => { setFormSelectedSnackDish(dish); setFormSelectedSnackVariantIdx(0); }}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${formSelectedSnackDish?._id === dish._id ? "bg-dhaba-accent/20 border-dhaba-accent/40 text-dhaba-accent" : "bg-dhaba-surface/60 border-dhaba-border/30 text-dhaba-muted hover:text-dhaba-text"}`}>
+                            {dish.name} <span className="font-normal text-dhaba-muted">₹{dish.variants[0]?.price}</span>
+                          </button>
+                        ))}
+                      </div>
+                  }
+                  {formSelectedSnackDish && formSelectedSnackDish.variants.length > 1 && (
+                    <select value={formSelectedSnackVariantIdx} onChange={(e) => setFormSelectedSnackVariantIdx(Number(e.target.value))}
+                      className="glass-input w-full rounded-xl px-4 py-2.5 text-dhaba-text text-sm outline-none appearance-none mt-2">
+                      {formSelectedSnackDish.variants.map((v, i) => (
+                        <option key={v.size} value={i} className="bg-dhaba-surface">{v.size} — ₹{v.price}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              ) : (
+                <select value={formVariantIdx} onChange={(e) => setFormVariantIdx(Number(e.target.value))}
+                  className="glass-input w-full rounded-xl px-4 py-2.5 text-dhaba-text text-sm outline-none appearance-none">
+                  {builderConfig.variants.map((v, i) => (
+                    <option key={v.label} value={i} className="bg-dhaba-surface">{v.label} — ₹{v.price}</option>
+                  ))}
+                </select>
+              )}
+
+              {/* Quantity + Add to cart */}
+              <div className="flex items-center gap-3">
+                <div className="glass-input rounded-xl flex items-center gap-3 px-3 py-2">
+                  <button onClick={() => setFormQty((p) => Math.max(1, p - 1))} className="text-dhaba-accent font-bold text-lg w-5">−</button>
+                  <span className="text-dhaba-text font-bold w-5 text-center">{formQty}</span>
+                  <button onClick={() => setFormQty((p) => p + 1)} className="text-dhaba-accent font-bold text-lg w-5">+</button>
+                </div>
+                <div className="text-sm text-dhaba-muted">
+                  {builderVariant && builderVariant.price > 0 && (
+                    <span className="font-semibold text-dhaba-text">₹{formQty * builderVariant.price}</span>
+                  )}
+                </div>
+                <button onClick={handleAddToCart} disabled={!canAddToCart}
+                  className="ml-auto flex items-center gap-1.5 px-4 py-2 rounded-xl bg-dhaba-accent/15 text-dhaba-accent text-xs font-bold hover:bg-dhaba-accent/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                  <FaPlus size={10} /> Add
+                </button>
               </div>
             </div>
 
-            {/* Price Preview */}
-            <div className="glass-card rounded-xl p-4 flex justify-between items-center">
-              <span className="text-dhaba-muted text-sm font-medium">
-                {activeVariant.label} × {formQty} @ ₹{activeVariant.price}
-              </span>
-              <span className={`font-display text-xl font-bold ${formConsumerType === "customer" ? "text-dhaba-success" : "text-dhaba-danger"}`}>
-                {formConsumerType === "customer" ? "+" : "-"}₹{formQty * activeVariant.price}
-              </span>
-            </div>
+            {/* ── Cart ── */}
+            {cart.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-dhaba-muted uppercase tracking-wider">Cart</p>
+                {cart.map((item) => (
+                  <div key={item.key} className="flex items-center justify-between glass-input rounded-xl px-4 py-2.5">
+                    <div className="text-sm text-dhaba-text font-semibold">
+                      {item.itemName ?? item.variantLabel}
+                      <span className="ml-2 text-xs font-normal text-dhaba-muted">× {item.quantity}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-sm font-bold ${formConsumerType === "customer" ? "text-dhaba-success" : "text-dhaba-danger"}`}>
+                        {formConsumerType === "customer" ? "+" : "-"}₹{item.quantity * item.pricePerUnit}
+                      </span>
+                      <button onClick={() => setCart((p) => p.filter((i) => i.key !== item.key))}
+                        className="text-dhaba-muted hover:text-dhaba-danger transition-colors">
+                        <FaTimes size={11} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex justify-between px-4 py-2 text-sm font-bold text-dhaba-text border-t border-dhaba-border/20 mt-1">
+                  <span>Total</span>
+                  <span className={formConsumerType === "customer" ? "text-dhaba-success" : "text-dhaba-danger"}>
+                    {formConsumerType === "customer" ? "+" : "-"}₹{cartTotal}
+                  </span>
+                </div>
+              </div>
+            )}
 
+            {/* ── Amount Paid (customer only, cart non-empty) ── */}
+            {formConsumerType === "customer" && cart.length > 0 && (
+              <div>
+                <label className="text-xs text-dhaba-muted font-bold tracking-wider uppercase mb-2 block">
+                  Amount Paid <span className="normal-case font-normal">(leave blank if fully paid)</span>
+                </label>
+                <input type="number" min={0} max={cartTotal}
+                  value={formAmountPaid}
+                  onChange={(e) => setFormAmountPaid(e.target.value === "" ? "" : Number(e.target.value))}
+                  placeholder={`₹${cartTotal} (full)`}
+                  className="glass-input w-full rounded-xl px-4 py-2.5 text-dhaba-text text-sm outline-none placeholder:text-dhaba-muted/50"
+                />
+                {formAmountPaid !== "" && formAmountPaid < cartTotal && (
+                  <p className={`mt-1.5 text-[11px] font-semibold ${formPhone ? "text-dhaba-warning" : "text-dhaba-danger"}`}>
+                    {formPhone
+                      ? `₹${cartTotal - formAmountPaid} will be added to ${formName || "customer"}'s ledger`
+                      : "Phone required to record due in ledger"}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* ── Footer ── */}
             <div className="flex gap-3">
-              <button
-                onClick={() => setShowAddModal(false)}
-                disabled={isSubmitting}
-                className="flex-1 glass-input rounded-xl py-2.5 text-dhaba-muted font-semibold text-sm hover:text-dhaba-text transition-colors disabled:opacity-50"
-              >
+              <button onClick={() => { setShowAddModal(false); resetForm(); }} disabled={isSubmitting}
+                className="flex-1 glass-input rounded-xl py-2.5 text-dhaba-muted font-semibold text-sm hover:text-dhaba-text transition-colors disabled:opacity-50">
                 Cancel
               </button>
-              <button
-                onClick={handleAdd}
-                disabled={isSubmitting || !canSubmit || formQty < 1}
-                className="flex-1 bg-gradient-warm text-dhaba-bg rounded-xl py-2.5 font-bold text-sm hover:shadow-glow transition-all disabled:opacity-60 flex items-center justify-center gap-2"
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-dhaba-bg border-t-transparent rounded-full animate-spin" />
-                    Saving…
-                  </>
-                ) : "Add Entry"}
+              <button onClick={handleAdd} disabled={isSubmitting || !canSubmit}
+                className="flex-1 bg-gradient-warm text-dhaba-bg rounded-xl py-2.5 font-bold text-sm hover:shadow-glow transition-all disabled:opacity-60 flex items-center justify-center gap-2">
+                {isSubmitting
+                  ? <><div className="w-4 h-4 border-2 border-dhaba-bg border-t-transparent rounded-full animate-spin" /> Saving…</>
+                  : `Save ${cart.length > 0 ? `(${cart.length} item${cart.length > 1 ? "s" : ""})` : ""}`}
               </button>
             </div>
           </div>

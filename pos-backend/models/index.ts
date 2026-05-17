@@ -174,13 +174,16 @@ export const CustomerLedger = mongoose.models.CustomerLedger ?? mongoose.model("
 // ── Consumable ────────────────────────────────────────────────────────────────
 const consumableSchema = new Schema(
   {
-    type:         { type: String, required: true },
-    quantity:     { type: Number, required: true },
-    pricePerUnit: { type: Number, required: true },
-    consumerType: { type: String, required: true },
-    consumerName: { type: String, required: true },
-    orderId:      { type: Schema.Types.ObjectId, ref: "Order", default: null },
-    timestamp:    { type: Date, default: Date.now },
+    type:          { type: String, required: true },
+    quantity:      { type: Number, required: true },
+    pricePerUnit:  { type: Number, required: true },
+    consumerType:  { type: String, required: true },
+    consumerName:  { type: String, required: true },
+    consumerPhone: { type: String, default: null },
+    amountPaid:    { type: Number, default: null },
+    itemName:      { type: String, default: null },
+    orderId:       { type: Schema.Types.ObjectId, ref: "Order", default: null },
+    timestamp:     { type: Date, default: Date.now },
   },
   baseOptions
 );

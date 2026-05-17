@@ -156,6 +156,9 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
     onSuccess: () => {
       enqueueSnackbar("Past order added successfully!", { variant: "success" });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["customerLedgers"] });
+      queryClient.invalidateQueries({ queryKey: ["earnings"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardEarnings"] });
       onClose();
     },
     onError: (err: Error) => {

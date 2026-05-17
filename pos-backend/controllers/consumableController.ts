@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import createHttpError from "http-errors";
 import * as consumableRepo from "../repositories/consumableRepo";
 import * as earningRepo from "../repositories/earningRepo";
+import * as ledgerRepo from "../repositories/ledgerRepo";
 import { CustomRequest as Request } from "../types";
 import { getZonedStartOfDayUtc, getZonedEndOfDayUtc } from "./earningController";
 
@@ -10,18 +11,26 @@ const UNIT_PRICES: Record<string, number> = { tea: 15, gutka: 25, cigarette: 20 
 
 const addConsumable = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { type, quantity, pricePerUnit, consumerType, consumerName, orderId, timestamp } = req.body;
+    const { type, quantity, pricePerUnit, consumerType, consumerName, consumerPhone, amountPaid, itemName, orderId, timestamp } = req.body;
 
     if (!type || !quantity || !consumerType || !consumerName) {
       return next(createHttpError(400, "Missing required fields: type, quantity, consumerType, consumerName."));
     }
 
-    const resolvedPrice = pricePerUnit ?? UNIT_PRICES[type] ?? 0;
+    const resolvedPrice     = pricePerUnit ?? UNIT_PRICES[type] ?? 0;
     const resolvedTimestamp = timestamp ? new Date(timestamp).toISOString() : new Date().toISOString();
+    const totalAmount       = quantity * resolvedPrice;
+    const paid              = (consumerType === "customer" && amountPaid != null)
+      ? Math.max(0, Math.min(amountPaid, totalAmount))
+      : totalAmount;
+    const balanceDue        = totalAmount - paid;
 
     const entry = await consumableRepo.create({
       type, quantity, consumerType, consumerName,
       pricePerUnit: resolvedPrice,
+      ...(consumerPhone && { consumerPhone }),
+      amountPaid: paid,
+      ...(itemName      && { itemName }),
       orderId: orderId != null && mongoose.isValidObjectId(orderId) ? orderId : null,
       timestamp: resolvedTimestamp,
     });
@@ -29,11 +38,98 @@ const addConsumable = async (req: Request, res: Response, next: NextFunction) =>
     if (consumerType === "customer") {
       try {
         const dateIso = getZonedStartOfDayUtc(new Date(resolvedTimestamp)).toISOString();
-        await earningRepo.incrementEarnings(dateIso, quantity * resolvedPrice);
+        if (paid > 0) await earningRepo.incrementEarnings(dateIso, paid);
       } catch (e) { console.error("Earnings error on addConsumable:", e); }
+
+      // Record outstanding balance in customer ledger
+      if (balanceDue > 0 && consumerPhone) {
+        try {
+          await ledgerRepo.upsertWithTransaction({
+            customerPhone: consumerPhone,
+            customerName: consumerName,
+            balanceDelta: balanceDue,
+            transaction: {
+              orderId: String((entry as Record<string, unknown>)._id),
+              transactionType: "full_payment_due",
+              amount: balanceDue,
+              timestamp: resolvedTimestamp,
+              notes: `Consumable (${type}) — ₹${balanceDue.toFixed(2)} outstanding`,
+            },
+          });
+        } catch (e) { console.error("Ledger error on addConsumable:", e); }
+      }
     }
 
     res.status(201).json({ success: true, message: "Consumable entry added.", data: entry });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const addConsumableBatch = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { items, consumerType, consumerName, consumerPhone, amountPaid, timestamp } = req.body as {
+      items: { type: string; itemName?: string; quantity: number; pricePerUnit: number }[];
+      consumerType: string; consumerName: string; consumerPhone?: string;
+      amountPaid?: number; timestamp?: string;
+    };
+
+    if (!items?.length || !consumerType || !consumerName) {
+      return next(createHttpError(400, "Missing required fields: items, consumerType, consumerName."));
+    }
+
+    const resolvedTimestamp = timestamp ? new Date(timestamp).toISOString() : new Date().toISOString();
+    const grandTotal = items.reduce((s, i) => s + i.quantity * i.pricePerUnit, 0);
+    const paid       = consumerType === "customer" && amountPaid != null
+      ? Math.max(0, Math.min(amountPaid, grandTotal))
+      : grandTotal;
+    const balanceDue = grandTotal - paid;
+
+    // Create one consumable entry per item (no per-item earnings — handled below as one sum)
+    const entries = await Promise.all(
+      items.map((item) =>
+        consumableRepo.create({
+          type: item.type,
+          itemName: item.itemName ?? null,
+          quantity: item.quantity,
+          pricePerUnit: item.pricePerUnit,
+          consumerType,
+          consumerName,
+          consumerPhone: consumerPhone ?? null,
+          amountPaid: null,
+          timestamp: resolvedTimestamp,
+        })
+      )
+    );
+
+    if (consumerType === "customer") {
+      // Record combined earnings once
+      try {
+        const dateIso = getZonedStartOfDayUtc(new Date(resolvedTimestamp)).toISOString();
+        if (paid > 0) await earningRepo.incrementEarnings(dateIso, paid);
+      } catch (e) { console.error("Earnings error on addConsumableBatch:", e); }
+
+      // One ledger entry for the combined balance
+      if (balanceDue > 0 && consumerPhone) {
+        try {
+          const itemSummary = items.map((i) => i.itemName ?? i.type).join(", ");
+          await ledgerRepo.upsertWithTransaction({
+            customerPhone: consumerPhone,
+            customerName: consumerName,
+            balanceDelta: balanceDue,
+            transaction: {
+              orderId: String((entries[0] as Record<string, unknown>)._id),
+              transactionType: "full_payment_due",
+              amount: balanceDue,
+              timestamp: resolvedTimestamp,
+              notes: `Consumables (${itemSummary}) — ₹${balanceDue.toFixed(2)} outstanding`,
+            },
+          });
+        } catch (e) { console.error("Ledger error on addConsumableBatch:", e); }
+      }
+    }
+
+    res.status(201).json({ success: true, message: "Consumable entries added.", data: entries });
   } catch (error) {
     next(error);
   }
@@ -70,7 +166,7 @@ const getDailySummary = async (req: Request, res: Response, next: NextFunction) 
 
     const raw = await consumableRepo.dailySummary(startDate, endDate);
 
-    const types = ["tea", "gutka", "cigarette"] as const;
+    const types = ["tea", "gutka", "cigarette", "snack"] as const;
     type SummaryEntry = { totalSold: number; totalRevenue: number; staffConsumed: number; ownerConsumed: number; wastedValue: number };
     const summary: Record<string, SummaryEntry> = {};
     for (const t of types) {
@@ -134,4 +230,4 @@ const deleteConsumable = async (req: Request, res: Response, next: NextFunction)
   }
 };
 
-export { addConsumable, getAllConsumables, getDailySummary, updateConsumable, deleteConsumable };
+export { addConsumable, addConsumableBatch, getAllConsumables, getDailySummary, updateConsumable, deleteConsumable };

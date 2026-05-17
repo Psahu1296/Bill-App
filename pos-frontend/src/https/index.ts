@@ -190,6 +190,12 @@ export const mergeLedgerEntry = (sourcePhone: string, targetPhone: string) =>
 export const addConsumable = (data: AddConsumablePayload) =>
   axiosWrapper.post("/api/consumables", data);
 
+export const addConsumableBatch = (data: {
+  items: { type: string; itemName?: string; quantity: number; pricePerUnit: number }[];
+  consumerType: string; consumerName: string; consumerPhone?: string;
+  amountPaid?: number; timestamp?: string;
+}) => axiosWrapper.post("/api/consumables/batch", data);
+
 export const getAllConsumables = (filters: Record<string, string> = {}) =>
   axiosWrapper.get("/api/consumables", { params: filters });
 

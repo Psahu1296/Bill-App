@@ -356,7 +356,7 @@ export interface Expense {
   updatedAt: string;
 }
 
-export type ConsumableType = "tea" | "gutka" | "cigarette";
+export type ConsumableType = "tea" | "gutka" | "cigarette" | "snack";
 export type ConsumerType = "customer" | "staff" | "owner";
 
 export interface AddConsumablePayload {
@@ -365,6 +365,9 @@ export interface AddConsumablePayload {
   pricePerUnit?: number;
   consumerType: ConsumerType;
   consumerName: string;
+  consumerPhone?: string;
+  amountPaid?: number;
+  itemName?: string;
   orderId?: string | null;
   timestamp?: string;
   staffIds?: string[];
@@ -378,6 +381,9 @@ export interface ConsumableEntry {
   pricePerUnit: number;
   consumerType: ConsumerType;
   consumerName: string;
+  consumerPhone?: string;
+  amountPaid?: number;
+  itemName?: string;
   orderId?: string | null;
   timestamp: string;
   createdAt: string;

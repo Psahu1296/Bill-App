@@ -11,6 +11,9 @@ function toApi(doc: any, populateOrder = false): Record<string, unknown> | null 
     pricePerUnit: doc.pricePerUnit,
     consumerType: doc.consumerType,
     consumerName: doc.consumerName,
+    ...(doc.consumerPhone != null && { consumerPhone: doc.consumerPhone }),
+    ...(doc.amountPaid    != null && { amountPaid:    doc.amountPaid    }),
+    ...(doc.itemName      != null && { itemName:      doc.itemName      }),
     timestamp: doc.timestamp,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
@@ -33,6 +36,7 @@ function toApi(doc: any, populateOrder = false): Record<string, unknown> | null 
 export async function create(data: {
   type: string; quantity: number; pricePerUnit: number;
   consumerType: string; consumerName: string;
+  consumerPhone?: string | null; amountPaid?: number | null; itemName?: string | null;
   orderId?: string | null; timestamp?: string;
 }) {
   const doc = await Consumable.create({
@@ -99,7 +103,7 @@ export async function dailySummary(startDate: Date, endDate: Date) {
 
 export async function update(id: string, updates: Record<string, unknown>) {
   if (!mongoose.isValidObjectId(id)) return null;
-  const allowed = ["type", "quantity", "pricePerUnit", "consumerType", "consumerName", "orderId", "timestamp"];
+  const allowed = ["type", "quantity", "pricePerUnit", "consumerType", "consumerName", "consumerPhone", "amountPaid", "itemName", "orderId", "timestamp"];
   const patch: Record<string, unknown> = {};
   for (const key of allowed) {
     if (key in updates) patch[key] = updates[key];
