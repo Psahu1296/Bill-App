@@ -182,6 +182,44 @@ export const getDashboardEarningsSummary = async (_req: Request, res: Response, 
   }
 };
 
+export const getEarningsRange = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { from, to } = req.query as { from?: string; to?: string };
+    if (!from || !to) return next(createHttpError(400, "Both from and to query params are required."));
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return next(createHttpError(400, "Invalid date format. Use YYYY-MM-DD."));
+    }
+
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    const diffDays = Math.round((toDate.getTime() - fromDate.getTime()) / 86400000);
+    if (diffDays < 0) return next(createHttpError(400, "from must be before or equal to to."));
+
+    const startIso = getZonedStartOfDayUtc(fromDate).toISOString();
+    const endIso   = getZonedStartOfDayUtc(toDate).toISOString();
+
+    const records = await earningRepo.findInRange(startIso, endIso) as Record<string, unknown>[];
+
+    // Build lookup: IST date string → revenue
+    const revenueMap = new Map<string, number>();
+    for (const r of records) {
+      const dateKey = format(toZonedTime(new Date(r.date as string), TIMEZONE), "yyyy-MM-dd");
+      revenueMap.set(dateKey, r.totalEarnings as number);
+    }
+
+    // Zero-fill every date in the range
+    const result: { date: string; revenue: number }[] = [];
+    for (let i = 0; i <= diffDays; i++) {
+      const dateStr = format(addDays(fromDate, i), "yyyy-MM-dd");
+      result.push({ date: dateStr, revenue: revenueMap.get(dateStr) ?? 0 });
+    }
+
+    res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getChartData = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const period = (req.query.period as string) || "day";

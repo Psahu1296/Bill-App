@@ -10,7 +10,7 @@ import * as ledgerRepo from "../repositories/ledgerRepo";
 import * as earningRepo from "../repositories/earningRepo";
 import * as userRepo from "../repositories/userRepo";
 import * as profileRepo from "../repositories/customerProfileRepo";
-import { getZonedStartOfDayUtc } from "./earningController";
+import { getZonedStartOfDayUtc, getZonedEndOfDayUtc } from "./earningController";
 import { CustomRequest as Request } from "../types";
 
 // ── Consumable sync helper ────────────────────────────────────────────────────
@@ -217,11 +217,22 @@ const getOrderById = async (req: Request, res: Response, next: NextFunction) => 
 
 const getOrders = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { startDate, endDate, tableId, customerPhone, orderStatus, paymentStatus, excludeStatus, search } = req.query;
+    const { date, startDate, endDate, tableId, customerPhone, orderStatus, paymentStatus, excludeStatus, search } = req.query;
+
+    let resolvedStart = startDate as string | undefined;
+    let resolvedEnd   = endDate   as string | undefined;
+
+    // ?date=YYYY-MM-DD overrides startDate/endDate with IST day boundaries
+    if (date) {
+      const anchor = new Date(date as string);
+      resolvedStart = getZonedStartOfDayUtc(anchor).toISOString();
+      resolvedEnd   = getZonedEndOfDayUtc(anchor).toISOString();
+    }
+
     const orders = await orderRepo.findAll({
-      startDate: startDate as string | undefined,
-      endDate:   endDate   as string | undefined,
-      tableId:   tableId   as string | undefined,
+      startDate:     resolvedStart,
+      endDate:       resolvedEnd,
+      tableId:       tableId       as string | undefined,
       customerPhone: customerPhone as string | undefined,
       orderStatus:   orderStatus   as string | undefined,
       paymentStatus: paymentStatus as string | undefined,

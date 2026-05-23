@@ -36,8 +36,27 @@ export async function findByName(name: string) {
   return toApi(doc);
 }
 
-export async function findAll() {
-  const docs = await Dish.find().sort({ name: 1 }).lean();
+export interface DishFilters {
+  type?: string;
+  category?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  search?: string;
+}
+
+export async function findAll(filters: DishFilters = {}) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const query: Record<string, any> = {};
+  if (filters.type) query.type = filters.type;
+  if (filters.category) query.category = filters.category;
+  if (filters.search) query.name = { $regex: filters.search, $options: "i" };
+  if (filters.minPrice !== undefined || filters.maxPrice !== undefined) {
+    const priceQuery: Record<string, number> = {};
+    if (filters.minPrice !== undefined) priceQuery.$gte = filters.minPrice;
+    if (filters.maxPrice !== undefined) priceQuery.$lte = filters.maxPrice;
+    query.variants = { $elemMatch: { price: priceQuery } };
+  }
+  const docs = await Dish.find(query).sort({ name: 1 }).lean();
   return docs.map(toApi);
 }
 

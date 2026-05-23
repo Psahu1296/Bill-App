@@ -87,13 +87,21 @@ const addDebtToLedger = async (req: Request, res: Response, next: NextFunction) 
 
 const getAllCustomerLedgers = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { name, phone, status, startDate, endDate } = req.query;
+    const { name, search, phone, status, startDate, endDate, hasBalance, sortBy } = req.query;
+    // search is an alias for name; hasBalance=true is a shorthand for status=unpaid + sort by balance
+    const resolvedName   = (search ?? name) as string | undefined;
+    const resolvedStatus = hasBalance === "true" ? "unpaid" : (status as string | undefined);
+    const resolvedSortBy = (hasBalance === "true" || sortBy === "balance") ? "balance" : "activity";
+    const compact        = hasBalance === "true";
+
     const ledgers = await ledgerRepo.findAll({
-      name: name as string | undefined,
-      phone: phone as string | undefined,
-      status: status as string | undefined,
-      startDate: startDate as string | undefined,
-      endDate: endDate as string | undefined,
+      name:      resolvedName,
+      phone:     phone      as string | undefined,
+      status:    resolvedStatus,
+      startDate: startDate  as string | undefined,
+      endDate:   endDate    as string | undefined,
+      sortBy:    resolvedSortBy,
+      compact,
     });
     res.status(200).json({ success: true, data: ledgers });
   } catch (error) {

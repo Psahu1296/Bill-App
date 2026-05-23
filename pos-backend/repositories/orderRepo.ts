@@ -76,7 +76,9 @@ export async function findAll(filters: OrderFilters = {}) {
     if (filters.startDate) query.orderDate.$gte = new Date(filters.startDate);
     if (filters.endDate) {
       const end = new Date(filters.endDate);
-      end.setUTCHours(23, 59, 59, 999);
+      // Only apply UTC end-of-day fallback for bare date strings (no time component).
+      // ISO strings with a time component (e.g. from ?date= IST-aware computation) are used as-is.
+      if (!filters.endDate.includes("T")) end.setUTCHours(23, 59, 59, 999);
       query.orderDate.$lte = end;
     }
   }

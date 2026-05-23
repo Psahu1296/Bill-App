@@ -127,12 +127,15 @@ const getExpensesByPeriod = async (req: Request, res: Response, next: NextFuncti
 
 const getAllExpenses = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { startDate, endDate, type } = req.query;
+    const { startDate, endDate, from, to, type } = req.query;
+    // Accept both startDate/endDate (legacy) and from/to (analytics)
+    const resolvedStart = (from ?? startDate) as string | undefined;
+    const resolvedEnd   = (to   ?? endDate)   as string | undefined;
 
     const filters: { startDate?: Date; endDate?: Date; type?: string } = {};
-    if (startDate) filters.startDate = getZonedStartOfDayUtc(new Date(startDate as string));
-    if (endDate)   filters.endDate   = getZonedEndOfDayUtc(new Date(endDate as string));
-    if (type)      filters.type      = type as string;
+    if (resolvedStart) filters.startDate = getZonedStartOfDayUtc(new Date(resolvedStart));
+    if (resolvedEnd)   filters.endDate   = getZonedEndOfDayUtc(new Date(resolvedEnd));
+    if (type)          filters.type      = type as string;
 
     const expenses = await expenseRepo.findAll(filters);
     const totalExpenses = expenses.reduce((sum, exp) => sum + ((exp as Record<string, unknown>).amount as number), 0);

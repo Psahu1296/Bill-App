@@ -5,9 +5,9 @@ import type { Dish } from "../../types";
 import { getDishImage } from "../../utils";
 
 const CATEGORY_BADGE: Record<string, { bg: string; dot: string; label: string }> = {
-  veg: { bg: "bg-black/60 text-green-400 border-green-500/30", dot: "bg-green-400", label: "VEG" },
-  non_veg: { bg: "bg-black/60 text-red-400 border-red-500/30", dot: "bg-red-400", label: "NON-VEG" },
-  egg: { bg: "bg-black/60 text-yellow-400 border-yellow-500/30", dot: "bg-yellow-400", label: "EGG" },
+  veg: { bg: "bg-dhaba-bg/80 text-dhaba-success border-dhaba-success/30", dot: "bg-dhaba-success", label: "VEG" },
+  non_veg: { bg: "bg-dhaba-bg/80 text-dhaba-danger border-dhaba-danger/30", dot: "bg-dhaba-danger", label: "NON-VEG" },
+  egg: { bg: "bg-dhaba-bg/80 text-dhaba-accent border-dhaba-accent/30", dot: "bg-dhaba-accent", label: "EGG" },
 };
 
 interface DishCardProps {
@@ -17,12 +17,12 @@ interface DishCardProps {
 }
 
 const DishCard: React.FC<DishCardProps> = ({ dish, onEdit, onDelete }) => {
-  const badge = CATEGORY_BADGE[dish.category] || { bg: "bg-white/5 text-white/50 border-white/10", dot: "bg-white/50", label: dish.category };
+  const badge = CATEGORY_BADGE[dish.category] || { bg: "bg-dhaba-surface/50 text-dhaba-muted border-dhaba-border/50", dot: "bg-dhaba-muted", label: dish.category };
 
   return (
-    <div className="glass-card rounded-[1.5rem] overflow-hidden w-full max-w-[300px] group hover:shadow-[0_8px_30px_rgba(0,0,0,0.12)] hover:-translate-y-1 transition-all duration-300 relative border border-white/5 bg-black/20 flex flex-col">
+    <div className="glass-card rounded-[1.5rem] overflow-hidden w-full max-w-[300px] group hover:-translate-y-1 transition-all duration-300 relative flex flex-col hover:shadow-elevated hover:border-dhaba-accent/30">
       {/* Image Container */}
-      <div className="relative h-[180px] overflow-hidden shrink-0 bg-[#121620]">
+      <div className="relative h-[180px] overflow-hidden shrink-0 bg-dhaba-surface">
         <Img
           src={[
             getDishImage(dish.name, dish.image),
@@ -30,16 +30,16 @@ const DishCard: React.FC<DishCardProps> = ({ dish, onEdit, onDelete }) => {
           ].filter(Boolean) as string[]}
           alt={dish.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
-          loader={<div className="w-full h-full bg-white/5 animate-pulse" />}
+          loader={<div className="w-full h-full bg-dhaba-surface/50 animate-pulse" />}
           unloader={
-            <div className="w-full h-full bg-white/5 flex items-center justify-center text-xs font-bold tracking-widest uppercase text-white/30">
+            <div className="w-full h-full bg-dhaba-surface/50 flex items-center justify-center text-xs font-bold tracking-widest uppercase text-dhaba-muted/50">
               No Image
             </div>
           }
         />
 
         {/* Soft dark gradient over image */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-dhaba-bg via-transparent to-transparent pointer-events-none opacity-80" />
 
         {/* Top Badges */}
         <div className="absolute top-3 left-3 right-3 flex justify-between items-start">
@@ -52,12 +52,12 @@ const DishCard: React.FC<DishCardProps> = ({ dish, onEdit, onDelete }) => {
           {/* Feature Badges (Fire, Globe) */}
           <div className="flex flex-col gap-1.5 items-end">
             {dish.isFrequent && (
-              <div className="bg-black/60 text-orange-400 p-1.5 rounded-lg border border-orange-500/30 backdrop-blur-md shadow-md" title="Frequently Ordered">
+              <div className="bg-dhaba-bg/80 text-dhaba-orange p-1.5 rounded-lg border border-dhaba-orange/30 backdrop-blur-md shadow-md" title="Frequently Ordered">
                 <FaFire size={12} />
               </div>
             )}
             {dish.isOnlineAvailable && (
-              <div className="bg-black/60 text-rose-500 p-1.5 rounded-lg border border-rose-500/30 backdrop-blur-md shadow-md" title="Available Online">
+              <div className="bg-dhaba-bg/80 text-dhaba-info p-1.5 rounded-lg border border-dhaba-info/30 backdrop-blur-md shadow-md" title="Available Online">
                 <FaGlobe size={12} />
               </div>
             )}
@@ -66,8 +66,8 @@ const DishCard: React.FC<DishCardProps> = ({ dish, onEdit, onDelete }) => {
 
         {/* Unavailable Overlay */}
         {!dish.isAvailable && (
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-10">
-            <span className="text-red-400 font-black text-xs tracking-[0.2em] uppercase bg-red-500/10 border border-red-500/20 px-4 py-2 rounded-xl shadow-[0_0_20px_rgba(239,68,68,0.15)]">
+          <div className="absolute inset-0 bg-dhaba-bg/60 backdrop-blur-sm flex items-center justify-center z-10">
+            <span className="text-dhaba-danger font-black text-xs tracking-[0.2em] uppercase bg-dhaba-danger/10 border border-dhaba-danger/30 px-4 py-2 rounded-xl shadow-[0_0_20px_hsl(var(--dhaba-danger)/0.2)]">
               Unavailable
             </span>
           </div>
@@ -76,13 +76,13 @@ const DishCard: React.FC<DishCardProps> = ({ dish, onEdit, onDelete }) => {
         {/* Base Price Float */}
         <div className="absolute bottom-3 right-3 flex flex-col items-end">
           {dish.variants?.[0]?.markedPrice != null && dish.variants[0].markedPrice > dish.variants[0].price && (
-            <div className="text-[10px] font-bold line-through text-white/50 mb-0.5 tracking-wide">
+            <div className="text-[10px] font-bold line-through text-dhaba-muted mb-0.5 tracking-wide">
               ₹{dish.variants[0].markedPrice}
             </div>
           )}
-          <div className="bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/20 shadow-lg flex items-center gap-1.5">
-            <span className="text-[9px] font-black text-white/50 tracking-widest uppercase">From</span>
-            <span className="font-display text-lg font-black text-white">
+          <div className="bg-dhaba-bg/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-dhaba-border shadow-lg flex items-center gap-1.5">
+            <span className="text-[9px] font-black text-dhaba-muted tracking-widest uppercase">From</span>
+            <span className="font-display text-lg font-black text-dhaba-accent drop-shadow-[0_0_8px_hsl(var(--dhaba-accent)/0.5)]">
               ₹{dish.variants?.[0]?.price ?? "—"}
             </span>
           </div>
@@ -92,15 +92,15 @@ const DishCard: React.FC<DishCardProps> = ({ dish, onEdit, onDelete }) => {
       {/* Content Body */}
       <div className="p-4 flex flex-col flex-1 relative z-10">
         <div className="mb-4">
-          <h3 className="font-display text-lg font-black text-white/90 leading-tight line-clamp-1 tracking-wide group-hover:text-blue-400 transition-colors">
+          <h3 className="font-display text-lg font-black text-dhaba-text leading-tight line-clamp-1 tracking-wide group-hover:text-dhaba-accent transition-colors">
             {dish.name}
           </h3>
           <div className="flex items-center gap-2 mt-2">
-            <span className="text-[9px] text-white/40 font-black tracking-widest uppercase bg-white/5 px-2 py-0.5 rounded border border-white/5">
+            <span className="text-[9px] text-dhaba-muted font-black tracking-widest uppercase bg-dhaba-surface px-2 py-0.5 rounded border border-dhaba-border/50">
               {dish.numberOfOrders} orders
             </span>
             {dish.numberOfOrders > 100 && (
-              <span className="text-[8px] bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(234,179,8,0.2)] font-black tracking-widest">
+              <span className="text-[8px] bg-dhaba-accent/10 border border-dhaba-accent/30 text-dhaba-accent px-1.5 py-0.5 rounded shadow-[0_0_8px_hsl(var(--dhaba-accent)/0.3)] font-black tracking-widest">
                 BESTSELLER
               </span>
             )}
@@ -113,17 +113,17 @@ const DishCard: React.FC<DishCardProps> = ({ dish, onEdit, onDelete }) => {
             dish.variants.map((v, i) => (
               <div
                 key={i}
-                className="bg-black/40 border border-white/5 text-[10px] font-bold text-white/70 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-inner"
+                className="bg-dhaba-surface/80 border border-dhaba-border/50 text-[10px] font-bold text-dhaba-text/80 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-inner"
               >
-                <span className="text-white/90">{v.size}</span>
+                <span className="text-dhaba-text">{v.size}</span>
                 <span className="opacity-30">|</span>
                 <div className="flex items-center gap-1">
                   {v.markedPrice != null && v.markedPrice > v.price && (
-                    <span className="line-through text-white/40">₹{v.markedPrice}</span>
+                    <span className="line-through text-dhaba-muted">₹{v.markedPrice}</span>
                   )}
-                  <span className="text-white">₹{v.price}</span>
+                  <span className="text-dhaba-accent">₹{v.price}</span>
                   {v.onlinePrice != null && v.onlinePrice > 0 && (
-                    <span className="text-rose-500 ml-0.5 flex items-center gap-0.5" title="Online Price">
+                    <span className="text-dhaba-info ml-0.5 flex items-center gap-0.5" title="Online Price">
                       <FaGlobe size={8} /> ₹{v.onlinePrice}
                     </span>
                   )}
@@ -131,18 +131,18 @@ const DishCard: React.FC<DishCardProps> = ({ dish, onEdit, onDelete }) => {
               </div>
             ))
           ) : (
-            <span className="text-[10px] font-bold text-red-400/70 tracking-widest uppercase">No variants</span>
+            <span className="text-[10px] font-bold text-dhaba-danger/80 tracking-widest uppercase">No variants</span>
           )}
         </div>
 
         <div className="flex-1" /> {/* Spacer */}
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-2 pt-4 border-t border-white/5">
+        <div className="flex items-center gap-2 pt-4 border-t border-dhaba-border/30">
           {onEdit && (
             <button
               onClick={() => onEdit(dish)}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white/5 border border-white/5 text-[10px] font-black uppercase tracking-widest text-white/50 hover:text-blue-400 hover:bg-blue-500/10 hover:border-blue-500/20 transition-all"
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-dhaba-surface/50 border border-dhaba-border/50 text-[10px] font-black uppercase tracking-widest text-dhaba-muted hover:text-dhaba-accent hover:bg-dhaba-accent/10 hover:border-dhaba-accent/30 hover:shadow-glow transition-all"
             >
               <FaEdit size={12} /> Edit
             </button>
@@ -150,7 +150,7 @@ const DishCard: React.FC<DishCardProps> = ({ dish, onEdit, onDelete }) => {
           {onDelete && (
             <button
               onClick={() => onDelete(dish._id)}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white/5 border border-white/5 text-[10px] font-black uppercase tracking-widest text-white/50 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/20 transition-all"
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-dhaba-surface/50 border border-dhaba-border/50 text-[10px] font-black uppercase tracking-widest text-dhaba-muted hover:text-dhaba-danger hover:bg-dhaba-danger/10 hover:border-dhaba-danger/30 hover:shadow-[0_0_15px_hsl(var(--dhaba-danger)/0.2)] transition-all"
             >
               <FaTrash size={12} /> Delete
             </button>

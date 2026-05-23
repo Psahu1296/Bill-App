@@ -3,7 +3,8 @@ import mongoose from "mongoose";
 import createHttpError from "http-errors";
 import * as dishRepo from "../repositories/dishRepo";
 import { SEED_DISHES } from "../scripts/dishSeedData";
-import { Dish } from "../models";
+import { Dish, Order } from "../models";
+import { getZonedStartOfDayUtc, getZonedEndOfDayUtc } from "./earningController";
 
 const addDish = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -34,9 +35,16 @@ const addDish = async (req: Request, res: Response, next: NextFunction) => {
   }
 };
 
-const getDishes = async (_req: Request, res: Response, next: NextFunction) => {
+const getDishes = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    res.status(200).json({ success: true, data: await dishRepo.findAll() });
+    const { type, category, minPrice, maxPrice, search } = req.query;
+    const filters: dishRepo.DishFilters = {};
+    if (type)     filters.type     = type     as string;
+    if (category) filters.category = category as string;
+    if (search)   filters.search   = search   as string;
+    if (minPrice) filters.minPrice = Number(minPrice);
+    if (maxPrice) filters.maxPrice = Number(maxPrice);
+    res.status(200).json({ success: true, data: await dishRepo.findAll(filters) });
   } catch (error) {
     next(error);
   }
@@ -189,4 +197,40 @@ const seedDishes = async (_req: Request, res: Response, next: NextFunction) => {
   }
 };
 
-export { addDish, getDishes, getOnlineDishes, getFrequentDishes, getDishById, updateDish, deleteDish, bulkAddDishes, seedDishes };
+const getTopRevenueDishes = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
+    const from = req.query.from as string | undefined;
+    const to   = req.query.to   as string | undefined;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const matchStage: Record<string, any> = { orderStatus: { $ne: "Cancelled" } };
+    if (from || to) {
+      matchStage.orderDate = {};
+      if (from) matchStage.orderDate.$gte = getZonedStartOfDayUtc(new Date(from));
+      if (to)   matchStage.orderDate.$lte = getZonedEndOfDayUtc(new Date(to));
+    }
+
+    const results = await Order.aggregate([
+      { $match: matchStage },
+      { $unwind: "$items" },
+      {
+        $group: {
+          _id: "$items.name",
+          totalRevenue:  { $sum: { $multiply: ["$items.quantity", "$items.pricePerQuantity"] } },
+          totalQuantity: { $sum: "$items.quantity" },
+          orderCount:    { $sum: 1 },
+        },
+      },
+      { $sort: { totalRevenue: -1 } },
+      { $limit: limit },
+      { $project: { _id: 0, name: "$_id", totalRevenue: 1, totalQuantity: 1, orderCount: 1 } },
+    ]);
+
+    res.status(200).json({ success: true, data: results });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export { addDish, getDishes, getOnlineDishes, getFrequentDishes, getDishById, updateDish, deleteDish, bulkAddDishes, seedDishes, getTopRevenueDishes };

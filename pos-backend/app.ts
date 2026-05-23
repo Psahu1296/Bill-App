@@ -32,6 +32,7 @@ import requestRoutes from "./routes/requestRoutes";
 import profilesRoute from "./routes/profilesRoute";
 import reminderRoute from "./routes/reminderRoute";
 import inventoryRoutes from "./routes/inventoryRoutes";
+import dailySummaryRoutes from "./routes/dailySummaryRoutes";
 import { sendScheduledReminders } from "./controllers/reminderController";
 
 const app = express();
@@ -176,6 +177,7 @@ app.use("/api/requests", requestRoutes);
 app.use("/api/profiles", profilesRoute);
 app.use("/api/reminders", reminderRoute);
 app.use("/api/inventory", inventoryRoutes);
+app.use("/api/daily-summary", dailySummaryRoutes);
 
 // Deleted frontend static serving — the Frontend is now fully packed directly inside of the Desktop Electron EXE.
 

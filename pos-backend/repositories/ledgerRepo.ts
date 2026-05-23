@@ -2,6 +2,20 @@ import mongoose from "mongoose";
 import { CustomerLedger } from "../models";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+function compactToApi(doc: any) {
+  if (!doc) return null;
+  return {
+    _id: String(doc._id),
+    customerName: doc.customerName,
+    customerPhone: doc.customerPhone,
+    balanceDue: doc.balanceDue,
+    lastActivity: doc.lastActivity,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ledgerToApi(doc: any) {
   if (!doc) return null;
   return {
@@ -34,6 +48,8 @@ export async function findByPhone(phone: string) {
 export async function findAll(filters: {
   name?: string; phone?: string; status?: string;
   startDate?: string; endDate?: string;
+  sortBy?: "balance" | "activity";
+  compact?: boolean;
 } = {}) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const query: Record<string, any> = {};
@@ -48,8 +64,12 @@ export async function findAll(filters: {
     query["transactions.timestamp"] = txMatch;
   }
 
-  const docs = await CustomerLedger.find(query).sort({ lastActivity: -1 }).lean();
-  return docs.map(ledgerToApi);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sort: Record<string, any> = filters.sortBy === "balance" ? { balanceDue: -1 } : { lastActivity: -1 };
+  let q = CustomerLedger.find(query).sort(sort);
+  if (filters.compact) q = q.select("-transactions") as typeof q;
+  const docs = await q.lean();
+  return docs.map(filters.compact ? compactToApi : ledgerToApi);
 }
 
 export async function upsertWithTransaction(data: {
