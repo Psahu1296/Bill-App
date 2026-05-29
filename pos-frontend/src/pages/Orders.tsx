@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import BottomNav from "../components/shared/BottomNav";
 import OrderCard from "../components/orders/OrderCard";
 import BackButton from "../components/shared/BackButton";
-import AddPastOrderModal from "../components/orders/AddPastOrderModal";
 import Skeleton from "../components/shared/Skeleton";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { getOrders } from "../https/index";
@@ -24,9 +24,9 @@ function todayStr() {
 }
 
 const Orders: React.FC = () => {
+  const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<FilterKey>("All");
   const [selectedDate, setSelectedDate] = useState(todayStr);
-  const [showAddPastOrder, setShowAddPastOrder] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -164,7 +164,7 @@ const Orders: React.FC = () => {
 
             <div className={`flex flex-wrap items-center gap-3 transition-all duration-300 ${isSearchMode ? "opacity-30 pointer-events-none grayscale" : ""}`}>
               <button
-                onClick={() => setShowAddPastOrder(true)}
+                onClick={() => navigate("/orders/add-past")}
                 className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-xs text-white bg-gradient-to-r from-blue-500 to-indigo-600 hover:shadow-[0_0_15px_rgba(59,130,246,0.4)] transition-all shadow-md active:scale-95 border border-blue-400/20 uppercase tracking-wider"
               >
                 <FaPlus className="text-[10px]" />
@@ -276,7 +276,6 @@ const Orders: React.FC = () => {
       <div className="relative z-20">
         <BottomNav />
       </div>
-      {showAddPastOrder && <AddPastOrderModal onClose={() => setShowAddPastOrder(false)} />}
     </div>
   );
 };

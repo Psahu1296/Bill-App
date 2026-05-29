@@ -101,6 +101,14 @@ export const bulkAddDishes = (data: AddDishPayload[]) =>
 export const seedDefaultDishes = () =>
   axiosWrapper.post("/api/dishes/seed");
 
+export const voiceParseDishes = (audio: Blob) => {
+  const form = new FormData();
+  form.append("audio", audio, "voice.webm");
+  return axiosWrapper.post("/api/dishes/voice-parse", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+};
+
 // Earnings
 export const getDailyEarnings = () =>
   axiosWrapper.get("/api/earnings/daywise");
@@ -310,6 +318,9 @@ export const getInventoryDashboard = () =>
 
 export const getInventoryVariants = (rawMaterial: string) =>
   axiosWrapper.get(`/api/inventory/variants/${encodeURIComponent(rawMaterial)}`);
+
+export const getInventoryLinkedDishes = (rawMaterial: string) =>
+  axiosWrapper.get(`/api/inventory/linked-dishes/${encodeURIComponent(rawMaterial)}`);
 
 export const getInventoryCycleHistory = (rawMaterial: string) =>
   axiosWrapper.get(`/api/inventory/cycles/${encodeURIComponent(rawMaterial)}`);

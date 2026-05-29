@@ -9,6 +9,7 @@ import { useMutation } from "@tanstack/react-query";
 import { enqueueSnackbar } from "notistack";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from "recharts";
 import BackButton from "../components/shared/BackButton";
+import BottomNav from "../components/shared/BottomNav";
 import {
   getAllExpenses, updateExpense, deleteExpense,
   getExpensePresets, createExpensePreset, deleteExpensePreset,
@@ -1197,6 +1198,7 @@ const Expenses: React.FC = () => {
           </div>
         )}
       </AnimatePresence>
+      <BottomNav />
     </div>
   );
 };

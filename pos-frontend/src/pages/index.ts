@@ -16,3 +16,4 @@ export { default as Requests } from './Requests';
 export { default as Expenses } from './Expenses';
 export { default as Customers } from './Customers';
 export { default as Inventory } from './Inventory';
+export { default as AddPastOrderPage } from './AddPastOrderPage';

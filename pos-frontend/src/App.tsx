@@ -6,7 +6,7 @@ import {
   useLocation,
   Navigate,
 } from "react-router-dom";
-import { Home, Auth, Orders, Tables, Menu, Dashboard, OrderSummary, Consumables, AppUpdate, Staff, DataManagement, DishesPage, ServerStatus, OnlineConfig, Requests, Expenses, Customers, Inventory } from "./pages";
+import { Home, Auth, Orders, Tables, Menu, Dashboard, OrderSummary, Consumables, AppUpdate, Staff, DataManagement, DishesPage, ServerStatus, OnlineConfig, Requests, Expenses, Customers, Inventory, AddPastOrderPage } from "./pages";
 import CustomerDetail from "./components/customers/CustomerDetail";
 import Header from "./components/shared/Header";
 import { ErrorBoundary } from "./components/shared";
@@ -176,6 +176,14 @@ function Layout() {
           element={
             <ProtectedRoutes>
               <Inventory />
+            </ProtectedRoutes>
+          }
+        />
+        <Route
+          path="/orders/add-past"
+          element={
+            <ProtectedRoutes>
+              <AddPastOrderPage />
             </ProtectedRoutes>
           }
         />

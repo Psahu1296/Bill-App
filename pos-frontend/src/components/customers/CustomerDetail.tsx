@@ -7,6 +7,7 @@ import {
   searchCustomerProfiles,
   updateLedgerEntry,
   getOrders,
+  addDebtToLedger,
 } from "../../https";
 import {
   exportToPDF,
@@ -60,6 +61,9 @@ const CustomerDetail: React.FC = () => {
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
+  const [addDueOpen, setAddDueOpen] = useState(false);
+  const [dueAmount, setDueAmount] = useState("");
+  const [dueNotes, setDueNotes] = useState("");
 
   // Try to read profile from list-page cache first
   const { data: profilesRes } = useQuery({ queryKey: ["customerProfiles", ""], enabled: false });
@@ -135,6 +139,26 @@ const CustomerDetail: React.FC = () => {
     },
     onError: (err: { response?: { data?: { message?: string } } }) => {
       enqueueSnackbar(err.response?.data?.message ?? "Update failed.", { variant: "error" });
+    },
+  });
+
+  const addDueMutation = useMutation({
+    mutationFn: () =>
+      addDebtToLedger(phone, {
+        amountDue: Number(dueAmount),
+        notes: dueNotes || "Old balance",
+        customerName: displayName,
+      }),
+    onSuccess: () => {
+      enqueueSnackbar("Balance added!", { variant: "success" });
+      queryClient.invalidateQueries({ queryKey: ["customerLedger", phone] });
+      queryClient.invalidateQueries({ queryKey: ["customerProfiles"] });
+      queryClient.invalidateQueries({ queryKey: ["customerLedgers"] });
+      setAddDueOpen(false);
+      setDueAmount(""); setDueNotes("");
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) => {
+      enqueueSnackbar(err.response?.data?.message ?? "Failed to add balance.", { variant: "error" });
     },
   });
 
@@ -291,14 +315,22 @@ const CustomerDetail: React.FC = () => {
                   </p>
                 </div>
               </div>
-              {balanceDue > 0 && (
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={() => { setPayAmount(balanceDue.toFixed(2)); setPayOpen(true); }}
-                  className="text-xs font-bold px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:shadow-[0_0_15px_rgba(16,185,129,0.4)] active:scale-95 transition-all shadow-md"
+                  onClick={() => setAddDueOpen(true)}
+                  className="text-xs font-bold px-4 py-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 active:scale-95 transition-all"
                 >
-                  Settle
+                  + Add Due
                 </button>
-              )}
+                {balanceDue > 0 && (
+                  <button
+                    onClick={() => { setPayAmount(balanceDue.toFixed(2)); setPayOpen(true); }}
+                    className="text-xs font-bold px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:shadow-[0_0_15px_rgba(16,185,129,0.4)] active:scale-95 transition-all shadow-md"
+                  >
+                    Settle
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -719,6 +751,95 @@ const CustomerDetail: React.FC = () => {
                       <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     )}
                     {payMutation.isPending ? "Recording…" : "Confirm"}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Add Due Modal ──────────────────────────────────────────── */}
+      <AnimatePresence>
+        {addDueOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0c111d]/90 backdrop-blur-md p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="relative w-full max-w-sm rounded-[2rem] overflow-hidden"
+            >
+              <div
+                className="absolute inset-[-50%] animate-spin z-0 pointer-events-none"
+                style={{ animationDuration: "6s", background: "conic-gradient(from 180deg at 50% 50%, #f59e0b 0deg, #d97706 180deg, transparent 360deg)" }}
+              />
+              <div className="absolute inset-[1px] bg-[#111827] rounded-[1.95rem] z-0 shadow-[inset_0_0_30px_rgba(0,0,0,0.8)] pointer-events-none" />
+
+              <div className="relative z-10">
+                <div className="flex items-center justify-between px-6 py-5 border-b border-white/10">
+                  <div>
+                    <h2 className="font-display text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-400">
+                      Add Old Balance
+                    </h2>
+                    <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest mt-1">{displayName}</p>
+                  </div>
+                  <button
+                    onClick={() => setAddDueOpen(false)}
+                    className="p-2.5 bg-white/5 hover:bg-red-500/20 hover:text-red-400 rounded-xl transition-all border border-white/5"
+                  >
+                    <FaTimes className="text-white/70" />
+                  </button>
+                </div>
+
+                <div className="px-6 py-6 space-y-5 bg-[#111827]">
+                  <div>
+                    <label className="block text-[10px] font-black text-white/60 uppercase tracking-[0.15em] mb-2">
+                      Amount Due *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 font-black">₹</span>
+                      <input
+                        type="number"
+                        value={dueAmount}
+                        onChange={(e) => setDueAmount(e.target.value)}
+                        className="w-full bg-[#1e293b] rounded-xl pl-8 pr-4 py-3.5 text-white font-black text-sm focus:outline-none focus:ring-2 ring-amber-500/50 border border-white/5 placeholder:text-white/20 transition-all shadow-inner"
+                        step="0.01" min="0.01"
+                        placeholder="0.00"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-white/60 uppercase tracking-[0.15em] mb-2">
+                      Notes <span className="normal-case font-medium text-white/30 tracking-normal">(optional)</span>
+                    </label>
+                    <input
+                      value={dueNotes}
+                      onChange={(e) => setDueNotes(e.target.value)}
+                      placeholder="e.g. Old credit from before system…"
+                      className="w-full bg-[#1e293b] rounded-xl px-4 py-3.5 text-white text-sm focus:outline-none focus:ring-2 ring-amber-500/50 border border-white/5 placeholder:text-white/20 transition-all shadow-inner"
+                    />
+                  </div>
+                </div>
+
+                <div className="px-6 py-5 bg-[#0f172a] border-t border-white/5 flex gap-3 justify-end">
+                  <button
+                    onClick={() => { setAddDueOpen(false); setDueAmount(""); setDueNotes(""); }}
+                    className="px-6 py-3 rounded-xl text-white/50 font-black text-[11px] uppercase tracking-wider hover:text-white hover:bg-white/5 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => addDueMutation.mutate()}
+                    disabled={!dueAmount || Number(dueAmount) <= 0 || addDueMutation.isPending}
+                    className="bg-gradient-to-r from-amber-500 to-orange-600 text-white px-8 py-3 rounded-xl font-black text-[11px] uppercase tracking-wider flex items-center gap-2 hover:shadow-[0_0_20px_rgba(245,158,11,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-amber-400/30 active:scale-95"
+                  >
+                    {addDueMutation.isPending && (
+                      <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    )}
+                    {addDueMutation.isPending ? "Adding…" : "Add Balance"}
                   </button>
                 </div>
               </div>

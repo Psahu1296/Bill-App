@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { useAppDispatch } from "../../redux/hooks";
-import { addItems } from "../../redux/slices/cartSlice";
 import type { Dish, DishVariant } from "../../types";
 import { getDishImage } from "../../utils";
 
-interface MenuItemProps { item: Dish; }
+interface MenuItemProps {
+  item: Dish;
+  onAddToCart: (dish: Dish, variant: DishVariant, qty: number) => void;
+}
 
-const MenuItem: React.FC<MenuItemProps> = ({ item }) => {
+const MenuItem: React.FC<MenuItemProps> = ({ item, onAddToCart }) => {
   const [itemCount, setItemCount] = useState(1);
   const [selectedVariant, setSelectedVariant] = useState<DishVariant | null>(null);
-  const dispatch = useAppDispatch();
 
   useEffect(() => {
     if (item?.variants?.length > 0) {
@@ -28,15 +28,7 @@ const MenuItem: React.FC<MenuItemProps> = ({ item }) => {
 
   const handleAddToCart = () => {
     if (!selectedVariant) return;
-    dispatch(addItems({
-      id: `${item._id}_${selectedVariant.size}`,
-      name: item.name,
-      variantSize: selectedVariant.size,
-      pricePerQuantity: selectedVariant.price,
-      markedPricePerQuantity: selectedVariant.markedPrice,
-      quantity: itemCount,
-      price: selectedVariant.price * itemCount,
-    }));
+    onAddToCart(item, selectedVariant, itemCount);
     setItemCount(1);
   };
 

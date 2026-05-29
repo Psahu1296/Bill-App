@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect } from "react";
 import BottomNav from "../components/shared/BottomNav";
 import BackButton from "../components/shared/BackButton";
 import { MdRestaurantMenu } from "react-icons/md";
@@ -8,12 +8,12 @@ import CartInfo from "../components/menu/CartInfo";
 import Bill from "../components/menu/Bill";
 import { useSelector } from "react-redux";
 import { useAppDispatch } from "../redux/hooks";
-import { removeAllItems, updateList } from "../redux/slices/cartSlice";
+import { addItems, removeAllItems, updateList } from "../redux/slices/cartSlice";
 import { setCustomer, updateTable } from "../redux/slices/customerSlice";
 import { useSearchParams } from "react-router-dom";
 import { getOrderById } from "../https";
 import type { RootState } from "../redux/store";
-import type { Order } from "../types";
+import type { Dish, DishVariant, Order } from "../types";
 
 const Menu: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -58,6 +58,27 @@ const Menu: React.FC = () => {
 
   const customerData = useSelector((state: RootState) => state.customer);
 
+  const handleAddToCart = useCallback((dish: Dish, variant: DishVariant, qty: number) => {
+    dispatch(addItems({
+      id: `${dish._id}_${variant.size}`,
+      name: dish.name,
+      variantSize: variant.size,
+      pricePerQuantity: variant.price,
+      markedPricePerQuantity: variant.markedPrice,
+      quantity: qty,
+      price: variant.price * qty,
+    }));
+  }, [dispatch]);
+
+  const handleAddCustom = useCallback((name: string, price: number) => {
+    dispatch(addItems({
+      id: `custom-${Date.now()}`,
+      name,
+      pricePerQuantity: price,
+      quantity: 1,
+    }));
+  }, [dispatch]);
+
   return (
     <section className="bg-[#1f1f1f] flex gap-3 h-fit pb-20">
       <div className="flex-[3]">
@@ -82,7 +103,7 @@ const Menu: React.FC = () => {
             </div>
           </div>
         </div>
-        <MenuContainer />
+        <MenuContainer onAddToCart={handleAddToCart} onAddCustom={handleAddCustom} />
       </div>
       <div className="flex-[1] bg-[#1a1a1a] mt-4 mr-3 h-[780px] rounded-lg pt-2 basis-[12%]">
         <CustomerInfo />

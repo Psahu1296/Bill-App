@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { FaHome, FaUsers } from "react-icons/fa";
-import { MdOutlineReorder, MdTableBar } from "react-icons/md";
+import { MdOutlineReorder, MdTableBar, MdReceiptLong, MdInventory } from "react-icons/md";
 import { BiSolidDish } from "react-icons/bi";
 import { useNavigate, useLocation } from "react-router-dom";
 import Modal from "./Modal";
@@ -8,10 +8,14 @@ import { setCustomer } from "../../redux/slices/customerSlice";
 import { useAppDispatch } from "../../redux/hooks";
 import CustomerFields from "./CustomerFields";
 
-const navItems = [
+const leftNav = [
   { path: "/", icon: FaHome, label: "Home" },
   { path: "/orders", icon: MdOutlineReorder, label: "Orders" },
+  { path: "/expenses", icon: MdReceiptLong, label: "Expenses" },
+];
+const rightNav = [
   { path: "/tables", icon: MdTableBar, label: "Tables" },
+  { path: "/inventory", icon: MdInventory, label: "Inventory" },
   { path: "/customers", icon: FaUsers, label: "Customers" },
 ];
 
@@ -46,27 +50,51 @@ const BottomNav: React.FC = () => {
       {/* Gradient fade above nav */}
       <div className="h-6 bg-gradient-to-t from-dhaba-bg to-transparent pointer-events-none" />
 
-      <div className="glass border-t border-dhaba-border/30 px-4 py-2 flex justify-around items-center">
-        {navItems.map(({ path, icon: Icon, label }) => (
-          <button
-            key={path}
-            onClick={() => navigate(path)}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-semibold text-sm transition-all duration-300 ${
-              isActive(path)
-                ? "bg-dhaba-accent/15 text-dhaba-accent shadow-glow"
-                : "text-dhaba-muted hover:text-dhaba-text hover:bg-dhaba-surface-hover"
-            }`}
-          >
-            <Icon size={18} />
-            <span className={isActive(path) ? "" : "hidden lg:inline"}>{label}</span>
-          </button>
-        ))}
+      <div className="glass border-t border-dhaba-border/30 px-2 py-2 flex items-center">
+        {/* Left 3 items */}
+        <div className="flex flex-1 justify-around">
+          {leftNav.map(({ path, icon: Icon, label }) => (
+            <button
+              key={path}
+              onClick={() => navigate(path)}
+              className={`flex items-center gap-1.5 px-3 py-2.5 rounded-2xl font-semibold text-sm transition-all duration-300 ${
+                isActive(path)
+                  ? "bg-dhaba-accent/15 text-dhaba-accent shadow-glow"
+                  : "text-dhaba-muted hover:text-dhaba-text hover:bg-dhaba-surface-hover"
+              }`}
+            >
+              <Icon size={18} />
+              <span className={isActive(path) ? "" : "hidden lg:inline"}>{label}</span>
+            </button>
+          ))}
+        </div>
 
-        {/* Floating action button */}
+        {/* Spacer for centered FAB */}
+        <div className="w-16 shrink-0" />
+
+        {/* Right 3 items */}
+        <div className="flex flex-1 justify-around">
+          {rightNav.map(({ path, icon: Icon, label }) => (
+            <button
+              key={path}
+              onClick={() => navigate(path)}
+              className={`flex items-center gap-1.5 px-3 py-2.5 rounded-2xl font-semibold text-sm transition-all duration-300 ${
+                isActive(path)
+                  ? "bg-dhaba-accent/15 text-dhaba-accent shadow-glow"
+                  : "text-dhaba-muted hover:text-dhaba-text hover:bg-dhaba-surface-hover"
+              }`}
+            >
+              <Icon size={18} />
+              <span className={isActive(path) ? "" : "hidden lg:inline"}>{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Floating action button — centered */}
         <button
           disabled={isActive("/tables") || isActive("/menu")}
           onClick={() => setIsModalOpen(true)}
-          className="absolute -top-5 btn-accent rounded-2xl p-4 shadow-glow-lg disabled:opacity-40 disabled:shadow-none"
+          className="absolute left-1/2 -translate-x-1/2 -top-5 btn-accent rounded-2xl p-4 shadow-glow-lg disabled:opacity-40 disabled:shadow-none"
         >
           <BiSolidDish size={28} />
         </button>

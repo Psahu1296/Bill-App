@@ -6,12 +6,14 @@ import { FaTimes, FaClipboardList, FaPlus, FaMinus, FaShoppingBag } from "react-
 import { MdTableRestaurant } from "react-icons/md";
 import { PiTruckTrailerLight } from "react-icons/pi";
 
-import { getTables, getDishes, addOrder } from "../../https";
+import { getTables, addOrder } from "../../https";
 import CustomerFields from "../shared/CustomerFields";
 import { getTodayISO } from "../../utils";
 import type { Table, Dish, DishVariant, OrderStatus, PaymentMethod } from "../../types";
-import PastOrderItemBuilder, { type LocalCartItem } from "./PastOrderItemBuilder";
+import { type LocalCartItem } from "./PastOrderItemBuilder";
 import PastOrderSummary from "./PastOrderSummary";
+import MenuContainer from "../menu/MenuContainer";
+import LocalCartDisplay from "./LocalCartDisplay";
 
 interface AddPastOrderModalProps {
   onClose: () => void;
@@ -37,10 +39,7 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
   const [amountPaidTouched, setAmountPaidTouched] = useState(false);
 
   // ── Menu / cart state ─────────────────────────────────────────
-  const [search, setSearch]               = useState("");
-  const [catFilter, setCatFilter]         = useState("All");
-  const [cartItems, setCartItems]         = useState<LocalCartItem[]>([]);
-  const [selectedVariants, setSelectedVariants] = useState<Record<string, DishVariant>>({});
+  const [cartItems, setCartItems] = useState<LocalCartItem[]>([]);
 
   // ── Data fetching ─────────────────────────────────────────────
   const { data: tablesRes, isLoading: tablesLoading } = useQuery({
@@ -48,15 +47,9 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
     queryFn: getTables,
     staleTime: 60_000,
   });
-  const { data: dishesRes, isLoading: dishesLoading } = useQuery({
-    queryKey: ["dishes"],
-    queryFn: getDishes,
-    staleTime: 5 * 60_000,
-  });
 
   const allTables: Table[] = tablesRes?.data?.data ?? [];
   const virtualTable: Table | undefined = allTables.find((t) => t.isVirtual);
-  const allDishes: Dish[]  = dishesRes?.data?.data ?? [];
 
   // ── Bill derived values ───────────────────────────────────────
   const subtotal           = cartItems.reduce((s, i) => s + i.price, 0);
@@ -64,22 +57,13 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
   const displayAmountPaid  = amountPaidTouched ? amountPaid : finalTotal;
 
   // ── Cart handlers ─────────────────────────────────────────────
-  const handleVariantSelect = useCallback((dishId: string, variant: DishVariant) => {
-    setSelectedVariants((prev) => ({ ...prev, [dishId]: variant }));
-  }, []);
-
-  const handleAddToCart = useCallback((dish: Dish) => {
-    const variant =
-      selectedVariants[dish._id] ||
-      dish.variants.find((v) => v.size === "Full") ||
-      dish.variants.find((v) => v.size === "Regular") ||
-      dish.variants[0];
+  const handleAddToCart = useCallback((dish: Dish, variant: DishVariant, qty: number) => {
     setCartItems((prev) => {
       const existing = prev.find((i) => i.id === dish._id && i.variantSize === variant.size);
       if (existing) {
         return prev.map((i) =>
           i.id === dish._id && i.variantSize === variant.size
-            ? { ...i, quantity: i.quantity + 1, price: (i.quantity + 1) * i.pricePerQuantity }
+            ? { ...i, quantity: i.quantity + qty, price: (i.quantity + qty) * i.pricePerQuantity }
             : i
         );
       }
@@ -94,13 +78,13 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
           ...(variant.markedPrice != null && variant.markedPrice > variant.price
             ? { markedPricePerQuantity: variant.markedPrice }
             : {}),
-          quantity: 1,
-          price: variant.price,
+          quantity: qty,
+          price: variant.price * qty,
           batch: 1,
         },
       ];
     });
-  }, [selectedVariants]);
+  }, []);
 
   const handleChangeQty = useCallback((id: string, variantSize: string | undefined, delta: number) => {
     setCartItems((prev) =>
@@ -360,19 +344,11 @@ const AddPastOrderModal: React.FC<AddPastOrderModalProps> = ({ onClose }) => {
 
               {/* Right Column: Menu / Cart */}
               <div className="w-full lg:w-7/12 flex flex-col gap-6 lg:border-l lg:border-dhaba-border/20 lg:pl-8">
-                <PastOrderItemBuilder
-                  allDishes={allDishes}
-                  dishesLoading={dishesLoading}
+                <MenuContainer onAddToCart={handleAddToCart} />
+                <LocalCartDisplay
                   cartItems={cartItems}
-                  selectedVariants={selectedVariants}
-                  search={search}
-                  catFilter={catFilter}
-                  onSearchChange={setSearch}
-                  onCatFilterChange={setCatFilter}
-                  onVariantSelect={handleVariantSelect}
-                  onAddToCart={handleAddToCart}
                   onChangeQty={handleChangeQty}
-                  onRemoveFromCart={handleRemoveFromCart}
+                  onRemove={handleRemoveFromCart}
                 />
               </div>
 

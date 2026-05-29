@@ -191,4 +191,33 @@ const updateCycle = async (req: Request, res: Response, next: NextFunction) => {
   }
 };
 
-export { getInventoryDashboard, getCycleHistory, updateCycle, getVariantsForMaterial };
+/** Returns all dishes linked to this raw material (explicit tag + name/alias match), with their variant sizes */
+const getLinkedDishes = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rawMaterial = req.params.rawMaterial as string;
+    if (!rawMaterial) return next(createHttpError(400, "rawMaterial param required"));
+
+    const preset = await ExpensePreset.findOne({ name: rawMaterial })
+      .select("aliases")
+      .lean() as unknown as { aliases?: string[] } | null;
+    const aliases = preset?.aliases ?? [];
+
+    const keywords = [rawMaterial.toLowerCase(), ...aliases.map((a) => a.toLowerCase())];
+    const regexClauses = keywords.map((k) => ({ name: { $regex: k, $options: "i" } }));
+
+    const dishes = await Dish.find({ $or: [{ rawMaterial }, ...regexClauses] })
+      .select("name variants")
+      .lean() as unknown as { name: string; variants?: { size: string }[] }[];
+
+    const result = dishes.map((d) => ({
+      name: d.name,
+      variants: (d.variants ?? []).map((v) => v.size).filter(Boolean),
+    }));
+
+    res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export { getInventoryDashboard, getCycleHistory, updateCycle, getVariantsForMaterial, getLinkedDishes };

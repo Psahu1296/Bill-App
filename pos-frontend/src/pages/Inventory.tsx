@@ -4,16 +4,18 @@ import {
   getInventoryDashboard,
   getInventoryCycleHistory,
   getInventoryVariants,
+  getInventoryLinkedDishes,
   updateInventoryCycle,
   updateExpensePresetPieceMap,
   updateInventoryConfig,
 } from "../https";
 import type { InventoryItem, StockCycle, TrackingMode } from "../types";
 import { enqueueSnackbar } from "notistack";
-import { FaBoxOpen, FaChartLine, FaHistory, FaExclamationTriangle, FaPuzzlePiece, FaClock } from "react-icons/fa";
+import { FaBoxOpen, FaChartLine, FaHistory, FaExclamationTriangle, FaPuzzlePiece, FaClock, FaLink } from "react-icons/fa";
 import { MdRefresh, MdInventory } from "react-icons/md";
 import Skeleton from "../components/shared/Skeleton";
 import BackButton from "../components/shared/BackButton";
+import BottomNav from "../components/shared/BottomNav";
 
 const labelClass = "text-[10px] font-black text-white/40 uppercase tracking-[0.2em]";
 const valueClass = "font-display text-xl font-black text-white/90 tracking-tight";
@@ -460,6 +462,80 @@ function InventoryConfigEditor({
   );
 }
 
+type LinkedDish = { name: string; variants: string[] };
+
+function LinkedDishesPanel({ rawMaterial }: { rawMaterial: string }) {
+  const [open, setOpen] = useState(false);
+
+  const { data: dishes = [], isLoading } = useQuery({
+    queryKey: ["inventory-linked-dishes", rawMaterial],
+    queryFn: () => getInventoryLinkedDishes(rawMaterial).then((r) => r.data.data as LinkedDish[]),
+    enabled: open,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  return (
+    <div className="border border-white/5 rounded-2xl overflow-hidden relative z-10">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-white/3 hover:bg-white/5 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <FaLink className="text-teal-400 text-xs" />
+          <span className="text-[10px] font-black uppercase tracking-widest text-white/50">Linked Dishes</span>
+          {!open && dishes.length > 0 && (
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-400 border border-teal-500/20 uppercase tracking-wider">
+              {dishes.length}
+            </span>
+          )}
+        </div>
+        <span className="text-[10px] font-black text-white/30 uppercase tracking-wider">{open ? "▲" : "▼"}</span>
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 pt-2 bg-black/20 flex flex-col gap-2">
+          {isLoading ? (
+            <Skeleton className="h-8 rounded-lg" count={2} />
+          ) : dishes.length === 0 ? (
+            <p className="text-[10px] text-white/30 font-medium text-center py-2">
+              No dishes linked. Add dish names as aliases in Tracking Config above.
+            </p>
+          ) : (
+            <>
+              <p className="text-[10px] text-white/30 font-medium">
+                {dishes.length} dish{dishes.length !== 1 ? "es" : ""} tracked for {rawMaterial}
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {dishes.map((dish) => (
+                  <div key={dish.name} className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/3 border border-white/5 gap-3">
+                    <span className="text-[11px] font-bold text-white/70 truncate">{dish.name}</span>
+                    <div className="flex gap-1 flex-wrap justify-end shrink-0">
+                      {dish.variants.map((v) => (
+                        <span key={v} className="text-[9px] font-black px-1.5 py-0.5 rounded border bg-teal-500/10 text-teal-400/70 border-teal-500/20 uppercase tracking-wider">
+                          {v}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[9px] text-white/25 mt-0.5">
+                Missing a dish? Add its name or regional alias in Tracking Config.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatConsumptionRate(rate: number, stockUnit: string): string {
+  if (stockUnit === "kg") return `${(rate * 1000).toFixed(0)}g`;
+  if (stockUnit === "ltr") return `${(rate * 1000).toFixed(0)}ml`;
+  return `${rate.toFixed(3)} ${stockUnit}`;
+}
+
 function InventoryCard({ item }: { item: InventoryItem }) {
   const [showHistory, setShowHistory] = useState(false);
   const [targetDays, setTargetDays] = useState(7);
@@ -467,10 +543,18 @@ function InventoryCard({ item }: { item: InventoryItem }) {
 
   const isTimeLinkd = trackingMode === "time-linked";
 
-  const restockQty =
-    !isTimeLinkd && item.consumptionRate && item.dailyUnitRate > 0
-      ? (item.dailyUnitRate * targetDays * item.consumptionRate).toFixed(2)
-      : null;
+  const daysActive = item.activeCycle
+    ? Math.floor((Date.now() - new Date(item.activeCycle.startDate).getTime()) / 86_400_000)
+    : null;
+
+  const getRestockQty = (days: number): string | null => {
+    if (isTimeLinkd || !item.consumptionRate || item.dailyUnitRate <= 0) return null;
+    if (days === 7 && item.prediction.restockFor7Days !== null)
+      return item.prediction.restockFor7Days.toFixed(2);
+    if (days === 14 && item.prediction.restockFor14Days !== null)
+      return item.prediction.restockFor14Days.toFixed(2);
+    return (item.dailyUnitRate * days * item.consumptionRate).toFixed(2);
+  };
 
   const isLowStock = item.prediction.daysRemaining !== null && item.prediction.daysRemaining <= 3;
 
@@ -519,9 +603,14 @@ function InventoryCard({ item }: { item: InventoryItem }) {
               <div className="bg-[#1e293b] border border-white/5 rounded-2xl p-4 flex flex-col justify-center shadow-inner">
                 <p className={labelClass}>Avg Duration</p>
                 <p className={`${valueClass} mt-1`}>{avgDaysLasted?.toFixed(1) ?? "—"}</p>
-                <p className="text-[10px] font-bold text-white/30 mt-0.5">days/{stockUnit}</p>
+                <p className="text-[10px] font-bold text-white/30 mt-0.5">days avg</p>
               </div>
-              <div className="bg-[#1e293b] border border-white/5 rounded-2xl p-4 flex flex-col justify-center shadow-inner col-span-2">
+              <div className="bg-[#1e293b] border border-white/5 rounded-2xl p-4 flex flex-col justify-center shadow-inner">
+                <p className={labelClass}>Days Active</p>
+                <p className={`${valueClass} mt-1`}>{daysActive !== null ? daysActive : "—"}</p>
+                <p className="text-[10px] font-bold text-white/30 mt-0.5">current fill</p>
+              </div>
+              <div className="bg-[#1e293b] border border-white/5 rounded-2xl p-4 flex flex-col justify-center shadow-inner">
                 <p className={labelClass}>Cycles</p>
                 <p className={`${valueClass} mt-1`}>{item.closedCyclesCount}</p>
                 <p className="text-[10px] font-bold text-white/30 mt-0.5">completed</p>
@@ -537,12 +626,12 @@ function InventoryCard({ item }: { item: InventoryItem }) {
               <div className="bg-[#1e293b] border border-white/5 rounded-2xl p-4 flex flex-col justify-center shadow-inner">
                 <p className={labelClass}>Usage</p>
                 <p className={`${valueClass} mt-1`}>
-                  {item.consumptionRate !== null ? `${(item.consumptionRate * 1000).toFixed(0)}g` : "—"}
+                  {item.consumptionRate !== null ? formatConsumptionRate(item.consumptionRate, stockUnit) : "—"}
                 </p>
                 <p className="text-[10px] font-bold text-white/30 mt-0.5">per {consumptionUnit}</p>
               </div>
               <div className="bg-[#1e293b] border border-white/5 rounded-2xl p-4 flex flex-col justify-center shadow-inner">
-                <p className={labelClass}>{consumptionUnit} Sold</p>
+                <p className={labelClass}>{consumptionUnit} Used</p>
                 <p className={`${valueClass} mt-1`}>
                   {item.activeUnitsConsumed !== null ? item.activeUnitsConsumed : "—"}
                 </p>
@@ -575,7 +664,7 @@ function InventoryCard({ item }: { item: InventoryItem }) {
         </div>
 
         {/* Restock recommendation — order-linked only */}
-        {!isTimeLinkd && item.consumptionRate !== null && item.dailyUnitRate > 0 && (
+        {getRestockQty(targetDays) !== null && (
           <div className="bg-blue-500/5 border border-blue-500/10 rounded-2xl p-5 relative z-10">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
@@ -599,7 +688,7 @@ function InventoryCard({ item }: { item: InventoryItem }) {
             <div className="flex items-end justify-between border-t border-blue-500/10 pt-3">
               <p className="text-xs font-bold text-white/40">Suggested Purchase</p>
               <p className="font-display font-black text-blue-400 text-2xl drop-shadow-[0_0_8px_rgba(59,130,246,0.3)]">
-                {restockQty} <span className="text-sm opacity-70">{stockUnit}</span>
+                {getRestockQty(targetDays)} <span className="text-sm opacity-70">{stockUnit}</span>
               </p>
             </div>
           </div>
@@ -613,6 +702,9 @@ function InventoryCard({ item }: { item: InventoryItem }) {
             variantPieceMap={item.variantPieceMap}
           />
         )}
+
+        {/* Linked dishes — order-linked only */}
+        {!isTimeLinkd && <LinkedDishesPanel rawMaterial={item.rawMaterial} />}
 
         {/* Inventory tracking config */}
         <InventoryConfigEditor item={item} />
@@ -747,6 +839,7 @@ const Inventory: React.FC = () => {
           ))}
         </div>
       </div>
+      <BottomNav />
     </div>
   );
 };
