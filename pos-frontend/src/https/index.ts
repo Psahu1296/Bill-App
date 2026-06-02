@@ -122,6 +122,15 @@ export const getPeriodEarnings = (periodType: string) =>
 export const getDashboardChartData = (period: string) =>
   axiosWrapper.get("/api/earnings/chart", { params: { period } });
 
+export const getTopRevenueDishes = (params: { limit?: number; from?: string; to?: string } = {}) =>
+  axiosWrapper.get("/api/dishes/top-revenue", { params });
+
+export const getDailySummary = (date: string) =>
+  axiosWrapper.get(`/api/daily-summary/${date}`);
+
+export const getDailySummaryRange = (from: string, to: string) =>
+  axiosWrapper.get("/api/daily-summary/range", { params: { from, to } });
+
 // Expenses
 export const addExpense = (expenseData: AddExpensePayload) =>
   axiosWrapper.post("/api/expenses", expenseData);
