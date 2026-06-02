@@ -75,6 +75,42 @@ _Avoid_: Buy suggestion, reorder quantity, purchase recommendation
 > **Dev:** "What if there's no history yet — no closed cycles?"
 > **Domain expert:** "Stock Prediction still shows using Daily Plate Rate alone for days remaining. Consumption Rate shows '—' until first cycle closes."
 
+## Voice Order
+
+**Voice Order**:
+A feature that lets the admin speak dish names, variants, and quantities in a single utterance (e.g. "2 dal fry full, 1 chicken curry, 3 roti"). The browser captures speech via Web Speech API, sends the raw transcript text to the backend, which fuzzy-matches against the dish catalogue and returns structured cart items.
+_Avoid_: voice input, speech-to-cart, mic order
+
+**Voice Transcript**:
+The raw text string produced by the browser's Web Speech API from the admin's spoken utterance. Sent as-is to `POST /api/dishes/voice-parse`.
+_Avoid_: audio, speech blob, recording
+
+**Voice Parse Result**:
+The backend response from `POST /api/dishes/voice-parse`. Contains three lists: `resolved` (confident matches ready to add to cart), `ambiguous` (query phrase matched multiple dishes above threshold — requires admin confirmation), and `unmatched` (phrases that matched nothing).
+_Avoid_: parse response, NLP result
+
+**Resolved Item**:
+A voice-parsed cart item where a single dish matched the spoken phrase with confidence above threshold. Has `dish`, `variant` (defaulted via Full → Regular → variants[0]), and `quantity`. Added to cart immediately without confirmation.
+_Avoid_: matched item, confirmed item
+
+**Ambiguous Item**:
+A voice-parsed phrase that matched multiple dishes above the fuzzy threshold (e.g. "dal" → Dal Fry, Dal Makhani, Dal Tadka). Shown in an inline resolver UI — admin taps one candidate to confirm. Only then added to cart.
+_Avoid_: conflict, multi-match, unclear item
+
+**Default Variant**:
+The variant automatically selected when the admin does not specify one in the voice utterance. Resolution order: variant with `size === "Full"` → `size === "Regular"` → `variants[0]`.
+_Avoid_: fallback variant, auto-variant
+
+## Menu Component Architecture
+
+**MenuContainer**:
+The shared orchestrator component for browsing and filtering the dish catalogue. Callback-based — it does not own the cart. Accepts `onAddToCart(dish, variant, qty)` and optional `onAddCustom(name, price)`. Used on the Menu page (wraps Redux dispatch) and past order modals (wraps local state).
+_Avoid_: menu panel, dish browser
+
+**Controlled Menu**:
+The pattern where `MenuContainer` is stateless about cart destination. The parent decides what happens when a dish is added. Contrast with the old approach where `MenuContainer` dispatched directly to Redux.
+_Avoid_: stateless menu, dumb menu
+
 ## Flagged ambiguities
 
 - "plates sold" means completed orders (`orderStatus === "Completed"`) only — pending and cancelled orders do not count as consumption.

@@ -149,11 +149,19 @@ Most routes require a JWT cookie (`accessToken`).
 - `/api/customer`: Customer details & CRM.
 - `/api/profiles` & `/api/reminders`: Profiles & automated push reminders.
 
+#### Analytics
+- `/api/daily-summary/:date`: Full day picture — revenue, orders, payment split, top items, peak hour, consumables.
+- `/api/daily-summary/range?from=&to=`: Array of daily summaries (max 90 days).
+- `/api/earnings/chart?period=`: Bucketed income/expenses/orders (hourly/daily/monthly).
+- `/api/earnings/range?from=&to=`: Revenue per day from pre-computed DailyEarning collection.
+- `/api/dishes/top-revenue?limit=&from=&to=`: Top dishes ranked by revenue via aggregation.
+
 #### Finance & Operations
-- `/api/earnings`: Daily/dashboard earning summaries.
-- `/api/expenses` & `/api/expense-presets`: Expense tracking.
+- `/api/earnings`: Daily/dashboard/period earning summaries.
+- `/api/expenses` & `/api/expense-presets`: Expense tracking with preset categories and variant piece maps.
+- `/api/inventory`: Raw material stock cycles, consumption rates, restock predictions.
 - `/api/ledger`: Customer credit (Khata) tracking.
-- `/api/consumables`: Logging internal consumption (tea, etc.).
+- `/api/consumables`: Logging internal consumption (tea, gutka, cigarette).
 - `/api/staff`: Employee management and payments.
 
 #### Payments
@@ -182,7 +190,7 @@ Most routes require a JWT cookie (`accessToken`).
 | Framer Motion 11.18 | Animations |
 | Notistack 3.0 | Toast notifications |
 | React Hook Form 7.57 | Form handling |
-| Recharts 3.8 | Data visualization (charts) |
+| Recharts 3.8 | Charts (area, bar, pie) |
 | Vite 6.0.5 | Build tool |
 
 ### Redux Store
@@ -201,20 +209,21 @@ store = {
 |---|---|---|
 | `/auth` | `Auth` | Login + Register |
 | `/` | `Home` | Dashboard: recent orders, KPIs, quick consumable log |
-| `/menu` | `Menu` | POS: browse dishes, cart, customer info, bill, Pay modal |
-| `/orders` | `Orders` | Order list with status filters, pay remaining balance |
+| `/menu` | `Menu` | POS: browse dishes (voice order), cart, bill, Pay modal |
+| `/orders` | `Orders` | Order list with date/status filters, pay remaining balance |
 | `/tables` | `Tables` | Table grid, status, add tables |
 | `/customers` | `Customers` | CRM, ledger and balances |
-| `/customers/:phone` | `CustomerDetail` | Specific customer order history and khata |
-| `/consumables` | `Consumables` | Log internal tea/cigarettes |
+| `/customers/:phone` | `CustomerDetail` | Customer order history and khata |
+| `/consumables` | `Consumables` | Log internal tea/gutka/cigarettes |
 | `/staff` | `Staff` | Employee CRUD, salary payments |
-| `/expenses` | `Expenses` | Detailed expense tracking & dashboard |
-| `/dashboard` | `Dashboard` | Analytics & Revenue metrics |
+| `/expenses` | `Expenses` | Expense tracking, filtering, summary dashboard |
+| `/dashboard` | `Dashboard` | Analytics with period selector and custom date range |
 | `/dashboard/dishes` | `DishesPage` | Full dish CRUD |
 | `/requests` | `Requests` | Pre-orders and customer dish requests |
-| `/online-config` | `OnlineConfig` | Settings for the online customer app |
-| `/server-status` | `ServerStatus` | Monitoring DB and connection health |
-| `/app-update` | `AppUpdate` | Check GitHub releases, version info |
+| `/online-config` | `OnlineConfig` | Delivery areas, online ordering flags |
+| `/inventory` | `Inventory` | Raw material stock cycles, consumption rates, predictions |
+| `/server-status` | `ServerStatus` | MongoDB connection health |
+| `/app-update` | `AppUpdate` | GitHub releases, version info |
 
 *(All routes except `/auth` are protected)*
 

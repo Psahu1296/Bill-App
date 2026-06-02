@@ -39,18 +39,21 @@ Head to the [**Releases page**](../../releases/latest) and download the installe
 - **Table Management** — visual table grid with booking status
 - **Menu Management** — add/edit dishes with variants (Half / Full / Regular etc.)
   - Filter by type (Veg / Non-Veg) and category (Rice, Roti, Sabji, Drinks, and any custom categories)
-  - "Available only" toggle to hide sold-out items during a busy shift
+  - "Available only" toggle, voice-order entry via mic, bulk import
 - **Billing & Invoicing** — auto-generated bills with tax, print-ready invoices
-- **Dashboard** — daily earnings, popular dishes, recent orders at a glance
-- **Customer Ledger** — track credit/balance for regular customers
-- **Expenses Tracking** — log daily expenses by category
+- **Dashboard & Analytics** — daily/weekly/monthly/yearly earnings, income vs expenses charts, top dishes by revenue, payment split, custom date range filters
+- **Customer Ledger** — track credit/balance (khata) for regular customers
+- **Expenses Tracking** — log daily expenses by category with period summaries
 - **Consumables Tracking** — track tea, gutka, cigarette consumption by staff/customer/owner
 - **Staff Management** — staff profiles, salary records, payment history
+- **Inventory / Raw Material Tracking** — stock cycle tracking, consumption rates, restock predictions
 - **Data Management** *(Admin only)* — export data as JSON, CSV or Excel (XLSX), bulk delete by module and date range, live DB stats
-- **Razorpay Integration** — online payment support (requires internet)
+- **Online Customer App** — QR-code ordering web app (dine-in / takeaway / delivery) with PhonePe/Razorpay, real-time SSE status, customer profiles
+- **Pre-orders & Dish Requests** — customers can pre-book and request dishes through the online app
+- **Razorpay + PhonePe Integration** — online payment support
+- **Push Notifications** — SSE-based real-time admin alerts
 - **Splash screen** — animated launch screen showing startup progress
 - **Auto-updater** — silent background updates via GitHub Releases
-- **Fully offline** — SQLite database embedded on your machine, no cloud needed
 
 ---
 
@@ -59,13 +62,14 @@ Head to the [**Releases page**](../../releases/latest) and download the installe
 | Category | Technology |
 |----------|------------|
 | Desktop shell | Electron |
-| Frontend | React, Redux Toolkit, Tailwind CSS, TypeScript |
+| Frontend | React 18, Redux Toolkit, TanStack Query, Tailwind CSS, TypeScript |
 | Backend | Node.js, Express, TypeScript |
-| Database | SQLite via `better-sqlite3` (embedded, zero-config) |
-| Auth | JWT, bcrypt |
-| State | Redux Toolkit + React Query |
-| Payments | Razorpay |
+| Database | MongoDB via Mongoose |
+| Auth | JWT (httpOnly cookie), bcryptjs |
+| Payments | Razorpay + PhonePe |
+| Charts | Recharts |
 | Export | SheetJS (`xlsx`) for Excel export |
+| Push | Firebase Admin (push notifications) |
 
 ---
 
@@ -106,16 +110,7 @@ npm run electron:dev
 
 ### Seed the default menu (optional)
 
-If the dish list is empty, the **Menu page** will show a "Load Default Menu" button that seeds the database in one click — no terminal needed.
-
-To seed from the terminal instead:
-
-```bash
-cd pos-backend
-npx tsx scripts/seedDishes.ts
-```
-
-This inserts ~30 typical dhaba dishes (roti, rice, sabji, drinks) and skips any that already exist. Images are left blank — update them via the UI later.
+If the dish list is empty, navigate to **Dashboard → Manage Dishes** and use the "Seed Default Dishes" option, or call `POST /api/dishes/seed` directly.
 
 ### Environment variables (backend)
 
@@ -123,15 +118,16 @@ Create `pos-backend/.env`:
 
 ```env
 PORT=5001
-DATABASE_PATH=./dhaba-pos.db    # path to the SQLite file (auto-created)
+MONGODB_URI=mongodb+srv://...   # MongoDB Atlas connection string (required)
 JWT_SECRET=your_secret_here
 RAZORPAY_KEY_ID=your_key
 RAZORPAY_KEY_SECRET=your_secret
 RAZORPAY_WEBHOOK_SECRET=your_webhook_secret
 FRONTEND_URL=http://localhost:5173
+CUSTOMER_APP_URL=http://localhost:5174
+PHONEPE_ENV=UAT
+NODE_ENV=development
 ```
-
-> In the packaged desktop app, all secrets are auto-generated and managed by the app — no `.env` file needed.
 
 ---
 
@@ -179,23 +175,22 @@ GitHub Actions picks up the tag and builds installers for all three platforms.
 ```
 Bill-App/
 ├── electron/                  # Electron main process
-│   ├── main.ts                # Sets up DATABASE_PATH, starts Express, manages splash + BrowserWindow
+│   ├── main.ts                # Starts Express, manages splash + BrowserWindow
 │   ├── preload.ts             # Context bridge (IPC for renderer)
 │   ├── splash.html            # Animated launch/loading screen
 │   └── splash-preload.ts      # Context bridge for splash window
-├── pos-backend/               # Express + better-sqlite3 API
-│   ├── app.ts                 # Express app setup (routes, middleware)
-│   ├── server.ts              # Standalone entry: initDB + app.listen
-│   ├── db/
-│   │   ├── index.ts           # SQLite singleton (WAL mode, foreign keys)
-│   │   └── schema.ts          # CREATE TABLE IF NOT EXISTS for all tables
+├── pos-backend/               # Express + Mongoose API
+│   ├── app.ts                 # Express app setup (routes, middleware, CORS)
+│   ├── server.ts              # Entry point: MongoDB connect + app.listen
+│   ├── models/                # Mongoose models (Order, Dish, User, Expense, ...)
 │   ├── repositories/          # Typed data-access functions (one file per domain)
 │   ├── controllers/           # HTTP request handlers
 │   └── routes/
 ├── pos-frontend/              # React + Vite + TypeScript
 │   └── src/
 │       ├── types/             # Shared domain types
-│       ├── redux/             # Store, slices, hooks
+│       ├── redux/             # Store, slices (cart, user, customer)
+│       ├── https/             # API call functions (axiosWrapper)
 │       ├── components/
 │       └── pages/
 ├── build-resources/           # App icons (icon.png / .ico / .icns)
@@ -208,20 +203,22 @@ Bill-App/
 ## Roadmap
 
 - [x] Order, table, menu, billing management
-- [x] Customer ledger (credit tracking)
-- [x] Expense tracking
+- [x] Customer ledger (khata / credit tracking)
+- [x] Expense tracking with period summaries
 - [x] Consumables tracking (tea, gutka, cigarette)
 - [x] Staff management & salary payments
 - [x] TypeScript migration (FE + BE)
-- [x] Electron desktop app (offline, zero config)
-- [x] SQLite migration (replaced MongoDB — instant startup, no extra binary)
+- [x] Electron desktop app with auto-updater
 - [x] Splash screen with startup progress
-- [x] Auto-updater
-- [x] Menu filters (Veg/Non-Veg, category, availability, search)
+- [x] Menu filters, voice-order entry, bulk import
 - [x] Data Management — export (JSON/CSV/XLSX), bulk delete, live DB stats
-- [ ] Cloud sync / multi-device
+- [x] MongoDB migration (Mongoose, cloud-ready)
+- [x] Online customer app (QR ordering, PhonePe, SSE tracking)
+- [x] Pre-orders & dish requests
+- [x] Inventory / raw material stock cycle tracking + predictions
+- [x] Analytics dashboard — charts, top dishes, date range filters
 - [ ] Print receipt directly from app
-- [ ] Inventory / stock management
+- [ ] Cloud sync / multi-device (multiple POS terminals)
 
 ---
 

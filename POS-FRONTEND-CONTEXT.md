@@ -1,9 +1,9 @@
 # POS Frontend — Context & Code Guide
 
-> **Root:** `pos-frontend/`  
-> **Framework:** React 18 + TypeScript + Vite  
-> **Styling:** Tailwind CSS  
-> **Last updated:** 2026-04-02
+> **Root:** `pos-frontend/`
+> **Framework:** React 18 + TypeScript + Vite
+> **Styling:** Tailwind CSS
+> **Last updated:** 2026-06-02
 
 ---
 
@@ -14,15 +14,16 @@
 | Framework | React 18 |
 | Build tool | Vite |
 | Styling | Tailwind CSS |
-| Routing | react-router-dom 6 |
+| Routing | react-router-dom 7 |
 | Global state | Redux Toolkit + react-redux |
+| Server state | TanStack Query 5 |
 | API calls | axios (via `axiosWrapper`) |
 | Forms | react-hook-form 7 |
 | Animations | framer-motion 11 |
 | Toasts | notistack 3 |
 | Icons | react-icons 5 |
+| Charts | Recharts 3 |
 | QR codes | qrcode.react |
-| Date utils | (via backend; display formatting inline) |
 
 ---
 
@@ -79,7 +80,7 @@ pos-frontend/src/
 
 ## Routing (`App.tsx`)
 
-Routes are declared with `react-router-dom` v6 `<Routes>` / `<Route>`. Protected routes check Redux `isAuth`. Add new routes directly in `App.tsx`.
+Routes are declared with `react-router-dom` v7 `<Routes>` / `<Route>`. Protected routes check Redux `isAuth`. Add new routes directly in `App.tsx`.
 
 ---
 
@@ -151,11 +152,16 @@ All API calls are functions exported from `src/https/index.ts`. They use `axiosW
 - `getFrequentDishes()`
 - `bulkAddDishes(data[])`
 - `seedDefaultDishes()`
+- `voiceParseDishes(audio: Blob)` — transcribe voice → structured cart items
 
-**Earnings**
+**Earnings & Analytics**
 - `getDailyEarnings()`
 - `getDashboardEarningsSummary()`
 - `getPeriodEarnings(periodType)`
+- `getDashboardChartData(period)` — bucketed income/expenses/orders for charts
+- `getTopRevenueDishes({ limit?, from?, to? })` — top dishes by revenue with optional date range
+- `getDailySummary(date)` — full day analytics (payment split, top items, peak hour, avg order value)
+- `getDailySummaryRange(from, to)` — array of daily summaries for a date range (max 90 days)
 
 **Expenses**
 - `addExpense(data)`, `getAllExpenses(filters?)`, `getExpensesByPeriod(periodType, date?)`, `updateExpense(id, updates)`, `deleteExpense(id)`
