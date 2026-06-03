@@ -17,6 +17,8 @@ import type { RootState } from "./redux/store";
 import { NotificationProvider } from "./context/NotificationContext";
 import { useAdminNotify } from "./hooks/useAdminNotify";
 import { ReminderProvider, useReminderContext } from "./context/ReminderContext";
+import { PendingOrdersProvider } from "./context/PendingOrdersContext";
+import PendingOrdersTray from "./components/shared/PendingOrdersTray";
 
 function Layout() {
   const isLoading = useLoadData();
@@ -225,7 +227,10 @@ function App() {
   return (
     <NotificationProvider>
       <Router>
-        <AppInner />
+        <PendingOrdersProvider>
+          <AppInner />
+          <PendingOrdersTray />
+        </PendingOrdersProvider>
       </Router>
     </NotificationProvider>
   );

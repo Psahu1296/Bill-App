@@ -13,6 +13,7 @@ import UpiQrModal from "./UpiQrModal";
 import { useAppDispatch } from "../../redux/hooks";
 import type { RootState } from "../../redux/store";
 import type { Order, AddOrderPayload, PaymentMethod, OrderStatus } from "../../types";
+import { usePendingOrders } from "../../context/PendingOrdersContext";
 
 const Bill: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -64,6 +65,7 @@ const Bill: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discount, roundOffEnabled, orderId, total]);
 
+  const { submit: submitPending } = usePendingOrders();
   const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Cash");
@@ -90,12 +92,22 @@ const Bill: React.FC = () => {
     paymentMethod,
   });
 
-  const handlePlaceOrder = () => {
-    const orderData = orderId ? { id: orderId, ...buildOrderData() } : buildOrderData();
-    orderMutation.mutate(orderData);
-  };
-
   type OrderMutationData = AddOrderPayload & { id?: string };
+
+  const handlePlaceOrder = () => {
+    if (orderId) {
+      // Updating an existing order — keep blocking so admin sees confirmation
+      orderMutation.mutate({ id: orderId, ...buildOrderData() } as unknown as OrderMutationData);
+      return;
+    }
+    // New order — optimistic: clear UI immediately, submit in background
+    const payload = buildOrderData();
+    const tableNo = customerData.table?.tableNo;
+    dispatch(removeCustomer());
+    dispatch(removeAllItems());
+    navigate("/", { replace: true });
+    submitPending(payload as AddOrderPayload, tableNo, Math.round(finalTotal));
+  };
 
   const orderMutation = useMutation({
     mutationFn: (reqData: OrderMutationData) => (reqData.id ? updateOrder(reqData as unknown as { id: string; [key: string]: unknown }) : addOrder(reqData)),
@@ -307,10 +319,12 @@ const Bill: React.FC = () => {
       <div className="space-y-2">
         <button
           onClick={handlePlaceOrder}
-          disabled={orderMutation.isPending}
+          disabled={!!orderId && orderMutation.isPending}
           className="w-full btn-accent rounded-xl py-3 text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {orderMutation.isPending ? <span className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : null}
+          {orderId && orderMutation.isPending
+            ? <span className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            : null}
           {orderId ? "Update Order" : "Place Order"}
         </button>
         <button

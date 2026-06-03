@@ -15,4 +15,5 @@ export const axiosWrapper = axios.create({
   baseURL,
   withCredentials: true,
   headers: { ...defaultHeader },
+  timeout: 15_000,
 });
