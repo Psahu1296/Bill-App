@@ -276,6 +276,7 @@ const updateOrderById = async (req: Request, res: Response, next: NextFunction) 
       updatePayload.balanceDueOnOrder = 0;
     } else if (
       (requestBodyUpdates.paymentStatus === "Refunded" || requestBodyUpdates.paymentStatus === "Pending") &&
+      oldPaymentStatus === "Paid" &&
       oldAmountPaid > 0
     ) {
       amountChangeForEarnings = -oldAmountPaid;

@@ -53,8 +53,9 @@ const PayRemainingModal: React.FC<PayRemainingModalProps> = ({
   const handlePayLater = () => {
     paymentMutation.mutate({
       id: order._id,
-      paymentStatus: "Pending" as typeof order.paymentStatus,
       orderStatus: "Completed" as OrderStatus,
+      amountPaid: order.amountPaid || 0,
+      paymentStatus: "Pending" as typeof order.paymentStatus,
     });
   };
 
