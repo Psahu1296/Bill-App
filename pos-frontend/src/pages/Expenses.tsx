@@ -970,7 +970,7 @@ const Expenses: React.FC = () => {
               <div className="relative z-10 flex items-center justify-between mb-4">
                 <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Category Breakdown</p>
               </div>
-              <div className="flex-1 min-h-0 relative z-10">
+              <div className="h-[320px] relative z-10">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={categoryData} dataKey="value" nameKey="name" cx="50%" cy="45%" innerRadius={70} outerRadius={100} paddingAngle={2}>
@@ -989,7 +989,7 @@ const Expenses: React.FC = () => {
               <div className="relative z-10 flex items-center justify-between mb-4">
                 <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Top 5 Items (Value)</p>
               </div>
-              <div className="flex-1 min-h-0 relative z-10 -ml-4">
+              <div className="h-[320px] relative z-10 -ml-4">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={itemData} layout="vertical" margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                     <XAxis type="number" hide />

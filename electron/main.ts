@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain } from "electron";
+import { app, BrowserWindow, shell, ipcMain, session } from "electron";
 import path from "path";
 import fs from "fs";
 import http from "http";
@@ -108,6 +108,17 @@ function createWindow(): void {
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  // One-time wipe of any HTTP cache poisoned by a truncated compressed response
+  // (net::ERR_CONTENT_DECODING_FAILED). The disk cache lives in %APPDATA% and
+  // survives reinstall, so clearing it here is the only way to recover an
+  // already-broken client via an update. Backend now sends Cache-Control:
+  // no-store on /api, so this can't recur — but old clients need this sweep.
+  try {
+    await session.defaultSession.clearCache();
+  } catch (err) {
+    console.error("Failed to clear cache on startup:", err);
+  }
+
   // In production spin up a tiny Node HTTP server to serve the built React app.
   // This gives us real HTTP semantics so BrowserRouter works without any hacks.
   if (!isDev) {

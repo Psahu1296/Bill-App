@@ -150,6 +150,15 @@ const registerLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Never let clients disk-cache API responses. A single truncated/corrupt
+// compressed body written to Electron's HTTP cache would otherwise poison an
+// endpoint permanently (replayed from cache → net::ERR_CONTENT_DECODING_FAILED),
+// surviving app reinstall because the cache lives in %APPDATA%.
+app.use("/api", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
+
 // API Endpoints
 app.use("/api/user/login", loginLimiter);
 app.use("/api/user/register", registerLimiter);
