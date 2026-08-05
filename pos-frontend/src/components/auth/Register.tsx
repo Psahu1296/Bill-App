@@ -121,7 +121,7 @@ const Register: React.FC<RegisterProps> = ({ setIsRegister }) => {
             Choose your role
           </label>
           <div className="flex item-center gap-3 mt-4">
-            {["Waiter", "Cashier", "Admin"].map((role) => (
+            {["Waiter", "Cashier"].map((role) => (
               <button
                 key={role}
                 type="button"

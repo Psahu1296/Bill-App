@@ -8,6 +8,11 @@ import config from "../config/config";
 
 const TOKEN_MAX_AGE_MS = 1000 * 60 * 60 * 24; // 1 day
 
+// Roles that can be picked on the public /register endpoint.
+// "Admin" is deliberately excluded — admin accounts are provisioned directly
+// in the database, never through self-registration.
+const SELF_REGISTER_ROLES = ["Waiter", "Cashier"] as const;
+
 const register = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { name, phone, email, password, role } = req.body;
@@ -16,12 +21,22 @@ const register = async (req: Request, res: Response, next: NextFunction) => {
       return next(createHttpError(400, "All fields are required!"));
     }
 
+    const requestedRole = String(role).trim();
+    const allowedRole = SELF_REGISTER_ROLES.find(
+      (r) => r.toLowerCase() === requestedRole.toLowerCase()
+    );
+    if (!allowedRole) {
+      return next(
+        createHttpError(403, `Role not allowed. Choose one of: ${SELF_REGISTER_ROLES.join(", ")}.`)
+      );
+    }
+
     if (await userRepo.findByEmail(email)) {
       return next(createHttpError(400, "User already exists!"));
     }
 
     const hashed = await bcrypt.hash(password, 10);
-    const user = await userRepo.create({ name, phone, email, password: hashed, role });
+    const user = await userRepo.create({ name, phone, email, password: hashed, role: allowedRole });
 
     const { password: _, ...userWithoutPassword } = user as Record<string, unknown>;
     res.status(201).json({ success: true, message: "New user created!", data: userWithoutPassword });
