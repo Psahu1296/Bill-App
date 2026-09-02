@@ -64,6 +64,11 @@ const syncConsumablesFromOrder = async (order: Record<string, unknown>) => {
   }
 };
 
+// Order types whose unpaid balance is tracked as customer debt on the ledger.
+// Delivery is excluded — cash is collected by the driver at the door.
+const isLedgerOrderType = (orderType: string | undefined) =>
+  (orderType ?? "dine-in") === "dine-in" || orderType === "takeaway";
+
 // ── Controllers ───────────────────────────────────────────────────────────────
 
 const addOrder = async (req: Request, res: Response, next: NextFunction) => {
@@ -160,12 +165,13 @@ const addOrder = async (req: Request, res: Response, next: NextFunction) => {
       } catch (e) { console.error("Earnings error on addOrder:", e); }
     }
 
-    // Ledger: if order is created already-completed with an outstanding balance,
-    // record it immediately (mirrors the justCompleted logic in updateOrder).
+    // Ledger: any newly-created dine-in or takeaway order with an outstanding
+    // balance is owed immediately — Pending included, not just Completed —
+    // so the customer's balance reflects the order as soon as it exists.
+    // Delivery is excluded — cash is collected by the driver at the door.
     if (
-      (newOrder.orderStatus as string) === "Completed" &&
       balanceDueOnOrder > 0 &&
-      (newOrder.orderType as string) === "dine-in"
+      isLedgerOrderType(newOrder.orderType as string)
     ) {
       try {
         const phone = (newOrder.customerDetails as Record<string, unknown>)?.phone as string;
@@ -288,6 +294,10 @@ const updateOrderById = async (req: Request, res: Response, next: NextFunction) 
       requestBodyUpdates.orderStatus === "Completed" &&
       (currentOrder.orderStatus as string) !== "Completed";
 
+    const justCancelled =
+      requestBodyUpdates.orderStatus === "Cancelled" &&
+      (currentOrder.orderStatus as string) !== "Cancelled";
+
     const tableRef = currentOrder.table;
     const tableId = tableRef
       ? typeof tableRef === "object"
@@ -298,39 +308,54 @@ const updateOrderById = async (req: Request, res: Response, next: NextFunction) 
     const updatedOrder = await orderRepo.update(id, updatePayload) as Record<string, unknown> | null;
     if (!updatedOrder) return next(createHttpError(404, "Order not found after update!"));
 
-    // Ledger: record when order JUST completes with outstanding balance.
-    // Delivery / takeaway orders are excluded — cash is collected at the door,
-    // so we add to earnings instead of opening a credit ledger entry.
+    // Ledger: sync dine-in/takeaway ledger debt when an order completes. The
+    // order may already carry a full_payment_due entry from creation (Pending
+    // state) — only reverse/rewrite it if the completed balance actually
+    // differs, so the common "completed unchanged" case doesn't add noise
+    // transactions. Delivery is excluded — cash is collected at the door, so
+    // we add to earnings instead of opening a credit ledger entry.
     if (justCompleted) {
       const finalBalanceDue = (updatedOrder.balanceDueOnOrder as number) ?? 0;
       const orderType = (updatedOrder.orderType as string) ?? "dine-in";
-      const isDineIn = orderType === "dine-in";
+      const tracksLedger = isLedgerOrderType(orderType);
 
-      if (finalBalanceDue > 0) {
-        if (isDineIn) {
-          const phone = (updatedOrder.customerDetails as Record<string, unknown>)?.phone as string;
-          const name  = (updatedOrder.customerDetails as Record<string, unknown>)?.name  as string;
+      if (tracksLedger) {
+        const phone = (updatedOrder.customerDetails as Record<string, unknown>)?.phone as string;
+        const name  = (updatedOrder.customerDetails as Record<string, unknown>)?.name  as string;
+        if (phone) {
           const alreadyRecorded = await ledgerRepo.getFullPaymentDueForOrder(id);
-          if (!alreadyRecorded && phone) {
-            await ledgerRepo.upsertWithTransaction({
-              customerPhone: phone,
-              customerName: name,
-              balanceDelta: finalBalanceDue,
-              transaction: {
-                orderId: id,
-                transactionType: "full_payment_due",
-                amount: finalBalanceDue,
-                timestamp: orderCreationDate.toISOString(),
-                notes: `Order #${id} completed — ₹${finalBalanceDue.toFixed(2)} outstanding`,
-              },
-            });
+          const recordedAmount = alreadyRecorded?.amount ?? 0;
+          if (Math.abs(recordedAmount - finalBalanceDue) > 0.01) {
+            if (alreadyRecorded) await ledgerRepo.reverseOrderTransactions(id, phone, name);
+            if (finalBalanceDue > 0) {
+              await ledgerRepo.upsertWithTransaction({
+                customerPhone: phone,
+                customerName: name,
+                balanceDelta: finalBalanceDue,
+                transaction: {
+                  orderId: id,
+                  transactionType: "full_payment_due",
+                  amount: finalBalanceDue,
+                  timestamp: orderCreationDate.toISOString(),
+                  notes: `Order #${id} completed — ₹${finalBalanceDue.toFixed(2)} outstanding`,
+                },
+              });
+            }
           }
-        } else {
-          // Delivery/takeaway: cash collected at door — record as earnings
-          amountChangeForEarnings += finalBalanceDue;
-          await orderRepo.update(id, { paymentStatus: "Paid", amountPaid: orderTotalWithTax, balanceDueOnOrder: 0 });
         }
+      } else if (finalBalanceDue > 0) {
+        // Delivery: cash collected at the door — record as earnings
+        amountChangeForEarnings += finalBalanceDue;
+        await orderRepo.update(id, { paymentStatus: "Paid", amountPaid: orderTotalWithTax, balanceDueOnOrder: 0 });
       }
+    }
+
+    // Ledger: reverse any outstanding debt when a dine-in/takeaway order is
+    // cancelled — it no longer represents money owed.
+    if (justCancelled && isLedgerOrderType(currentOrder.orderType as string)) {
+      const phone = (currentOrder.customerDetails as Record<string, unknown>)?.phone as string;
+      const name  = (currentOrder.customerDetails as Record<string, unknown>)?.name  as string;
+      if (phone) await ledgerRepo.reverseOrderTransactions(id, phone, name);
     }
 
     // Save customer profile for POS dine-in orders so they appear in auto-suggest.
@@ -346,13 +371,18 @@ const updateOrderById = async (req: Request, res: Response, next: NextFunction) 
       }
     }
 
-    // Ledger: reconcile when customer details or amountPaid changes on an
-    // ALREADY-completed dine-in order. Handles phone reassignment correctly by
-    // reversing the old phone's contribution first, then re-applying to the new phone.
-    const alreadyCompleted = !justCompleted && (currentOrder.orderStatus as string) === "Completed";
-    const orderTypeVal     = (currentOrder.orderType as string) ?? "dine-in";
+    // Ledger: reconcile when customer details or amountPaid changes on a
+    // dine-in/takeaway order that already carries ledger debt — Pending or
+    // Completed (a Pending order gets its debt recorded at creation, see
+    // addOrder). Handles phone reassignment correctly by reversing the old
+    // phone's contribution first, then re-applying to the new phone.
+    const shouldReconcileLedger =
+      !justCompleted &&
+      !justCancelled &&
+      (currentOrder.orderStatus as string) !== "Cancelled";
+    const orderTypeVal = (currentOrder.orderType as string) ?? "dine-in";
 
-    if (alreadyCompleted && orderTypeVal === "dine-in") {
+    if (shouldReconcileLedger && isLedgerOrderType(orderTypeVal)) {
       const oldPhone = (currentOrder.customerDetails as Record<string, unknown>)?.phone as string;
       const oldName  = (currentOrder.customerDetails as Record<string, unknown>)?.name  as string;
 
