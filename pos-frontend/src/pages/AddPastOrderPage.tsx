@@ -126,6 +126,7 @@ const AddPastOrderPage: React.FC = () => {
       enqueueSnackbar("Past order added successfully!", { variant: "success" });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["customerLedgers"] });
+      queryClient.invalidateQueries({ queryKey: ["customerProfiles"] });
       queryClient.invalidateQueries({ queryKey: ["earnings"] });
       queryClient.invalidateQueries({ queryKey: ["dashboardEarnings"] });
       navigate("/orders");

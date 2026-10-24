@@ -40,15 +40,22 @@ export async function searchCustomerProfiles(req: Request, res: Response, next: 
 
     const nameFilter = name ? { $regex: name, $options: "i" } : undefined;
 
-    const [profiles, ledgerDocs] = await Promise.all([
+    const ledgerFilter = nameFilter ? { customerName: nameFilter } : {};
+
+    const [profiles, ledgerDocs, duesAgg] = await Promise.all([
       ProfileRepo.searchProfiles(name),
       CustomerLedger.find(
-        nameFilter ? { customerName: nameFilter } : {},
+        ledgerFilter,
         { customerPhone: 1, customerName: 1, balanceDue: 1, lastActivity: 1 }
       )
         .sort({ lastActivity: -1 })
         .limit(100)
         .lean() as unknown as { customerPhone: string; customerName: string; balanceDue?: number; lastActivity?: Date }[],
+      // Totals over ALL matching ledgers — the list above is capped at 100.
+      CustomerLedger.aggregate([
+        { $match: { ...ledgerFilter, balanceDue: { $gt: 0 } } },
+        { $group: { _id: null, count: { $sum: 1 }, totalAmount: { $sum: "$balanceDue" } } },
+      ]),
     ]);
 
     // Merge: phone is the dedup key.
@@ -84,7 +91,12 @@ export async function searchCustomerProfiles(req: Request, res: Response, next: 
       return ((a.name as string) ?? "").localeCompare((b.name as string) ?? "");
     });
 
-    res.json({ success: true, data });
+    const summary = {
+      totalOutstanding: duesAgg[0]?.totalAmount ?? 0,
+      withDues: duesAgg[0]?.count ?? 0,
+    };
+
+    res.json({ success: true, data, summary });
   } catch (err) {
     next(err);
   }

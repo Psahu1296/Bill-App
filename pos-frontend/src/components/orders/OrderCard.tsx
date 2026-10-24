@@ -114,6 +114,7 @@ const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
       queryClient.invalidateQueries({ queryKey: ["tables"] });
       if (newStatus === "Completed") {
         queryClient.invalidateQueries({ queryKey: ["customerLedgers"] });
+        queryClient.invalidateQueries({ queryKey: ["customerProfiles"] });
         queryClient.invalidateQueries({ queryKey: ["earnings"] });
       }
     },

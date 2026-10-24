@@ -42,6 +42,7 @@ const PayRemainingModal: React.FC<PayRemainingModalProps> = ({
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["tables"] });
       queryClient.invalidateQueries({ queryKey: ["customerLedgers"] });
+      queryClient.invalidateQueries({ queryKey: ["customerProfiles"] });
       enqueueSnackbar("Payment recorded successfully!", { variant: "success" });
       onSuccess();
     },

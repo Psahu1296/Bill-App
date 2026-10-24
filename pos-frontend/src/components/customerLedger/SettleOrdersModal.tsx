@@ -100,6 +100,7 @@ const SettleOrdersModal: React.FC<SettleOrdersModalProps> = ({ isOpen, onClose, 
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["earnings"] });
       queryClient.invalidateQueries({ queryKey: ["customerLedgers"] });
+      queryClient.invalidateQueries({ queryKey: ["customerProfiles"] });
       enqueueSnackbar(
         isOverpay
           ? `Tab settled · ₹${credit.toFixed(0)} credit stored for ${customer?.customerName}`

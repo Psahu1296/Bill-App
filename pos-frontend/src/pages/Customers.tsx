@@ -19,6 +19,10 @@ const Customers: React.FC = () => {
     queryKey: ["customerProfiles", search],
     queryFn: () => searchCustomerProfiles({ name: search }),
     placeholderData: (prev) => prev,
+    // Ledgers are created server-side by many flows (orders, past orders, payments)
+    // that don't invalidate this key — always refetch on mount so totals stay current.
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const customers: CustomerProfile[] = data?.data?.data ?? [];
@@ -31,8 +35,10 @@ const Customers: React.FC = () => {
     });
   }, [customers, filter]);
 
-  const totalOutstanding = customers.reduce((s, c) => s + (c.balanceDue ?? 0), 0);
-  const totalWithDues = customers.filter(c => (c.balanceDue ?? 0) > 0).length;
+  // Server computes totals over all ledgers; the list itself is capped.
+  const summary: { totalOutstanding: number; withDues: number } | undefined = data?.data?.summary;
+  const totalOutstanding = summary?.totalOutstanding ?? 0;
+  const totalWithDues = summary?.withDues ?? 0;
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex flex-col bg-dhaba-bg relative overflow-y-auto">
