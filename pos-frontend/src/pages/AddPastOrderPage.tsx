@@ -86,6 +86,23 @@ const AddPastOrderPage: React.FC = () => {
     });
   }, []);
 
+  const handleAddCustom = useCallback((name: string, price: number) => {
+    const id = `custom-${Date.now()}`;
+    setCartItems((prev) => [
+      ...prev,
+      {
+        dishId: id,
+        id,
+        name,
+        variantSize: undefined,
+        pricePerQuantity: price,
+        quantity: 1,
+        price,
+        batch: 1,
+      },
+    ]);
+  }, []);
+
   const handleChangeQty = useCallback((id: string, variantSize: string | undefined, delta: number) => {
     setCartItems((prev) =>
       prev
@@ -196,7 +213,7 @@ const AddPastOrderPage: React.FC = () => {
         {/* ── Left: Menu picker (scrollable) ── */}
         <main className="flex-1 min-h-0 overflow-y-auto border-b lg:border-b-0 lg:border-r border-dhaba-border/20">
           <div className="p-4 sm:p-5">
-            <MenuContainer onAddToCart={handleAddToCart} />
+            <MenuContainer onAddToCart={handleAddToCart} onAddCustom={handleAddCustom} />
           </div>
         </main>
 
